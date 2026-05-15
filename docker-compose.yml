@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  # PostgreSQL 数据库服务
+  postgres:
+    image: postgres:15-alpine
+    container_name: novelai-postgres
+    environment:
+      POSTGRES_USER: novelai
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: novel_ai
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - novelai-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U novelai -d novel_ai"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 应用服务
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: novelai-app
+    ports:
+      - "3200:3200"
+    environment:
+      - DATABASE_URL=postgresql://novelai:password@postgres:5432/novel_ai?schema=public
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - DEEPSEEK_MODEL_ID=deepseek-chat
+      - NODE_TLS_REJECT_UNAUTHORIZED=0
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./src:/app/src
+      - ./prisma:/app/prisma
+    networks:
+      - novelai-network
+    command: sh -c "npx prisma generate && npx prisma migrate deploy && npm run dev"
+
+volumes:
+  postgres_data:
+
+networks:
+  novelai-network:
+    driver: bridge
