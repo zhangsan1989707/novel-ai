@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { Button, Input, Select, Textarea, toast } from '@/components/ui'
 import { Settings, AlertCircle, ChevronDown, ChevronUp, Sparkles, Wand2 } from 'lucide-react'
@@ -88,6 +89,7 @@ interface ProjectFormProps {
 }
 
 export function ProjectForm({ defaultValues, onSubmit, onCancel, loading, submitLabel }: ProjectFormProps) {
+  const router = useRouter()
   const [aiConfigs, setAiConfigs] = useState<AIConfig[]>([])
   const [loadingConfigs, setLoadingConfigs] = useState(true)
   const [showMoreSettings, setShowMoreSettings] = useState(false)
@@ -367,14 +369,14 @@ export function ProjectForm({ defaultValues, onSubmit, onCancel, loading, submit
             <div className="flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg text-amber-700 dark:text-amber-400">
               <AlertCircle className="h-4 w-4 flex-shrink-0" />
               <span className="text-sm">暂无可用的 AI 配置</span>
-              <a
-                href="/settings"
-                target="_blank"
+              <button
+                type="button"
+                onClick={() => router.push('/settings')}
                 className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline"
               >
                 <Settings className="h-3 w-3" />
                 去配置
-              </a>
+              </button>
             </div>
           ) : (
             <div className="flex items-center gap-4">
@@ -389,14 +391,14 @@ export function ProjectForm({ defaultValues, onSubmit, onCancel, loading, submit
                   </option>
                 ))}
               </select>
-              <a
-                href="/settings"
-                target="_blank"
+              <button
+                type="button"
+                onClick={() => router.push('/settings')}
                 className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
               >
                 <Settings className="h-4 w-4" />
                 管理
-              </a>
+              </button>
             </div>
           )}
         </div>
