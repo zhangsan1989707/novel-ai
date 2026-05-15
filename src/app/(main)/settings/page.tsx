@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { Button, Input, Select, Modal, Badge, Card, CardContent } from '@/components/ui'
-import { Plus, Trash2, Edit2, Check, Key, Shield, Play, Loader2, CheckCircle, XCircle } from 'lucide-react'
+import { Plus, Trash2, Edit2, Check, Key, Shield, Play, Loader2, CheckCircle, XCircle, ArrowLeft } from 'lucide-react'
 import { AIVendor } from '@/types'
 
 interface AIConfig {
@@ -46,6 +47,7 @@ const defaultModelIds: Record<AIVendor, string> = {
 }
 
 export default function SettingsPage() {
+  const router = useRouter()
   const [configs, setConfigs] = useState<AIConfig[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -245,9 +247,18 @@ export default function SettingsPage() {
       <header className="sticky top-0 z-10 bg-white dark:bg-gray-800 border-b">
         <div className="px-4 py-4">
           <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">设置</h1>
-              <p className="text-sm text-gray-500">配置 AI 模型和 API</p>
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => router.back()}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                title="返回"
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </button>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">AI 配置</h1>
+                <p className="text-sm text-gray-500">配置 AI 模型和 API</p>
+              </div>
             </div>
             <Button onClick={() => openModal()}>
               <Plus className="h-4 w-4 mr-2" />
