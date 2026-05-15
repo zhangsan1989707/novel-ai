@@ -6,6 +6,8 @@ import { useForm } from 'react-hook-form'
 import { Button, Input, Select, Textarea, toast } from '@/components/ui'
 import { Settings, AlertCircle, ChevronDown, ChevronUp, Sparkles, Wand2 } from 'lucide-react'
 import { AIVendor } from '@/types'
+import { InspirationPanel } from '@/components/inspiration'
+import type { HotInspiration } from '@/lib/inspiration/data'
 
 // ============================================
 // Type 定义
@@ -95,6 +97,7 @@ export function ProjectForm({ defaultValues, onSubmit, onCancel, loading, submit
   const [showMoreSettings, setShowMoreSettings] = useState(false)
   const [generatingSynopsis, setGeneratingSynopsis] = useState(false)
   const [generatingSettings, setGeneratingSettings] = useState(false)
+  const [showInspiration, setShowInspiration] = useState(true)
 
   useEffect(() => {
     fetchAIConfigs()
@@ -147,6 +150,16 @@ export function ProjectForm({ defaultValues, onSubmit, onCancel, loading, submit
 
   // 使用 watch 获取表单值，避免直接操作 DOM
   const formValues = watch()
+
+  const handleInspirationSelect = (inspiration: HotInspiration) => {
+    setValue('title', inspiration.sampleTitle)
+    setValue('description', inspiration.sampleSummary)
+    setValue('genre', inspiration.sampleGenre)
+    setValue('writingStyle', inspiration.sampleWritingStyle)
+    setValue('targetAudience', inspiration.category === 'male' ? 'MALE' : inspiration.category === 'female' ? 'FEMALE' : undefined)
+    setShowInspiration(false)
+    toast.success(`已应用「${inspiration.title}」灵感`)
+  }
 
   const handleGenerateSynopsis = async () => {
     const title = formValues.title
@@ -256,9 +269,21 @@ export function ProjectForm({ defaultValues, onSubmit, onCancel, loading, submit
 
   return (
     <form onSubmit={handleSubmit(processSubmit)} className="space-y-6">
-      {/* 基本信息 */}
-      <div className="space-y-4">
+      {showInspiration && (
+        <InspirationPanel onSelect={handleInspirationSelect} />
+      )}
+      <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-medium">基本信息</h3>
+        {formValues.title && (
+          <button
+            type="button"
+            onClick={() => setShowInspiration(!showInspiration)}
+            className="text-sm text-blue-600 hover:text-blue-700"
+          >
+            {showInspiration ? '收起灵感推荐' : '查看灵感推荐'}
+          </button>
+        )}
+      </div>
 
         <Input
           label="标题"

@@ -1,0 +1,1 @@
+export { InspirationPanel } from './InspirationPanel'
