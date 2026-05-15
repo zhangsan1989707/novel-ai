@@ -9,7 +9,12 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "docker:start": "bash scripts/docker-start.sh",
+    "docker:stop": "bash scripts/docker-stop.sh",
+    "docker:build": "bash scripts/docker-build.sh",
+    "docker:restart": "bash scripts/docker-restart.sh",
+    "docker:logs": "bash scripts/docker-logs.sh"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

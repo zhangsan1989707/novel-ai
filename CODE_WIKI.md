@@ -4,6 +4,64 @@
 
 Novel AI 是一个基于多智能体协作的 AI 小说创作平台。该项目采用 Next.js 作为全栈框架，结合 PostgreSQL 数据库和多种大语言模型 API，实现智能化的网络小说创作流程。
 
+### 1.0 系统架构图
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                              前端 (Next.js 16 App Router)                │
+│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌────────┐ │
+│  │项目管理 │ │章节创作 │ │角色关系图│ │伏笔追踪 │ │可视化分析│ │导出导出│ │
+│  └────┬────┘ └────┬────┘ └────┬────┘ └────┬────┘ └────┬────┘ └───┬────┘ │
+├───────┼───────────┼───────────┼───────────┼───────────┼───────────┼──────┤
+│       │           │           │           │           │           │       │
+│  ┌────▼───────────▼───────────▼───────────▼───────────▼───────────▼────┐ │
+│  │                         API 路由层 (Next.js API Routes)                │ │
+│  │  /api/novel/*  │  /api/projects/*  │  /api/engine/*  │  /api/ai/*   │ │
+│  └────┬───────────┬───────────────────┬─────────────────┬──────────────┘ │
+├───────┼───────────┼───────────────────┼─────────────────┼────────────────┤
+│       │           │                   │                 │                 │
+│  ┌────▼───────────▼───────────────────▼─────────────────▼──────────────┐ │
+│  │                          核心业务逻辑层 (lib/)                         │ │
+│  │                                                                      │ │
+│  │  ┌────────────────┐  ┌────────────────┐  ┌────────────────────┐    │ │
+│  │  │  多Agent系统   │  │   AI 提供商    │  │    记忆系统        │    │ │
+│  │  │  (agents/)     │  │   (ai/)        │  │    (memory/)       │    │ │
+│  │  │                │  │                │  │                    │    │ │
+│  │  │ • Planner      │  │ • OpenAI       │  │ • 角色记忆         │    │ │
+│  │  │ • Writer       │  │ • Anthropic    │  │ • 伏笔追踪         │    │ │
+│  │  │ • Polisher     │  │ • DeepSeek    │  │ • 分层摘要         │    │ │
+│  │  │ • Validator    │  │ • 阿里云       │  │                    │    │ │
+│  │  │ • Summarizer   │  │ • MiniMax      │  │                    │    │ │
+│  │  │                │  │ • 火山引擎     │  │                    │    │ │
+│  │  └────────────────┘  └────────────────┘  └────────────────────┘    │ │
+│  │                                                                      │ │
+│  │  ┌────────────────┐  ┌────────────────┐  ┌────────────────────┐    │ │
+│  │  │  小说引擎      │  │   导出服务     │  │    成本追踪        │    │ │
+│  │  │  (engine/)     │  │   (export/)    │  │    (cost-tracker/) │    │ │
+│  │  │                │  │                │  │                    │    │ │
+│  │  │ • Orchestrator │  │ • TXT          │  │ • Token 统计       │    │ │
+│  │  │ • StoryState   │  │ • Markdown     │  │ • 配额管理         │    │ │
+│  │  │                │  │ • JSON         │  │ • 费用计算         │    │ │
+│  │  │                │  │ • EPUB         │  │                    │    │ │
+│  │  └────────────────┘  └────────────────┘  └────────────────────┘    │ │
+│  └────────────────────────────────────────────────────────────────────┘ │
+├─────────────────────────────────────────────────────────────────────────┤
+│                            数据层 (PostgreSQL + Prisma)                   │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐       │
+│  │  User    │ │ Project │ │ Chapter  │ │Character │ │ Plotline │       │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘       │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### 1.0.1 项目模式
+
+Novel AI 支持两种创作模式：
+
+| 模式 | 说明 | 使用场景 |
+|------|------|----------|
+| **创作模式 (CREATE)** | 从零开始创作小说，AI 辅助生成大纲和正文 | 新作品创作 |
+| **拆解模式 (ANALYZE)** | 导入已有小说进行结构分析和学习 | 学习借鉴、风格提取 |
+
 ### 1.1 技术栈
 
 | 类别 | 技术选型 | 说明 |
@@ -611,7 +669,178 @@ AI 提供商采用工厂模式，通过 `AIProviderFactory` 统一管理不同�
 
 ---
 
-## 10. 注意事项
+## 10. 章节列表生成 (`generate-chapter-list`)
+
+### 10.1 API 端点
+
+| 端点 | 方法 | 功能 |
+|------|------|------|
+| `/api/novel/ai/generate-chapter-list` | POST | AI 生成章节目录 |
+
+### 10.2 请求参数
+
+```typescript
+interface GenerateChapterListRequest {
+  projectTitle: string        // 小说标题（必填）
+  genre?: string             // 类型
+  writingStyle?: string       // 写作风格
+  worldSetting?: string       // 世界观设定
+  protagonistProfile?: string // 主角人设
+  protagonistGoal?: string    // 主角目标
+  antagonistSetting?: string  // 反派设定
+  endingPlan?: string        // 结局规划
+  totalChapters: number      // 章节数量（默认50，最大500）
+  titleStyle: 'webnovel' | 'traditional' | 'poetry'  // 标题风格
+  aiModelId?: number         // AI 模型配置 ID
+  vendor?: AIVendor          // AI 提供商
+  temperature?: number        // 温度参数（默认0.7）
+}
+```
+
+### 10.3 标题风格说明
+
+| 风格 | 特点 | 示例 |
+|------|------|------|
+| `webnovel` | 网文风格，吸睛有悬念 | "他竟然是隐藏的首富？" |
+| `traditional` | 传统风格，简洁概括 | "第三章 意外的相遇" |
+| `poetry` | 诗词风格，文艺对仗 | "第三回 风雪夜归人" |
+
+### 10.4 输出格式
+
+```typescript
+interface ChapterListResponse {
+  success: boolean
+  data: {
+    content: string          // 原始 AI 输出
+    chapterList: {
+      chapters: Array<{
+        chapterNumber: number
+        title: string
+        summary: string      // 章节概要（50-100字）
+        wordCount: number    // 预估字数
+        plotType: 'setup' | 'develop' | 'climax' | 'resolution' | 'transition'
+      }>
+    }
+    usage: {
+      promptTokens: number
+      completionTokens: number
+      totalTokens: number
+    }
+  }
+}
+```
+
+### 10.5 前端组件 (`ChapterListGenerator`)
+
+```typescript
+interface ChapterListGeneratorProps {
+  projectId: number
+  projectTitle: string
+  // ... 其他项目设定
+  aiModelId?: number
+  onApply: (chapters: ChapterItem[]) => void
+}
+
+// 使用示例
+<ChapterListGenerator
+  projectId={1}
+  projectTitle="我的小说"
+  genre="玄幻"
+  aiModelId={1}
+  onApply={(chapters) => {
+    // 处理生成的章节列表
+    console.log(chapters)
+  }}
+/>
+```
+
+---
+
+## 11. 目标受众支持
+
+### 11.1 枚举值
+
+```typescript
+enum TargetAudience {
+  MALE = 'MALE'   // 男频
+  FEMALE = 'FEMALE' // 女频
+}
+```
+
+### 11.2 在项目中的使用
+
+项目模型新增 `targetAudience` 字段：
+
+```prisma
+model NovelProject {
+  // ...
+  targetAudience String?  // 目标受众: MALE=男频, FEMALE=女频
+  // ...
+}
+```
+
+### 11.3 在提示词中的应用
+
+```typescript
+// 简介生成时自动注入目标受众
+if (params.targetAudience) {
+  const audienceText = params.targetAudience === 'MALE' 
+    ? '男频（男性读者为主）' 
+    : '女频（女性读者为主）'
+  parts.push(`目标受众：${audienceText}`)
+}
+```
+
+---
+
+## 12. 项目模式
+
+### 12.1 创作 vs 拆解
+
+```typescript
+enum ProjectMode {
+  CREATE = 'CREATE'    // 创作模式：从零开始创作
+  ANALYZE = 'ANALYZE'  // 拆解模式：分析已有小说
+}
+```
+
+### 12.2 拆解模式流程
+
+```
+1. 用户导入原始小说文本
+2. 系统自动分章节（支持常见格式识别）
+3. 并发生成章节摘要（控制并发 5）
+4. 基于摘要层进行聚合分析
+5. 生成：人物关系图、剧情线、伏笔追踪、世界观设定
+```
+
+### 12.3 数据模型
+
+```prisma
+// 原始小说存储
+model SourceNovel {
+  id            String  @id @default(cuid())
+  projectId     Int     @unique
+  originalText  String  @db.Text
+  wordCount     Int
+  sourceName    String?
+}
+
+// 分析结果
+model BookAnalysis {
+  id            String  @id @default(cuid())
+  projectId     Int
+  volumeNumber  Int     @default(-1)  // -1=整书, 0=全卷, N=具体卷
+  analysisType  String  // BREAKDOWN/CONTINUATION
+  dimension     String  // CHARACTER_RELATION/PLOT_LINE/FORESHADOWING...
+  analysisData  Json
+  rawContent    String? @db.Text
+}
+```
+
+---
+
+## 13. 注意事项
 
 - 项目使用 Next.js App Router，所有 API 路由均为服务端点
 - 数据库操作统一通过 `src/lib/prisma.ts` 的 Prisma Client 实例

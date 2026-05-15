@@ -1,0 +1,10 @@
+---
+description: 
+alwaysApply: true
+enabled: true
+updatedAt: 2026-05-15T15:53:19.547Z
+provider: 
+---
+
+代码修改要考虑前后端兼容问题
+修改完后一定要提交git
