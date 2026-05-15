@@ -1,0 +1,564 @@
+// This is your Prisma schema file
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// 枚举类型
+// ============================================
+
+enum ProjectStatus {
+  DRAFT       // 草稿
+  WRITING     // 写作中
+  COMPLETED   // 已完成
+  PAUSED      // 暂停
+}
+
+enum ChapterStatus {
+  DRAFT
+  GENERATING
+  COMPLETED
+  REVIEWING
+}
+
+enum WriterType {
+  REAL_AUTHOR  // 真实作者风格
+  CUSTOM       // 自定义风格
+}
+
+enum TrainingStatus {
+  UNTRAINED  // 未训练
+  TRAINING   // 训练中
+  TRAINED    // 已训练
+  FAILED     // 失败
+}
+
+enum DocumentStatus {
+  PENDING    // 待处理
+  PROCESSING // 处理中
+  COMPLETED  // 已完成
+  FAILED     // 失败
+}
+
+enum AIVendor {
+  OPENAI     // OpenAI (GPT系列)
+  ANTHROPIC  // Anthropic (Claude系列)
+  ALIBABA    // 阿里云 (通义千问)
+  DEEPSEEK   // DeepSeek
+  MINIMAX    // MiniMax
+  VOLCENGINE // 火山引擎 (字节跳动)
+}
+
+// ============================================
+// 数据模型
+// ============================================
+
+model User {
+  id            Int             @id @default(autoincrement())
+  email         String          @unique
+  name          String?
+  password      String
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  projects      NovelProject[]
+  virtualWriters VirtualWriter[]
+  publicCharacters Character[]   @relation("CharacterCreator")
+
+  @@map("users")
+}
+
+model AIModelConfig {
+  id            Int             @id @default(autoincrement())
+  name          String          // 配置名称，如 "GPT-4o"
+  vendor        AIVendor
+  modelId       String          // 实际模型 ID
+  apiKey        String?         // API Key（加密存储）
+  apiEndpoint   String?         // 自定义端点
+  isDefault     Boolean         @default(false)
+  sortOrder     Int             @default(0)
+
+  projects      NovelProject[]
+
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@map("ai_model_configs")
+}
+
+model NovelProject {
+  id                  Int             @id @default(autoincrement())
+  title               String
+  description         String?         @db.Text
+  genre               String?         // 玄幻/奇幻/仙侠/都市/科幻/历史/游戏/悬疑/言情/军事/体育/轻小说
+  writingStyle        String?         // 轻松幽默/热血激昂/暗黑沉重/唯美文艺/悬疑烧脑/搞笑吐槽/史诗宏大/细腻温情/快节奏爽文/慢热养成
+  targetWordCount     Int?            // 目标总字数
+  currentWordCount    Int             @default(0)  // 当前总字数
+  chapterWordCount    Int             @default(3000)  // 每章目标字数
+
+  // 大纲设定
+  outline             String?         @db.Text
+  outlineStages       Json?          // {stage1: [], stage2: [], stage3: [], stage4: []} 分阶段大纲
+
+  // 详细设定
+  worldSetting        String?         @db.Text        // 世界观设定
+  powerSystem         String?         @db.Text        // 力量体系
+  protagonistProfile  String?         @db.Text        // 主角人设
+  protagonistGoal     String?         @db.Text        // 主角目标
+  antagonistSetting   String?         @db.Text        // 反派设定
+  endingPlan          String?         @db.Text        // 结局规划
+  writingPrompt       String?         @db.Text        // 写作提示词
+
+  status              ProjectStatus   @default(DRAFT)
+  coverImage          String?         // 封面图 URL
+  totalVolumes        Int             @default(4)      // 总卷数
+
+  // 项目模式: CREATE=创作模式, ANALYZE=拆解模式
+  projectMode         String          @default("CREATE")
+
+  // 外键
+  aiModelId           Int?
+  aiModelConfig       AIModelConfig?  @relation(fields: [aiModelId], references: [id])
+  creatorId           Int
+  creator             User            @relation(fields: [creatorId], references: [id])
+
+  chapters            NovelChapter[]
+  bookAnalyses        BookAnalysis[]
+  sourceNovel         SourceNovel?
+
+  // 小说引擎关联
+  characters          Character[]
+  plotlines           Plotline[]
+  storyState          StoryState?
+  storyEvents         StoryEvent[]
+  agentLogs           AgentLog[]
+  chapterSummaries    ChapterSummary[]
+  volumeSummaries     VolumeSummary[]
+  bookSummary         BookSummary?
+
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  @@index([creatorId])
+  @@index([status])
+  @@map("novel_projects")
+}
+
+model NovelChapter {
+  id                  Int             @id @default(autoincrement())
+  projectId           Int
+  project             NovelProject    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  chapterNumber       Int             // 章节编号
+  title               String
+  content             String?         @db.Text
+  summary             String?         @db.Text
+  wordCount           Int             @default(0)
+
+  generationPrompt    String?         @db.Text        // 生成提示词
+  generationParams    Json?          // 生成参数
+  generationCount     Int             @default(0)     // 生成次数
+  lastGeneratedTime   DateTime?
+
+  sortOrder           Int             @default(0)
+  status              ChapterStatus   @default(DRAFT)
+
+  // 小说引擎字段
+  chapterOutline      Json?          // 策划 Agent 输出的章节大纲
+  validationReport    Json?          // 校验 Agent 的验证报告
+  retryCount          Int             @default(0)     // 校验失败重试次数
+  lastAgentType       AgentType?      // 最后执行的 Agent 类型
+
+  virtualWriterId     Int?
+  virtualWriter       VirtualWriter?  @relation(fields: [virtualWriterId], references: [id])
+
+  versions            ChapterVersion[]
+
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  @@unique([projectId, chapterNumber])
+  @@index([projectId])
+  @@map("novel_chapters")
+}
+
+model VirtualWriter {
+  id                  Int             @id @default(autoincrement())
+  name                String
+  description         String?         @db.Text
+  writerType          WriterType      @default(CUSTOM)
+
+  // 风格特征
+  styleFeatures       String?         @db.Text        // 整体风格描述
+  vocabularyFeatures  String?         @db.Text        // 词汇特征
+  sentenceFeatures    String?         @db.Text        // 句式特征
+  rhetoricFeatures     String?         @db.Text        // 修辞特征
+  themeFeatures       String?         @db.Text        // 主题特征
+
+  trainingStatus      TrainingStatus  @default(UNTRAINED)
+  trainingProgress    Int             @default(0)
+  trainedAt           DateTime?
+
+  documentCount       Int             @default(0)
+  totalWordCount      Int             @default(0)
+
+  isPublic            Boolean         @default(false)
+  tags                String?
+
+  creatorId           Int
+  creator             User            @relation(fields: [creatorId], references: [id])
+
+  chapters            NovelChapter[]
+  documents           WriterDocument[]
+
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  @@index([creatorId])
+  @@map("virtual_writers")
+}
+
+model WriterDocument {
+  id                  Int             @id @default(autoincrement())
+  virtualWriterId     Int
+  virtualWriter       VirtualWriter   @relation(fields: [virtualWriterId], references: [id], onDelete: Cascade)
+
+  fileName            String
+  filePath            String
+  fileSize            Int
+  wordCount           Int
+
+  status              DocumentStatus  @default(PENDING)
+  errorMessage        String?
+
+  createdAt           DateTime        @default(now())
+  processedAt         DateTime?
+
+  @@index([virtualWriterId])
+  @@map("writer_documents")
+}
+
+model ChapterVersion {
+  id            Int             @id @default(autoincrement())
+  chapterId     Int
+  chapter       NovelChapter    @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+
+  content       String          @db.Text
+  wordCount     Int
+  prompt        String?         @db.Text
+  versionNumber Int
+
+  createdAt     DateTime        @default(now())
+
+  @@index([chapterId])
+  @@map("chapter_versions")
+}
+
+model BookAnalysis {
+  id            String          @id @default(cuid())
+  projectId     Int
+  project       NovelProject    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  // 粒度: -1=整书, 0=全卷, 1-N=具体卷
+  volumeNumber  Int             @default(-1)
+  // 分析类型: BREAKDOWN/CONTINUATION
+  analysisType  String
+  // 分析维度: CHARACTER_RELATION/PLOT_LINE/FORESHADOWING/CHAPTER_STRUCTURE/WORLD_SETTING
+  dimension     String
+  // 结构化分析结果
+  analysisData  Json
+  // 原始分析文本
+  rawContent    String?         @db.Text
+  wordCount     Int?
+
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@unique([projectId, volumeNumber, analysisType, dimension])
+  @@index([projectId])
+  @@map("book_analysis")
+}
+
+// 拆解模式：存储原始小说文本
+model SourceNovel {
+  id            String          @id @default(cuid())
+  projectId     Int             @unique
+  project       NovelProject    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  // 原始小说文本
+  originalText  String          @db.Text
+  wordCount     Int             // 字数统计
+
+  // 来源信息
+  sourceName    String?         // 来源名称，如"《斗破苍穹》"
+
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@map("source_novels")
+}
+
+// ============================================
+// 小说引擎 - Agent 协作系统
+// ============================================
+
+enum CharacterRole {
+  PROTAGONIST  // 主角
+  ANTAGONIST  // 反派
+  SUPPORTING  // 配角
+  MINOR       // 次要
+}
+
+enum PlotlineType {
+  FORESHADOW  // 伏笔
+  SUBPLOT     // 支线
+  CONFLICT    // 冲突
+}
+
+enum PlotlineStatus {
+  OPEN       // 进行中
+  RESOLVED   // 已回收
+  ABANDONED  // 已放弃
+}
+
+enum AgentType {
+  PLANNER    // 策划 Agent
+  WRITER     // 写作 Agent
+  POLISHER   // 润色 Agent
+  VALIDATOR  // 校验 Agent
+  SUMMARIZER // 摘要 Agent
+}
+
+// 角色档案
+model Character {
+  id              String            @id @default(cuid())
+  projectId       Int
+  project         NovelProject      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  name            String           // 角色名
+  role            CharacterRole    @default(SUPPORTING)  // 角色类型
+  aliases         String[]         @default([])         // 别名/称呼列表
+  appearance      String?          @db.Text             // 外貌描述
+  personality     String?          @db.Text             // 性格特征
+  catchphrases    String[]         @default([])         // 口头禅/习惯用语
+  background      String?          @db.Text             // 背景故事
+  relationships   Json?            @default("{}")        // {角色名: 关系描述} 键值对
+  currentState    Json?            @default("{}")        // 当前状态：位置、情绪、阵营
+
+  firstChapter    Int?             // 首次出场章节
+  lastUpdated     Int?             // 最后一次更新的章节号
+
+  // 复用库字段
+  isPublic        Boolean          @default(false)     // 是否公开到复用库
+  tags            String[]         @default([])         // 标签
+  creatorId       Int?             // 创建者（用于公开角色的用户）
+  creator         User?            @relation("CharacterCreator", fields: [creatorId], references: [id])
+
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([projectId])
+  @@map("characters")
+}
+
+// 伏笔/支线追踪
+model Plotline {
+  id              String           @id @default(cuid())
+  projectId       Int
+  project         NovelProject     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  type            PlotlineType     @default(FORESHADOW)
+  description     String           @db.Text             // 伏笔/线索描述
+  plantedAt       Int              // 埋入章节号
+  resolvedAt      Int?             // 回收章节号（null=未回收）
+  plannedAt       Int?             // 计划回收章节号
+  status          PlotlineStatus  @default(OPEN)
+
+  // 追踪元数据
+  metadata        Json?           @default("{}")
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([projectId])
+  @@index([status])
+  @@map("plotlines")
+}
+
+// 故事状态机快照
+model StoryState {
+  id              String          @id @default(cuid())
+  projectId       Int             @unique
+  project         NovelProject    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  // 情绪热度曲线（0-100），按章节号存储
+  emotionalArc    Json            @default("[]")        // [{chapterNo, value}]
+
+  // 主线/支线冲突状态
+  mainConflict    String?         // 当前主线冲突描述
+  subConflicts    Json?           @default("[]")        // [{id, description, status}]
+
+  // 章节进度
+  currentChapter  Int             @default(0)
+  totalPlanned   Int             @default(100)
+
+  // 元数据
+  metadata        Json?           @default("{}")
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@map("story_states")
+}
+
+// 故事事件审计日志
+model StoryEvent {
+  id              String          @id @default(cuid())
+  projectId       Int
+  project         NovelProject    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  eventType       String          // 事件类型
+  chapterNo       Int?             // 关联章节号
+  description     String          @db.Text             // 事件描述
+  metadata        Json?           @default("{}")
+
+  createdAt       DateTime        @default(now())
+
+  @@index([projectId])
+  @@index([chapterNo])
+  @@map("story_events")
+}
+
+// Agent 执行日志
+model AgentLog {
+  id              String          @id @default(cuid())
+  projectId       Int
+  project         NovelProject    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  chapterNo       Int             // 章节号
+  agentType       AgentType       // Agent 类型
+  status          String          // START/RUNNING/DONE/FAILED
+
+  // 输入输出
+  inputPrompt     String?         @db.Text
+  outputContent   String?         @db.Text
+  errorMessage    String?
+
+  // 性能指标
+  tokenCount      Int?
+  durationMs      Int?
+
+  // 校验结果（仅 Validator）
+  validationResult Json?          @default("{}")
+
+  createdAt       DateTime        @default(now())
+
+  @@index([projectId, chapterNo])
+  @@index([createdAt])
+  @@map("agent_logs")
+}
+
+// 章节摘要（独立存储，支持更多元数据）
+model ChapterSummary {
+  id              String          @id @default(cuid())
+  projectId       Int
+  chapterNo       Int
+  project         NovelProject    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  // 摘要内容（200-300字）
+  summary         String          @db.Text
+
+  // 关键事件列表
+  keyEvents       String[]        @default([])
+
+  // 情绪基调
+  emotionalTone   String?         // 如：紧张、温馨、悲伤
+
+  // 本章埋下的伏笔ID列表
+  plantedPlotlines String[]       @default([])
+
+  // 本章回收的伏笔ID列表
+  resolvedPlotlines String[]      @default([])
+
+  createdAt       DateTime        @default(now())
+
+  @@unique([projectId, chapterNo])
+  @@index([projectId])
+  @@map("chapter_summaries")
+}
+
+// ============================================
+// 分层摘要系统 - 解决 760 章大文本 token 超限问题
+// ============================================
+
+// L2 卷摘要
+model VolumeSummary {
+  id              String          @id @default(cuid())
+  projectId       Int
+  project         NovelProject    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  volumeNumber    Int             // 卷号 1-N
+  summary         String          @db.Text  // 500-800字
+
+  // 关键事件（卷内最重要的 N 个事件）
+  keyEvents       String[]        @default([])
+
+  // 情绪曲线
+  emotionalArc    Json            @default("[]")  // [{chapterNo, value}]
+
+  // 伏笔统计
+  plantedPlotlines String[]       @default([])    // 本卷埋下的伏笔ID
+  resolvedPlotlines String[]      @default([])    // 本卷回收的伏笔ID
+
+  // 章节概览（各章节一句话描述）
+  chapterOverview Json             @default("[]")   // [{chapterNo, title, summary}]
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@unique([projectId, volumeNumber])
+  @@index([projectId])
+  @@map("volume_summaries")
+}
+
+// L3 全书摘要
+model BookSummary {
+  id              String          @id @default(cuid())
+  projectId       Int             @unique
+  project         NovelProject    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  // 整体摘要
+  summary         String          @db.Text  // 1000-1500字
+
+  // 主线概述
+  mainPlot        String          @db.Text
+
+  // 支线列表
+  subPlots        String[]        @default([])
+
+  // 角色成长弧线
+  characterArcs   Json             @default("[]")  // [{characterId, name, arcDescription}]
+
+  // 主题元素
+  thematicElements String[]       @default([])
+
+  // 全书伏笔统计
+  totalPlotlines    Int           @default(0)
+  resolvedPlotlines Int           @default(0)
+  openPlotlines     Int           @default(0)
+
+  // 结构分析
+  structureAnalysis Json?        @default("{}")  // {openingChapters, developmentChapters, climaxChapters, resolutionChapters}
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@map("book_summaries")
+}
