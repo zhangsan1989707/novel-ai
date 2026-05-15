@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
       },
     })
   } catch (error) {
-    console.error('生成创意设定失败:', error)
+    logError(error instanceof Error ? error : new Error(String(error)), { type: 'generate_idea', projectTitle })
     return NextResponse.json(
       { success: false, error: { code: 'GENERATION_ERROR', message: '生成创意设定失败' } },
       { status: 500 }

@@ -5,6 +5,7 @@ import { createProviderFromDefaultConfig } from '@/lib/ai'
 import { buildNovelGenerationPrompt, buildEndingPrompt, buildRevisionPrompt } from '@/lib/ai/prompts'
 import { buildPromptContext } from '@/lib/ai/context-manager'
 import { AIVendor, ContinuationMode, EndingDirection } from '@/types'
+import { logError } from '@/lib/logger'
 
 // ============================================
 // Schema 验证
@@ -344,7 +345,7 @@ export async function POST(
         { status: 400 }
       )
     }
-    console.error('续写生成失败:', error)
+    logError(error instanceof Error ? error : new Error(String(error)), { type: $1 })
     return NextResponse.json(
       { success: false, error: { code: 'GENERATION_ERROR', message: '续写生成失败' } },
       { status: 500 }

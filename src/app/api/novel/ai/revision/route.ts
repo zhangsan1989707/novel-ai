@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { getAIProvider, buildPromptContext, buildRevisionPrompt, createProviderFromDefaultConfig } from '@/lib/ai'
 import { countChineseWords } from '@/lib/utils'
 import { AIVendor } from '@/types'
+import { logError } from '@/lib/logger'
 
 // ============================================
 // Schema 验证
@@ -190,7 +191,7 @@ export async function POST(request: NextRequest) {
             status: 'completed',
           })
         } catch (error) {
-          console.error('SSE revision error:', error)
+          logError(error instanceof Error ? error : new Error(String(error)), { type: $1 })
           sendEvent('error', {
             message: error instanceof Error ? error.message : '改稿失败',
           })
@@ -214,7 +215,7 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-    console.error('改稿失败:', error)
+    logError(error instanceof Error ? error : new Error(String(error)), { type: 'revision', chapterId })
     return NextResponse.json(
       { success: false, error: { code: 'REVISION_ERROR', message: '改稿失败' } },
       { status: 500 }

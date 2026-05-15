@@ -6,6 +6,7 @@ import { getVolumeChapterRange } from '@/lib/ai/context-manager'
 import { prisma } from '@/lib/prisma'
 import { AIVendor, AnalysisDimension, AnalysisType } from '@/types'
 import { getChapterSummariesInRange, saveChapterSummary } from '@/lib/memory/chapter-summary'
+import { logger } from '@/lib/logger'
 
 // ============================================
 // 常量配置
@@ -198,7 +199,7 @@ async function generateChapterSummariesBatch(
     const batchNum = Math.floor(i / batchSize) + 1
     const totalBatches = Math.ceil(chapters.length / batchSize)
 
-    console.log(`[分层分析] 生成摘要批次 ${batchNum}/${totalBatches}`)
+    logger.debug({ type: 'layered_analysis', batchNum, totalBatches, message: '生成摘要批次' })
 
     const prompt = `请为以下 ${batch.length} 章小说生成简短摘要。
 
@@ -244,7 +245,7 @@ ${batch.map(ch => `第${ch.chapterNumber}章 "${ch.title}":\n${ch.content.slice(
         }
       }
     } catch (error) {
-      console.error(`批次 ${batchNum} 摘要生成失败:`, error)
+      logError(error instanceof Error ? error : new Error(String(error)), { type: 'batch_summary', batchNum, projectId })
     }
   }
 
@@ -448,7 +449,7 @@ export async function POST(request: NextRequest) {
     let resultContent: string
 
     if (useLayeredAnalysis) {
-      console.log(`[分层分析] 章节数 ${chapters.length} > ${LAYERED_ANALYSIS_THRESHOLD}，启用分层分析`)
+      logger.info({ type: 'layered_analysis', chapterCount: chapters.length, threshold: LAYERED_ANALYSIS_THRESHOLD, message: '启用分层分析' })
 
       // L1: 优先从数据库读取已生成的摘要
       const minChapter = Math.min(...chapters.map(c => c.chapterNumber))
@@ -469,7 +470,7 @@ export async function POST(request: NextRequest) {
 
       // 如果有没有摘要的章节，批量生成并持久化
       if (chaptersNeedingSummary.length > 0) {
-        console.log(`[分层分析] ${chaptersNeedingSummary.length} 章缺少摘要，开始生成...`)
+        logger.info({ type: 'layered_analysis', missingChapterCount: chaptersNeedingSummary.length, message: '开始生成缺失摘要' })
         const newSummaries = await generateChapterSummariesBatch(
           chaptersNeedingSummary,
           provider,
@@ -586,7 +587,7 @@ export async function POST(request: NextRequest) {
         )
       }
     }
-    console.error('拆书分析失败:', error)
+    logError(error instanceof Error ? error : new Error(String(error)), { type: 'analyze_plot', projectId })
     const errorMessage = error instanceof Error ? error.message : '未知错误'
     return NextResponse.json(
       { success: false, error: { code: 'ANALYZE_ERROR', message: '拆书分析失败: ' + errorMessage } },

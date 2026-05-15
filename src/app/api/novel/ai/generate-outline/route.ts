@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createProviderFromDefaultConfig, buildOutlineGenerationPrompt } from '@/lib/ai'
 import { AIVendor } from '@/types'
+import { logger, logError } from '@/lib/logger'
 
 // ============================================
 // Schema 验证
@@ -91,7 +92,7 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-    console.error('生成大纲失败:', error)
+    logError(error instanceof Error ? error : new Error(String(error)), { type: 'generate_outline' })
     return NextResponse.json(
       { success: false, error: { code: 'GENERATE_ERROR', message: '生成大纲失败' } },
       { status: 500 }

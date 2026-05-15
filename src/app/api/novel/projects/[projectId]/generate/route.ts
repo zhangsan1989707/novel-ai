@@ -202,7 +202,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         { status: 400 }
       )
     }
-    console.error('生成失败:', error)
+    logError(error instanceof Error ? error : new Error(String(error)), { type: 'generate', chapterId })
     return NextResponse.json(
       { success: false, error: { code: 'GENERATE_ERROR', message: '生成失败' } },
       { status: 500 }

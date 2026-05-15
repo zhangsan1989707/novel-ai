@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { createProviderFromDefaultConfig } from '@/lib/ai'
 import { saveChapterSummary } from '@/lib/memory/chapter-summary'
 import type { ChapterSummaryData } from '@/lib/engine/types'
+import { logger } from '@/lib/logger'
 
 const BATCH_SIZE = 5 // 每批处理章节数
 
@@ -135,7 +136,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
               })
             } catch (error) {
               failed++
-              console.error(`章节 ${chapter.chapterNumber} 摘要生成失败:`, error)
+              logError(error instanceof Error ? error : new Error(String(error)), { type: 'chapter_summary', chapterNo: chapter.chapterNumber, projectId: projectIdNum })
               sendEvent('chapter_error', {
                 chapterNo: chapter.chapterNumber,
                 error: error instanceof Error ? error.message : '生成失败',

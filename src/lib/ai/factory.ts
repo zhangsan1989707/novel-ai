@@ -1,6 +1,7 @@
 import { AIProviderFactory, BaseAIProvider } from './base'
 import type { AIProvider, AIConfig } from './types'
 import { AIVendor } from '@/types'
+import { logger } from '@/lib/logger'
 
 // 导入所有 Provider
 import {
@@ -72,7 +73,7 @@ export async function createProviderFromDefaultConfig(): Promise<AIProvider> {
       })
     }
   } catch (error) {
-    console.warn('Failed to get default config from database, falling back to env:', error)
+    logger.warn({ error, vendor }, 'Failed to get default config from database, falling back to env')
   }
 
   // 回退到环境变量
@@ -99,7 +100,7 @@ export async function createProviderFromConfigId(configId: number): Promise<AIPr
       })
     }
   } catch (error) {
-    console.warn('Failed to get config from database:', error)
+    logger.warn({ error, configId }, 'Failed to get config from database')
   }
 
   return null

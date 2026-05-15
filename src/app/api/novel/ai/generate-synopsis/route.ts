@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { buildSynopsisGenerationPrompt } from '@/lib/ai/prompts'
 import { getAIProvider, createProviderFromDefaultConfig } from '@/lib/ai/factory'
 import { AIVendor } from '@/types'
+import { logError } from '@/lib/logger'
 
 /**
  * POST /api/novel/ai/generate-synopsis
@@ -88,7 +89,7 @@ export async function POST(request: NextRequest) {
       },
     })
   } catch (error) {
-    console.error('生成简介失败:', error)
+    logError(error instanceof Error ? error : new Error(String(error)), { type: $1 })
     return NextResponse.json(
       { success: false, error: { code: 'GENERATION_ERROR', message: '生成简介失败' } },
       { status: 500 }

@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { getAIProvider, buildPromptContext, buildNovelGenerationPrompt, createProviderFromDefaultConfig } from '@/lib/ai'
 import { countChineseWords } from '@/lib/utils'
 import { AIVendor, ChapterStatus } from '@/types'
+import { logError } from '@/lib/logger'
 
 // ============================================
 // Schema 验证
@@ -281,7 +282,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
             successCount++
           } catch (error) {
-            console.error(`Chapter ${chapter.id} generation error:`, error)
+            logError(error instanceof Error ? error : new Error(String(error)), { type: $1 })
 
             // 恢复章节状态为 DRAFT
             await prisma.novelChapter.update({
@@ -332,7 +333,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         { status: 400 }
       )
     }
-    console.error('批量生成失败:', error)
+    logError(error instanceof Error ? error : new Error(String(error)), { type: 'batch_generate' })
     return NextResponse.json(
       { success: false, error: { code: 'BATCH_GENERATE_ERROR', message: '批量生成失败' } },
       { status: 500 }

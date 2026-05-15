@@ -10,6 +10,7 @@ import {
   TimelineValidation,
   ForeshadowingValidation,
 } from './types'
+import { logError } from '@/lib/logger'
 
 // 常见角色名变化模式
 const CHARACTER_ALIAS_PATTERNS = [
@@ -310,7 +311,7 @@ ${content.slice(0, 3000)}
       return JSON.parse(jsonMatch[0])
     }
   } catch (error) {
-    console.error('AI validation failed:', error)
+    logError(error instanceof Error ? error : new Error(String(error)), { type: 'ai_validation' })
   }
 
   return { issues: [], overallAssessment: '未能完成AI深度校验', score: 100 }

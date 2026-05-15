@@ -246,7 +246,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             status: 'completed',
           })
         } catch (error) {
-          console.error('SSE generation error:', error)
+          logError(error instanceof Error ? error : new Error(String(error)), { type: 'sse_generation', chapterId })
 
           // 恢复章节状态
           await prisma.novelChapter.update({
@@ -277,7 +277,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         { status: 400 }
       )
     }
-    console.error('生成失败:', error)
+    logError(error instanceof Error ? error : new Error(String(error)), { type: $1 })
     return NextResponse.json(
       { success: false, error: { code: 'GENERATE_ERROR', message: '生成失败' } },
       { status: 500 }

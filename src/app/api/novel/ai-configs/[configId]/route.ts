@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { AIVendor } from '@/types'
+import { logError } from '@/lib/logger'
 
 // ============================================
 // Schema 验证
@@ -56,7 +57,7 @@ export async function GET(
 
     return NextResponse.json({ success: true, data: safeConfig })
   } catch (error) {
-    console.error('获取 AI 配置失败:', error)
+    logError(error instanceof Error ? error : new Error(String(error)), { type: 'get_ai_config', configId: id })
     return NextResponse.json(
       { success: false, error: { code: 'GET_ERROR', message: '获取配置失败' } },
       { status: 500 }
@@ -127,7 +128,7 @@ export async function PUT(
         { status: 400 }
       )
     }
-    console.error('更新 AI 配置失败:', error)
+    logError(error instanceof Error ? error : new Error(String(error)), { type: 'update_ai_config', configId: id })
     return NextResponse.json(
       { success: false, error: { code: 'UPDATE_ERROR', message: '更新配置失败' } },
       { status: 500 }
@@ -161,7 +162,7 @@ export async function DELETE(
 
     return NextResponse.json({ success: true, data: null })
   } catch (error) {
-    console.error('删除 AI 配置失败:', error)
+    logError(error instanceof Error ? error : new Error(String(error)), { type: $1 })
     return NextResponse.json(
       { success: false, error: { code: 'DELETE_ERROR', message: '删除配置失败' } },
       { status: 500 }

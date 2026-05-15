@@ -4,6 +4,7 @@ import { createProviderFromDefaultConfig, getAIProvider } from '@/lib/ai'
 import { AIVendor } from '@/types'
 import { prisma } from '@/lib/prisma'
 import { buildChapterListPrompt } from '@/lib/ai/prompts'
+import { logError } from '@/lib/logger'
 
 const vendorEnum = z.enum(['OPENAI', 'ANTHROPIC', 'ALIBABA', 'DEEPSEEK', 'MINIMAX', 'VOLCENGINE'])
 
@@ -111,7 +112,7 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-    console.error('生成章节列表失败:', error)
+    logError(error instanceof Error ? error : new Error(String(error)), { type: 'generate_chapter_list' })
     return NextResponse.json(
       { success: false, error: { code: 'GENERATE_ERROR', message: '生成章节列表失败' } },
       { status: 500 }
