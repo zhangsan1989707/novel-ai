@@ -1,5 +1,5 @@
 export { ProjectCard } from './ProjectCard'
-export { ProjectForm, type ProjectFormData, genreOptions, writingStyleOptions } from './ProjectForm'
+export { ProjectForm, type ProjectFormData, genreOptions, writingStyleOptions, targetAudienceOptions } from './ProjectForm'
 export { ChapterListGenerator } from './ChapterListGenerator'
 export { BatchGenerator } from './BatchGenerator'
 export { ExportMenu } from './ExportMenu'

@@ -102,15 +102,40 @@ export function ChapterListGenerator({
       const data = await res.json()
 
       if (data.success && data.data.chapterList?.chapters) {
-        setChapters(data.data.chapterList.chapters)
+        const newChapters: ChapterItem[] = data.data.chapterList.chapters
+        setChapters((prev) => {
+          if (prev.length === 0) return newChapters
+          // 追加模式：已有章节时继续生成，章节号自动续接
+          const startNum = prev.length + 1
+          const appended = newChapters.map((ch, i) => ({
+            ...ch,
+            chapterNumber: startNum + i,
+          }))
+          return [...prev, ...appended]
+        })
       } else if (data.success && data.data.content) {
         const jsonMatch = data.data.content.match(/\{[\s\S]*\}/)
         if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0])
-          if (parsed.chapters) {
-            setChapters(parsed.chapters)
-          } else {
-            setError('生成格式有误，请重试')
+          try {
+            // 清理 AI 常见的 JSON 格式问题（尾随逗号）
+            const cleaned = jsonMatch[0].replace(/,\s*([\]}])/g, '$1')
+            const parsed = JSON.parse(cleaned)
+            if (parsed.chapters) {
+              const newChapters: ChapterItem[] = parsed.chapters
+              setChapters((prev) => {
+                if (prev.length === 0) return newChapters
+                const startNum = prev.length + 1
+                const appended = newChapters.map((ch, i) => ({
+                  ...ch,
+                  chapterNumber: startNum + i,
+                }))
+                return [...prev, ...appended]
+              })
+            } else {
+              setError('生成格式有误，请重试')
+            }
+          } catch {
+            setError('AI 返回格式异常，请重试')
           }
         } else {
           setError('生成格式有误，请重试')
@@ -236,16 +261,26 @@ export function ChapterListGenerator({
               </div>
 
               {/* 生成按钮 */}
-              <Button
-                variant="primary"
-                onClick={handleGenerate}
-                loading={generating}
-                disabled={generating}
-                className="shrink-0"
-              >
-                <Sparkles className="h-4 w-4 mr-2" />
-                {generating ? '生成中...' : '生成目录'}
-              </Button>
+              <div className="flex gap-2 shrink-0">
+                {chapters.length > 0 && (
+                  <Button
+                    variant="outline"
+                    onClick={() => setChapters([])}
+                    disabled={generating}
+                  >
+                    清空重来
+                  </Button>
+                )}
+                <Button
+                  variant="primary"
+                  onClick={handleGenerate}
+                  loading={generating}
+                  disabled={generating}
+                >
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  {generating ? '生成中...' : chapters.length > 0 ? '继续生成' : '生成目录'}
+                </Button>
+              </div>
             </div>
 
             {/* 当前风格说明 */}

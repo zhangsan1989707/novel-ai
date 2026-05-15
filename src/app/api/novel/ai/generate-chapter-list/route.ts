@@ -91,7 +91,10 @@ export async function POST(request: NextRequest) {
     try {
       const jsonMatch = result.content.match(/\{[\s\S]*\}/)
       if (jsonMatch) {
-        chapterList = JSON.parse(jsonMatch[0])
+        // 清理 AI 常见的 JSON 格式问题（尾随逗号）
+        const cleaned = jsonMatch[0]
+          .replace(/,\s*([\]}])/g, '$1')
+        chapterList = JSON.parse(cleaned)
       }
     } catch {
       // 解析失败

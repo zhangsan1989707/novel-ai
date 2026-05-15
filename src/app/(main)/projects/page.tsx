@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button, Select, Input, Pagination, Modal, Card, CardContent } from '@/components/ui'
-import { ProjectCard, ProjectForm, ProjectFormData, genreOptions, AnalyzeWizard } from '@/components/project'
+import { ProjectCard, genreOptions, AnalyzeWizard } from '@/components/project'
 import { Plus, Search, BookOpen, Sparkles, Settings } from 'lucide-react'
 import type { ProjectStatus } from '@/types'
 
@@ -60,7 +60,6 @@ export default function ProjectsPage() {
   const [searchQuery, setSearchQuery] = useState('')
 
   // Modal 状态
-  const [showCreateModal, setShowCreateModal] = useState(false)
   const [showAnalyzeModal, setShowAnalyzeModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleteProjectId, setDeleteProjectId] = useState<number | null>(null)
@@ -96,27 +95,6 @@ export default function ProjectsPage() {
   useEffect(() => {
     fetchProjects()
   }, [fetchProjects])
-
-  // 创建项目
-  const handleCreate = async (data: ProjectFormData) => {
-    setSubmitting(true)
-    try {
-      const res = await fetch('/api/novel/projects', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      })
-      const result = await res.json()
-      if (result.success) {
-        setShowCreateModal(false)
-        router.push(`/projects/${result.data.id}`)
-      }
-    } catch (error) {
-      console.error('创建项目失败:', error)
-    } finally {
-      setSubmitting(false)
-    }
-  }
 
   // 删除项目
   const handleDelete = async () => {
@@ -158,7 +136,7 @@ export default function ProjectsPage() {
                 <Settings className="h-4 w-4 mr-1.5" />
                 AI 配置
               </Button>
-              <Button size="sm" onClick={() => setShowCreateModal(true)}>
+              <Button size="sm" onClick={() => router.push('/projects/new')}>
                 <Plus className="h-4 w-4 mr-1.5" />
                 创作小说
               </Button>
@@ -233,7 +211,7 @@ export default function ProjectsPage() {
         ) : projects.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-gray-500 dark:text-gray-400 mb-4">还没有任何项目</p>
-            <Button onClick={() => setShowCreateModal(true)}>
+            <Button onClick={() => router.push('/projects/new')}>
               <Plus className="h-4 w-4 mr-2" />
               创建第一个项目
             </Button>
@@ -267,20 +245,6 @@ export default function ProjectsPage() {
           </>
         )}
       </main>
-
-      {/* 创建项目 Modal */}
-      <Modal
-        open={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
-        title="新建项目"
-        className="max-w-2xl"
-      >
-        <ProjectForm
-          onSubmit={handleCreate}
-          onCancel={() => setShowCreateModal(false)}
-          loading={submitting}
-        />
-      </Modal>
 
       {/* 拆解小说 Modal */}
       <Modal
