@@ -1,0 +1,353 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
+import { prisma } from '@/lib/prisma'
+import { createProviderFromDefaultConfig } from '@/lib/ai'
+import { buildNovelGenerationPrompt, buildEndingPrompt, buildRevisionPrompt } from '@/lib/ai/prompts'
+import { buildPromptContext } from '@/lib/ai/context-manager'
+import { AIVendor, ContinuationMode, EndingDirection } from '@/types'
+
+// ============================================
+// Schema 验证
+// ============================================
+
+const continuationSchema = z.object({
+  mode: z.enum(['ending', 'continue', 'rewrite']),
+  // ending 模式
+  targetChapterCount: z.number().int().positive().optional().default(1),
+  endingDirection: z.enum(['happy', 'tragic', 'open']).optional(),
+  // continue 模式
+  baseChapterId: z.number().int().positive().optional(),
+  // rewrite 模式
+  userInput: z.string().optional(),
+  // 通用参数
+  useContext: z.boolean().default(true),
+  contextChapterCount: z.number().int().min(1).max(10).default(3),
+  targetWordCount: z.number().int().positive().default(3000),
+  temperature: z.number().min(0).max(2).default(0.7),
+})
+
+// ============================================
+// API Handler
+// ============================================
+
+/**
+ * POST /api/novel/projects/[projectId]/continuation
+ * 续写生成接口 (SSE 流式)
+ */
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ projectId: string }> }
+) {
+  const { projectId } = await params
+  const projectIdNum = parseInt(projectId, 10)
+
+  if (isNaN(projectIdNum)) {
+    return NextResponse.json(
+      { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
+      { status: 400 }
+    )
+  }
+
+  try {
+    const body = await request.json()
+    const {
+      mode,
+      targetChapterCount,
+      endingDirection,
+      baseChapterId,
+      userInput,
+      useContext,
+      contextChapterCount,
+      targetWordCount,
+      temperature,
+    } = continuationSchema.parse(body)
+
+    // 获取项目信息
+    const rawProject = await prisma.novelProject.findUnique({
+      where: { id: projectIdNum },
+    })
+
+    if (!rawProject) {
+      return NextResponse.json(
+        { success: false, error: { code: 'NOT_FOUND', message: '项目不存在' } },
+        { status: 404 }
+      )
+    }
+
+    // 类型转换：处理 null vs undefined
+    const project = {
+      ...rawProject,
+      description: rawProject.description || undefined,
+      genre: rawProject.genre || undefined,
+      writingStyle: rawProject.writingStyle || undefined,
+      outline: rawProject.outline || undefined,
+      worldSetting: rawProject.worldSetting || undefined,
+      powerSystem: rawProject.powerSystem || undefined,
+      protagonistProfile: rawProject.protagonistProfile || undefined,
+      protagonistGoal: rawProject.protagonistGoal || undefined,
+      antagonistSetting: rawProject.antagonistSetting || undefined,
+      endingPlan: rawProject.endingPlan || undefined,
+      writingPrompt: rawProject.writingPrompt || undefined,
+      coverImage: rawProject.coverImage || undefined,
+      targetWordCount: rawProject.targetWordCount ?? undefined,
+      outlineStages: rawProject.outlineStages ?? undefined,
+    } as unknown as Parameters<typeof buildPromptContext>[0]
+
+    // 获取所有章节
+    const chapters = await prisma.novelChapter.findMany({
+      where: { projectId: projectIdNum },
+      orderBy: { chapterNumber: 'asc' },
+    })
+
+    // 获取分析结果
+    const analyses = await prisma.bookAnalysis.findMany({
+      where: { projectId: projectIdNum },
+    })
+
+    // 创建 AI Provider
+    const provider = await createProviderFromDefaultConfig()
+
+    // 根据模式构建提示词
+    let prompt = ''
+    let chapterTitle = ''
+    let chapterNumber = 1
+
+    if (mode === 'ending') {
+      // 续写结局模式
+      // 提取未回收伏笔和开放剧情线
+      const foreshadowingAnalysis = analyses.find(a => a.dimension === 'FORESHADOWING')
+      const plotLineAnalysis = analyses.find(a => a.dimension === 'PLOT_LINE')
+      const characterAnalysis = analyses.find(a => a.dimension === 'CHARACTER_RELATION')
+
+      const unresolvedForeshadowing: { setup: string; importance: string }[] = []
+      const openPlotlines: { title: string; keyEvents: string[] }[] = []
+      const characterArcs: { name: string; currentStatus: string; arcDescription?: string }[] = []
+
+      if (foreshadowingAnalysis?.analysisData) {
+        const data = foreshadowingAnalysis.analysisData as { items?: { setup: string; payoff?: string; importance: string }[] }
+        if (data.items) {
+          data.items.forEach(item => {
+            if (!item.payoff || item.payoff.trim() === '') {
+              unresolvedForeshadowing.push({ setup: item.setup, importance: item.importance })
+            }
+          })
+        }
+      }
+
+      if (plotLineAnalysis?.analysisData) {
+        const data = plotLineAnalysis.analysisData as { mainPlot?: { title: string; keyEvents: string[] }[]; subPlots?: { title: string; keyEvents: string[] }[] }
+        if (data.mainPlot) {
+          data.mainPlot.forEach(plot => {
+            openPlotlines.push({ title: plot.title, keyEvents: plot.keyEvents || [] })
+          })
+        }
+        if (data.subPlots) {
+          data.subPlots.forEach(plot => {
+            openPlotlines.push({ title: plot.title, keyEvents: plot.keyEvents || [] })
+          })
+        }
+      }
+
+      if (characterAnalysis?.analysisData) {
+        const data = characterAnalysis.analysisData as { characters?: { name: string; description: string }[] }
+        if (data.characters) {
+          data.characters.slice(0, 10).forEach(char => {
+            characterArcs.push({
+              name: char.name,
+              currentStatus: char.description.slice(0, 100),
+            })
+          })
+        }
+      }
+
+      // 获取最后一章
+      const lastChapter = chapters[chapters.length - 1]
+      chapterNumber = lastChapter ? lastChapter.chapterNumber + 1 : 1
+      chapterTitle = `结局章`
+
+      // 构建上下文
+      const currentChapter = lastChapter
+        ? { ...lastChapter, chapterNumber, title: chapterTitle }
+        : { id: 0, projectId: projectIdNum, chapterNumber, title: chapterTitle, content: '', wordCount: 0, status: 'DRAFT' as const, sortOrder: chapterNumber, summary: null, generationPrompt: null, virtualWriterId: null }
+
+      const context = await buildPromptContext(
+        project as Parameters<typeof buildPromptContext>[0],
+        currentChapter as unknown as Parameters<typeof buildPromptContext>[1],
+        [],
+        { useContext: false, contextChapterCount: 3, includeStageOutline: false }
+      )
+
+      // 构建结局提示词
+      prompt = buildEndingPrompt(context, {
+        unresolvedForeshadowing,
+        openPlotlines,
+        characterArcs,
+        endingDirection: endingDirection as 'happy' | 'tragic' | 'open' | undefined,
+        targetChapterCount,
+      })
+    } else if (mode === 'continue') {
+      // 继续创作模式
+      const lastChapter = chapters[chapters.length - 1]
+      chapterNumber = lastChapter ? lastChapter.chapterNumber + 1 : 1
+      chapterTitle = `第${chapterNumber}章`
+
+      // 获取前几章作为上下文
+      const contextChapters = lastChapter
+        ? chapters.slice(-contextChapterCount).map(ch => ({
+            id: ch.id,
+            projectId: ch.projectId,
+            chapterNumber: ch.chapterNumber,
+            title: ch.title,
+            content: ch.content || '',
+            wordCount: ch.wordCount || 0,
+            status: ch.status,
+            sortOrder: ch.sortOrder,
+            summary: ch.summary || null,
+            generationPrompt: ch.generationPrompt || null,
+            virtualWriterId: ch.virtualWriterId || null,
+          }))
+        : []
+
+      const currentChapterForContinue = lastChapter
+        ? { ...lastChapter, chapterNumber, title: chapterTitle }
+        : { id: 0, projectId: projectIdNum, chapterNumber, title: chapterTitle, content: '', wordCount: 0, status: 'DRAFT' as const, sortOrder: chapterNumber, summary: null, generationPrompt: null, virtualWriterId: null }
+
+      const context = await buildPromptContext(
+        project as Parameters<typeof buildPromptContext>[0],
+        currentChapterForContinue as unknown as Parameters<typeof buildPromptContext>[1],
+        contextChapters as unknown as Parameters<typeof buildPromptContext>[2],
+        { useContext, contextChapterCount, includeStageOutline: true }
+      )
+
+      prompt = buildNovelGenerationPrompt(context, {
+        useContext,
+        contextChapterCount,
+        targetWordCount,
+        includeStageOutline: true,
+      })
+    } else {
+      // rewrite 模式 - 全文重写
+      const lastChapter = chapters[chapters.length - 1]
+      chapterNumber = lastChapter ? lastChapter.chapterNumber + 1 : 1
+      chapterTitle = `重写版第${chapterNumber}章`
+
+      // 获取全书摘要
+      const bookSummary = await prisma.bookSummary.findFirst({
+        where: { projectId: projectIdNum },
+        orderBy: { createdAt: 'desc' },
+      })
+
+      // 构建上下文
+      const rewriteContextChapters = chapters.slice(-contextChapterCount).map(ch => ({
+        id: ch.id,
+        projectId: ch.projectId,
+        chapterNumber: ch.chapterNumber,
+        title: ch.title,
+        content: ch.content || '',
+        wordCount: ch.wordCount || 0,
+        status: ch.status,
+        sortOrder: ch.sortOrder,
+        summary: ch.summary || null,
+        generationPrompt: ch.generationPrompt || null,
+        virtualWriterId: ch.virtualWriterId || null,
+      }))
+
+      const currentChapterForRewrite = lastChapter
+        ? { ...lastChapter, chapterNumber, title: chapterTitle }
+        : { id: 0, projectId: projectIdNum, chapterNumber, title: chapterTitle, content: '', wordCount: 0, status: 'DRAFT' as const, sortOrder: chapterNumber, summary: null, generationPrompt: null, virtualWriterId: null }
+
+      const context = await buildPromptContext(
+        project as Parameters<typeof buildPromptContext>[0],
+        currentChapterForRewrite as unknown as Parameters<typeof buildPromptContext>[1],
+        rewriteContextChapters as unknown as Parameters<typeof buildPromptContext>[2],
+        { useContext: false, contextChapterCount: 3, includeStageOutline: false }
+      )
+
+      // 使用 revision continue 类型
+      const fullContent = lastChapter?.content || ''
+      prompt = buildRevisionPrompt(context, fullContent, 'continue', userInput)
+    }
+
+    // 创建章节记录
+    const newChapter = await prisma.novelChapter.create({
+      data: {
+        projectId: projectIdNum,
+        chapterNumber,
+        title: chapterTitle,
+        status: 'GENERATING',
+        sortOrder: chapterNumber,
+      },
+    })
+
+    // 设置 SSE 响应头
+    const encoder = new TextEncoder()
+    const stream = new ReadableStream({
+      async start(controller) {
+        const sendEvent = (event: string, data: Record<string, unknown>) => {
+          controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`))
+        }
+
+        try {
+          // 发送开始事件
+          sendEvent('start', { chapterId: newChapter.id, chapterNumber, mode })
+
+          // 流式生成
+          let fullContent = ''
+          for await (const token of provider.generateStream(prompt, { temperature })) {
+            fullContent += token
+            sendEvent('token', { content: token })
+          }
+
+          // 更新章节内容
+          await prisma.novelChapter.update({
+            where: { id: newChapter.id },
+            data: {
+              content: fullContent,
+              wordCount: fullContent.length,
+              status: 'COMPLETED',
+            },
+          })
+
+          // 发送完成事件
+          sendEvent('done', {
+            chapterId: newChapter.id,
+            chapterNumber,
+            wordCount: fullContent.length,
+          })
+        } catch (error) {
+          // 标记章节为失败
+          await prisma.novelChapter.update({
+            where: { id: newChapter.id },
+            data: { status: 'DRAFT' },
+          }).catch(() => {})
+
+          sendEvent('error', {
+            message: error instanceof Error ? error.message : '生成失败',
+          })
+        } finally {
+          controller.close()
+        }
+      },
+    })
+
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      },
+    })
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { success: false, error: { code: 'VALIDATION_ERROR', message: error.issues[0]?.message } },
+        { status: 400 }
+      )
+    }
+    console.error('续写生成失败:', error)
+    return NextResponse.json(
+      { success: false, error: { code: 'GENERATION_ERROR', message: '续写生成失败' } },
+      { status: 500 }
+    )
+  }
+}
