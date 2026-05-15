@@ -71,6 +71,8 @@ model User {
   projects      NovelProject[]
   virtualWriters VirtualWriter[]
   publicCharacters Character[]   @relation("CharacterCreator")
+  quota         UserQuota?
+  aiUsages      AIUsage[]
 
   @@map("users")
 }
@@ -142,6 +144,7 @@ model NovelProject {
   chapterSummaries    ChapterSummary[]
   volumeSummaries     VolumeSummary[]
   bookSummary         BookSummary?
+  aiUsages            AIUsage[]
 
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
@@ -186,6 +189,7 @@ model NovelChapter {
 
   @@unique([projectId, chapterNumber])
   @@index([projectId])
+  @@index([projectId, status])
   @@map("novel_chapters")
 }
 
@@ -389,6 +393,7 @@ model Plotline {
 
   @@index([projectId])
   @@index([status])
+  @@index([projectId, status, plantedAt])
   @@map("plotlines")
 }
 
@@ -433,6 +438,7 @@ model StoryEvent {
 
   @@index([projectId])
   @@index([chapterNo])
+  @@index([projectId, createdAt])
   @@map("story_events")
 }
 
@@ -561,4 +567,71 @@ model BookSummary {
   updatedAt       DateTime        @updatedAt
 
   @@map("book_summaries")
+}
+
+// ============================================
+// AI 调用成本追踪系统
+// ============================================
+
+// 各模型定价配置
+model ModelPricing {
+  id          Int       @id @default(autoincrement())
+  vendor      AIVendor
+  modelId     String    // 模型 ID，如 "deepseek-chat"
+  inputPrice  Decimal   // 输入价格（每百万 token）
+  outputPrice Decimal   // 输出价格（每百万 token）
+  currency    String    @default("CNY") // 货币单位
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([vendor, modelId])
+  @@map("model_pricings")
+}
+
+// 用户月度配额配置
+model UserQuota {
+  id           Int       @id @default(autoincrement())
+  userId       Int       @unique
+  user         User      @relation(fields: [userId], references: [id])
+
+  monthlyLimit Decimal   // 月度限额（金额）
+  alertThreshold Decimal  // 预警阈值（百分比，如 0.8 表示 80%）
+  isLocked     Boolean   @default(false) // 是否锁定（超出限额后）
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("user_quotas")
+}
+
+// AI 调用记录
+model AIUsage {
+  id          String    @id @default(cuid())
+  userId      Int
+  user        User      @relation(fields: [userId], references: [id])
+  projectId   Int?
+  project     NovelProject? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  vendor      AIVendor
+  modelId     String
+  usageType   String    // 调用类型：GENERATE, ANALYZE, SUMMARY 等
+
+  // Token 使用
+  promptTokens     Int      @default(0)
+  completionTokens Int     @default(0)
+  totalTokens      Int      @default(0)
+
+  // 费用计算
+  inputCost    Decimal   @default(0)
+  outputCost   Decimal   @default(0)
+  totalCost    Decimal   @default(0)
+
+  // 时间信息
+  usageMonth   Int       // 月份（YYYYMM）
+  createdAt    DateTime  @default(now())
+
+  @@index([userId, usageMonth])
+  @@index([projectId])
+  @@map("ai_usages")
 }

@@ -1,5 +1,15 @@
 import type { AIProvider, AIConfig, GenerationParams, GenerationResult } from './types'
 import type { AIVendor } from '@/types'
+import { getModelPricing, estimateCost } from '@/lib/cost-tracker'
+
+// 简单的 token 估算函数（当 API 不返回 token 统计时使用）
+export function estimateTokens(text: string): number {
+  // 中文字符约 1.5 个字符 = 1 token
+  // 英文字符约 4 个字符 = 1 token
+  const chineseChars = (text.match(/[\u4e00-\u9fa5]/g) || []).length
+  const otherChars = text.length - chineseChars
+  return Math.ceil(chineseChars / 1.5 + otherChars / 4)
+}
 
 /**
  * AI Provider 抽象基类
@@ -40,6 +50,42 @@ export abstract class BaseAIProvider implements AIProvider {
    */
   protected isContentSufficient(wordCount: number, targetWordCount: number): boolean {
     return wordCount >= targetWordCount * 0.9
+  }
+
+  /**
+   * 获取当前模型的定价信息
+   */
+  async getPricing() {
+    if (!this.config) {
+      throw new Error('Provider not configured')
+    }
+    return getModelPricing(this.vendor, this.config.modelId)
+  }
+
+  /**
+   * 估算一次调用的成本
+   */
+  async estimateCallCost(prompt: string, estimatedCompletionTokens: number) {
+    if (!this.config) {
+      throw new Error('Provider not configured')
+    }
+    const pricing = await this.getPricing()
+    if (!pricing) {
+      // 如果没有定价信息，使用默认值
+      return estimateCost(
+        estimateTokens(prompt),
+        estimatedCompletionTokens,
+        1.0,
+        2.0
+      )
+    }
+    const promptTokens = estimateTokens(prompt)
+    return estimateCost(
+      promptTokens,
+      estimatedCompletionTokens,
+      pricing.inputPrice.toNumber(),
+      pricing.outputPrice.toNumber()
+    )
   }
 }
 
