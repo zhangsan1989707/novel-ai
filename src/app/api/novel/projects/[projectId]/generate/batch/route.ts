@@ -5,6 +5,7 @@ import { getAIProvider, buildPromptContext, buildNovelGenerationPrompt, createPr
 import { countChineseWords } from '@/lib/utils'
 import { AIVendor, ChapterStatus } from '@/types'
 import { logError } from '@/lib/logger'
+import { toProjectDTO, toChapterDTO } from '@/types/dto'
 
 // ============================================
 // Schema 验证
@@ -96,23 +97,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     // 类型转换
-    const project = {
-      ...rawProject,
-      description: rawProject.description || undefined,
-      genre: rawProject.genre || undefined,
-      writingStyle: rawProject.writingStyle || undefined,
-      outline: rawProject.outline || undefined,
-      worldSetting: rawProject.worldSetting || undefined,
-      powerSystem: rawProject.powerSystem || undefined,
-      protagonistProfile: rawProject.protagonistProfile || undefined,
-      protagonistGoal: rawProject.protagonistGoal || undefined,
-      antagonistSetting: rawProject.antagonistSetting || undefined,
-      endingPlan: rawProject.endingPlan || undefined,
-      writingPrompt: rawProject.writingPrompt || undefined,
-      coverImage: rawProject.coverImage || undefined,
-      targetWordCount: rawProject.targetWordCount ?? undefined,
-      outlineStages: rawProject.outlineStages ?? undefined,
-    } as unknown as Parameters<typeof buildPromptContext>[0]
+    const project = toProjectDTO(rawProject)
 
     // 创建 SSE 流式响应
     const encoder = new TextEncoder()
@@ -184,17 +169,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             })
 
             // 构建提示词上下文
-            const chapterData = {
-              ...chapter,
-              summary: chapter.summary || undefined,
-              content: chapter.content || undefined,
-              generationPrompt: chapter.generationPrompt || undefined,
-            } as unknown as Parameters<typeof buildPromptContext>[1]
+            const chapterData = toChapterDTO(chapter)
 
             const context = await buildPromptContext(
               project,
               chapterData,
-              previousChapters as unknown as Parameters<typeof buildPromptContext>[2],
+              previousChapters.map(toChapterDTO),
               {
                 useContext,
                 contextChapterCount,

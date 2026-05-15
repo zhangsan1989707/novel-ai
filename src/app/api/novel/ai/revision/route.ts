@@ -5,6 +5,7 @@ import { getAIProvider, buildPromptContext, buildRevisionPrompt, createProviderF
 import { countChineseWords } from '@/lib/utils'
 import { AIVendor } from '@/types'
 import { logError } from '@/lib/logger'
+import { toProjectDTO, toChapterDTO } from '@/types/dto'
 
 // ============================================
 // Schema 验证
@@ -62,21 +63,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const project = {
-      ...rawProject,
-      description: rawProject.description || undefined,
-      genre: rawProject.genre || undefined,
-      writingStyle: rawProject.writingStyle || undefined,
-      outline: rawProject.outline || undefined,
-      worldSetting: rawProject.worldSetting || undefined,
-      powerSystem: rawProject.powerSystem || undefined,
-      protagonistProfile: rawProject.protagonistProfile || undefined,
-      protagonistGoal: rawProject.protagonistGoal || undefined,
-      antagonistSetting: rawProject.antagonistSetting || undefined,
-      endingPlan: rawProject.endingPlan || undefined,
-      writingPrompt: rawProject.writingPrompt || undefined,
-      targetWordCount: rawProject.targetWordCount ?? undefined,
-    } as unknown as Parameters<typeof buildPromptContext>[0]
+    const project = toProjectDTO(rawProject)
 
     // 获取章节信息
     const rawChapter = await prisma.novelChapter.findUnique({
@@ -90,11 +77,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const chapter = {
-      ...rawChapter,
-      summary: rawChapter.summary || undefined,
-      content: rawChapter.content || undefined,
-    } as unknown as Parameters<typeof buildPromptContext>[1]
+    const chapter = toChapterDTO(rawChapter)
 
     // 获取前文章节（用于上下文）
     const previousChapters = useContext
@@ -113,7 +96,7 @@ export async function POST(request: NextRequest) {
     const context = await buildPromptContext(
       project,
       chapter,
-      previousChapters as unknown as Parameters<typeof buildPromptContext>[2],
+      previousChapters.map(toChapterDTO),
       { useContext, contextChapterCount, includeStageOutline: true }
     )
 

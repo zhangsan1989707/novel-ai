@@ -6,6 +6,7 @@ import { buildNovelGenerationPrompt, buildEndingPrompt, buildRevisionPrompt } fr
 import { buildPromptContext } from '@/lib/ai/context-manager'
 import { AIVendor, ContinuationMode, EndingDirection } from '@/types'
 import { logError } from '@/lib/logger'
+import { toProjectDTO, toChapterDTO } from '@/types/dto'
 
 // ============================================
 // Schema 验证
@@ -75,24 +76,8 @@ export async function POST(
       )
     }
 
-    // 类型转换：处理 null vs undefined
-    const project = {
-      ...rawProject,
-      description: rawProject.description || undefined,
-      genre: rawProject.genre || undefined,
-      writingStyle: rawProject.writingStyle || undefined,
-      outline: rawProject.outline || undefined,
-      worldSetting: rawProject.worldSetting || undefined,
-      powerSystem: rawProject.powerSystem || undefined,
-      protagonistProfile: rawProject.protagonistProfile || undefined,
-      protagonistGoal: rawProject.protagonistGoal || undefined,
-      antagonistSetting: rawProject.antagonistSetting || undefined,
-      endingPlan: rawProject.endingPlan || undefined,
-      writingPrompt: rawProject.writingPrompt || undefined,
-      coverImage: rawProject.coverImage || undefined,
-      targetWordCount: rawProject.targetWordCount ?? undefined,
-      outlineStages: rawProject.outlineStages ?? undefined,
-    } as unknown as Parameters<typeof buildPromptContext>[0]
+    // 类型转换
+    const project = toProjectDTO(rawProject)
 
     // 获取所有章节
     const chapters = await prisma.novelChapter.findMany({
@@ -168,12 +153,12 @@ export async function POST(
 
       // 构建上下文
       const currentChapter = lastChapter
-        ? { ...lastChapter, chapterNumber, title: chapterTitle }
-        : { id: 0, projectId: projectIdNum, chapterNumber, title: chapterTitle, content: '', wordCount: 0, status: 'DRAFT' as const, sortOrder: chapterNumber, summary: null, generationPrompt: null, virtualWriterId: null }
+        ? toChapterDTO({ ...lastChapter, chapterNumber, title: chapterTitle })
+        : toChapterDTO({ id: 0, projectId: projectIdNum, chapterNumber, title: chapterTitle, content: '', wordCount: 0, status: 'DRAFT' as const, sortOrder: chapterNumber, summary: null, generationPrompt: null, generationParams: null, generationCount: 0, lastGeneratedTime: null, chapterOutline: null, validationReport: null, retryCount: 0, lastAgentType: null, virtualWriterId: null, createdAt: new Date(), updatedAt: new Date(), virtualWriter: null })
 
       const context = await buildPromptContext(
-        project as Parameters<typeof buildPromptContext>[0],
-        currentChapter as unknown as Parameters<typeof buildPromptContext>[1],
+        project,
+        currentChapter,
         [],
         { useContext: false, contextChapterCount: 3, includeStageOutline: false }
       )
@@ -194,29 +179,17 @@ export async function POST(
 
       // 获取前几章作为上下文
       const contextChapters = lastChapter
-        ? chapters.slice(-contextChapterCount).map(ch => ({
-            id: ch.id,
-            projectId: ch.projectId,
-            chapterNumber: ch.chapterNumber,
-            title: ch.title,
-            content: ch.content || '',
-            wordCount: ch.wordCount || 0,
-            status: ch.status,
-            sortOrder: ch.sortOrder,
-            summary: ch.summary || null,
-            generationPrompt: ch.generationPrompt || null,
-            virtualWriterId: ch.virtualWriterId || null,
-          }))
+        ? chapters.slice(-contextChapterCount).map(toChapterDTO)
         : []
 
       const currentChapterForContinue = lastChapter
-        ? { ...lastChapter, chapterNumber, title: chapterTitle }
-        : { id: 0, projectId: projectIdNum, chapterNumber, title: chapterTitle, content: '', wordCount: 0, status: 'DRAFT' as const, sortOrder: chapterNumber, summary: null, generationPrompt: null, virtualWriterId: null }
+        ? toChapterDTO({ ...lastChapter, chapterNumber, title: chapterTitle })
+        : toChapterDTO({ id: 0, projectId: projectIdNum, chapterNumber, title: chapterTitle, content: '', wordCount: 0, status: 'DRAFT' as const, sortOrder: chapterNumber, summary: null, generationPrompt: null, generationParams: null, generationCount: 0, lastGeneratedTime: null, chapterOutline: null, validationReport: null, retryCount: 0, lastAgentType: null, virtualWriterId: null, createdAt: new Date(), updatedAt: new Date(), virtualWriter: null })
 
       const context = await buildPromptContext(
-        project as Parameters<typeof buildPromptContext>[0],
-        currentChapterForContinue as unknown as Parameters<typeof buildPromptContext>[1],
-        contextChapters as unknown as Parameters<typeof buildPromptContext>[2],
+        project,
+        currentChapterForContinue,
+        contextChapters,
         { useContext, contextChapterCount, includeStageOutline: true }
       )
 
@@ -239,28 +212,16 @@ export async function POST(
       })
 
       // 构建上下文
-      const rewriteContextChapters = chapters.slice(-contextChapterCount).map(ch => ({
-        id: ch.id,
-        projectId: ch.projectId,
-        chapterNumber: ch.chapterNumber,
-        title: ch.title,
-        content: ch.content || '',
-        wordCount: ch.wordCount || 0,
-        status: ch.status,
-        sortOrder: ch.sortOrder,
-        summary: ch.summary || null,
-        generationPrompt: ch.generationPrompt || null,
-        virtualWriterId: ch.virtualWriterId || null,
-      }))
+      const rewriteContextChapters = chapters.slice(-contextChapterCount).map(toChapterDTO)
 
       const currentChapterForRewrite = lastChapter
-        ? { ...lastChapter, chapterNumber, title: chapterTitle }
-        : { id: 0, projectId: projectIdNum, chapterNumber, title: chapterTitle, content: '', wordCount: 0, status: 'DRAFT' as const, sortOrder: chapterNumber, summary: null, generationPrompt: null, virtualWriterId: null }
+        ? toChapterDTO({ ...lastChapter, chapterNumber, title: chapterTitle })
+        : toChapterDTO({ id: 0, projectId: projectIdNum, chapterNumber, title: chapterTitle, content: '', wordCount: 0, status: 'DRAFT' as const, sortOrder: chapterNumber, summary: null, generationPrompt: null, generationParams: null, generationCount: 0, lastGeneratedTime: null, chapterOutline: null, validationReport: null, retryCount: 0, lastAgentType: null, virtualWriterId: null, createdAt: new Date(), updatedAt: new Date(), virtualWriter: null })
 
       const context = await buildPromptContext(
-        project as Parameters<typeof buildPromptContext>[0],
-        currentChapterForRewrite as unknown as Parameters<typeof buildPromptContext>[1],
-        rewriteContextChapters as unknown as Parameters<typeof buildPromptContext>[2],
+        project,
+        currentChapterForRewrite,
+        rewriteContextChapters,
         { useContext: false, contextChapterCount: 3, includeStageOutline: false }
       )
 

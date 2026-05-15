@@ -4,6 +4,8 @@ import { z } from 'zod'
 import { getAIProvider, buildPromptContext, buildNovelGenerationPrompt, createProviderFromDefaultConfig } from '@/lib/ai'
 import { countChineseWords } from '@/lib/utils'
 import { AIVendor } from '@/types'
+import { logError } from '@/lib/logger'
+import { toProjectDTO, toChapterDTO } from '@/types/dto'
 
 // ============================================
 // Schema 验证
@@ -65,24 +67,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       )
     }
 
-    // 类型转换：处理 null vs undefined，并使用类型断言
-    const project = {
-      ...rawProject,
-      description: rawProject.description || undefined,
-      genre: rawProject.genre || undefined,
-      writingStyle: rawProject.writingStyle || undefined,
-      outline: rawProject.outline || undefined,
-      worldSetting: rawProject.worldSetting || undefined,
-      powerSystem: rawProject.powerSystem || undefined,
-      protagonistProfile: rawProject.protagonistProfile || undefined,
-      protagonistGoal: rawProject.protagonistGoal || undefined,
-      antagonistSetting: rawProject.antagonistSetting || undefined,
-      endingPlan: rawProject.endingPlan || undefined,
-      writingPrompt: rawProject.writingPrompt || undefined,
-      coverImage: rawProject.coverImage || undefined,
-      targetWordCount: rawProject.targetWordCount ?? undefined,
-      outlineStages: rawProject.outlineStages ?? undefined,
-    } as unknown as Parameters<typeof buildPromptContext>[0]
+    // 类型转换
+    const project = toProjectDTO(rawProject)
 
     // 获取章节信息
     const rawChapter = await prisma.novelChapter.findUnique({
@@ -96,12 +82,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       )
     }
 
-    const chapter = {
-      ...rawChapter,
-      summary: rawChapter.summary || undefined,
-      content: rawChapter.content || undefined,
-      generationPrompt: rawChapter.generationPrompt || undefined,
-    } as unknown as Parameters<typeof buildPromptContext>[1]
+    const chapter = toChapterDTO(rawChapter)
 
     // 获取前文章节
     const previousChapters = await prisma.novelChapter.findMany({
@@ -118,7 +99,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const context = await buildPromptContext(
       project,
       chapter,
-      previousChapters as unknown as Parameters<typeof buildPromptContext>[2],
+      previousChapters.map(toChapterDTO),
       {
         useContext,
         contextChapterCount,
