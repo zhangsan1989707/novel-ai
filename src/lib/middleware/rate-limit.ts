@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { LRUCache } from 'lru-cache'
-import { logger } from './logger'
+import logger from '../logger'
 
 interface RateLimitConfig {
   max: number

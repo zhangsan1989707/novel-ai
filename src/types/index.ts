@@ -111,6 +111,7 @@ export interface NovelProject {
   antagonistSetting?: string
   endingPlan?: string
   writingPrompt?: string
+  targetAudience?: 'MALE' | 'FEMALE'
   status: ProjectStatus
   coverImage?: string
   totalVolumes: number

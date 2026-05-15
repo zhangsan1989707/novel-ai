@@ -118,6 +118,9 @@ model NovelProject {
   endingPlan          String?         @db.Text        // 结局规划
   writingPrompt       String?         @db.Text        // 写作提示词
 
+  // 目标受众: MALE=男频, FEMALE=女频
+  targetAudience      String?         // 目标受众
+
   status              ProjectStatus   @default(DRAFT)
   coverImage          String?         // 封面图 URL
   totalVolumes        Int             @default(4)      // 总卷数

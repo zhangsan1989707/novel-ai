@@ -272,19 +272,7 @@ export function ProjectForm({ defaultValues, onSubmit, onCancel, loading, submit
       {showInspiration && (
         <InspirationPanel onSelect={handleInspirationSelect} />
       )}
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-medium">基本信息</h3>
-        {formValues.title && (
-          <button
-            type="button"
-            onClick={() => setShowInspiration(!showInspiration)}
-            className="text-sm text-blue-600 hover:text-blue-700"
-          >
-            {showInspiration ? '收起灵感推荐' : '查看灵感推荐'}
-          </button>
-        )}
-      </div>
-
+      <div className="space-y-4">
         <Input
           label="标题"
           placeholder="请输入小说标题"

@@ -30,6 +30,7 @@ const createProjectSchema = z.object({
   coverImage: z.string().optional(),
   totalVolumes: z.coerce.number().int().min(1).max(10).default(4),
   aiModelId: z.coerce.number().int().positive().optional(),
+  targetAudience: z.enum(['MALE', 'FEMALE']).optional(),
 })
 
 const updateProjectSchema = createProjectSchema.partial()
