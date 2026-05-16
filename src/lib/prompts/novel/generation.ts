@@ -79,8 +79,15 @@ export function buildNovelGenerationPrompt(
   // 【任务】
   parts.push(`\n【任务】`)
   parts.push(`请撰写第${context.currentChapterNumber}章 "${context.currentChapterTitle}"`)
+  
+  // 添加阶段大纲（如果有）
+  if (context.stageOutline) {
+    parts.push(`\n【本章阶段大纲】`)
+    parts.push(context.stageOutline)
+  }
+  
   if (context.currentChapterSummary) {
-    parts.push(`章节概要：${context.currentChapterSummary}`)
+    parts.push(`\n章节概要：${context.currentChapterSummary}`)
   }
 
   // 网文特性引导
