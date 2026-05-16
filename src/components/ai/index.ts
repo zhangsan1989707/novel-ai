@@ -19,3 +19,6 @@ export { DimensionCorrelationView } from './DimensionCorrelationView'
 // P2
 export { ChapterRhythmHeatmap } from './ChapterRhythmHeatmap'
 export { StyleConsistencyPanel } from './StyleConsistencyPanel'
+export { ResearchPanel } from './ResearchPanel'
+// Market
+export { MarketScanPanel } from './MarketScanPanel'

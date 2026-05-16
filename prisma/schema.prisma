@@ -149,6 +149,7 @@ model NovelProject {
   volumeSummaries     VolumeSummary[]
   bookSummary         BookSummary?
   aiUsages            AIUsage[]
+  researchRefs        ResearchRef[]
 
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
@@ -342,6 +343,7 @@ enum AgentType {
   POLISHER   // 润色 Agent
   VALIDATOR  // 校验 Agent
   SUMMARIZER // 摘要 Agent
+  RESEARCHER // 研究 Agent
 }
 
 // 角色档案
@@ -679,4 +681,66 @@ model AIUsage {
   @@index([userId, usageMonth])
   @@index([projectId])
   @@map("ai_usages")
+}
+
+// ============================================
+// 扫榜选材系统
+// ============================================
+
+model MarketTrend {
+  id             String   @id @default(cuid())
+  platform       String
+  genre          String
+  rankDate       DateTime
+  avgWordCount   Int      @default(0)
+  updateFreq     String?
+  hotTags        String[] @default([])
+  trendDirection String?
+  analysisData   Json     @default("{}")
+
+  createdAt      DateTime @default(now())
+
+  @@index([platform, genre, rankDate])
+  @@map("market_trends")
+}
+
+model MarketBook {
+  id           String   @id @default(cuid())
+  platform     String
+  genre        String
+  title        String
+  author       String?
+  rankPosition Int?
+  wordCount    Int      @default(0)
+  rating       Float?
+  tags         String[] @default([])
+  synopsis     String?  @db.Text
+  analysisData Json     @default("{}")
+  rankDate     DateTime
+
+  createdAt    DateTime @default(now())
+
+  @@index([platform, genre])
+  @@index([platform, rankDate])
+  @@map("market_books")
+}
+
+model ResearchRef {
+  id          String    @id @default(cuid())
+  projectId   Int
+  project     NovelProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  topic       String
+  summary     String    @db.Text
+  keyFacts    String[]  @default([])
+  creativeMaterials String[] @default([])
+  confidence  String    @default("medium")
+  usageSuggestions String[] @default([])
+  usedInChapter Int?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([projectId])
+  @@map("research_refs")
 }
