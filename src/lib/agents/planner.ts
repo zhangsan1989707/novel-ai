@@ -3,7 +3,8 @@
  */
 import { prisma } from '@/lib/prisma'
 import { AIService } from '@/lib/ai/service'
-import { buildPlannerPrompt } from './prompts'
+import { buildPlannerPrompt as buildPlannerPromptV1 } from '../prompts/chapter/planning'
+import { buildPlannerPrompt as buildPlannerPromptV2 } from '../prompts/chapter/planning-v2'
 import type { ChapterOutline, AgentContext } from '../engine/types'
 
 interface PlannerInput extends AgentContext {
@@ -12,7 +13,11 @@ interface PlannerInput extends AgentContext {
   emotionalArc: { chapterNo: number; value: number }[]
   recentChapterCount: number
   targetWordCount: number
+  useEnhancedPrompt?: boolean
 }
+
+// 默认使用增强版提示词
+const buildPlannerPrompt = buildPlannerPromptV2
 
 export async function plannerAgent(
   input: PlannerInput

@@ -2,8 +2,9 @@
  * 校验 Agent - 一致性检查
  */
 import { AIService } from '@/lib/ai/service'
-import { buildValidatorPrompt } from './prompts'
-import type { ValidationReport, CharacterProfile, PlotlineData } from '../engine/types'
+import { buildValidatorPrompt as buildValidatorPromptV1 } from '../prompts/chapter/validating'
+import { buildValidatorPrompt as buildValidatorPromptV2, type ValidationReport as ValidationReportV2 } from '../prompts/chapter/validating-v2'
+import type { CharacterProfile, PlotlineData } from '../engine/types'
 
 interface ValidatorInput {
   projectId: number
@@ -13,12 +14,19 @@ interface ValidatorInput {
   recentSummaries: { chapterNo: number; summary: string }[]
   worldSetting?: string | null
   openPlotlines: PlotlineData[]
+  chapterTitle?: string
+  chapterGoal?: string
+  useEnhancedPrompt?: boolean
 }
+
+// 默认使用增强版校验
+const buildValidatorPrompt = buildValidatorPromptV2
+type ValidationReport = ValidationReportV2
 
 export async function validatorAgent(
   input: ValidatorInput
 ): Promise<ValidationReport> {
-  const { projectId, chapterNo, newChapterContent, characterProfiles, recentSummaries, worldSetting, openPlotlines } = input
+  const { projectId, chapterNo, newChapterContent, characterProfiles, recentSummaries, worldSetting, openPlotlines, chapterTitle, chapterGoal } = input
 
   // 获取可追踪的 AI Provider
   const provider = await AIService.createProvider({
@@ -44,12 +52,14 @@ export async function validatorAgent(
     recentSummaries: recentSummaries.map(s => `第${s.chapterNo}章：${s.summary}`).join('\n'),
     worldSetting,
     openPlotlines: plotlinesStr,
+    chapterTitle,
+    chapterGoal,
   })
 
   // 执行校验
   const result = await provider.generate(prompt, {
     temperature: 0.3,
-    maxTokens: 2000,
+    maxTokens: 2500,
   })
 
   // 解析 JSON
@@ -67,6 +77,12 @@ export async function validatorAgent(
         characterUpdates: {},
         newPlotlines: [],
         resolvedPlotlines: [],
+        qualityMetrics: {
+          logicScore: 75,
+          characterScore: 75,
+          emotionScore: 75,
+          styleScore: 70,
+        },
       }
     }
   }
@@ -77,6 +93,7 @@ export async function validatorAgent(
     score: 50,
     issues: [{
       type: 'worldview',
+      severity: 'major',
       description: '无法解析校验结果，可能存在格式问题',
       location: '全文',
       reference: '校验输出',
@@ -84,5 +101,11 @@ export async function validatorAgent(
     characterUpdates: {},
     newPlotlines: [],
     resolvedPlotlines: [],
+    qualityMetrics: {
+      logicScore: 50,
+      characterScore: 50,
+      emotionScore: 50,
+      styleScore: 50,
+    },
   }
 }
