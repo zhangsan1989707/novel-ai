@@ -92,7 +92,7 @@ export async function GET(request: NextRequest) {
           _count: true,
         }),
         // AI 调用次数
-        prisma.aiUsage.count({
+        prisma.aIUsage.count({
           where: { userId: creatorId },
         }),
       ]),
