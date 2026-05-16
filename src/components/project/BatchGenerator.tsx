@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Button, Modal } from '@/components/ui'
-import { Sparkles, CheckSquare, Square, Loader2 } from 'lucide-react'
+import { Sparkles, ChevronDown, ChevronUp, BookOpen, PenLine, Sliders, Info } from 'lucide-react'
 import { CostEstimationModal } from './CostEstimationModal'
 
 interface Chapter {
@@ -13,6 +13,28 @@ interface Chapter {
   status: string
   content?: string | null
 }
+
+// 预设字数选项
+const WORD_COUNT_PRESETS = [
+  { label: '短篇', value: 2000, desc: '~2000字' },
+  { label: '标准', value: 3000, desc: '~3000字' },
+  { label: '长篇', value: 5000, desc: '~5000字' },
+]
+
+// 预设风格选项（隐藏复杂参数）
+const STYLE_PRESETS = [
+  { label: '保守', temperature: 0.4, desc: '内容稳定、风格一致' },
+  { label: '均衡', temperature: 0.7, desc: '兼顾稳定与创意（推荐）' },
+  { label: '创意', temperature: 1.0, desc: '更多变化和惊喜' },
+]
+
+// 参考章节数选项
+const CONTEXT_OPTIONS = [
+  { value: 1, label: '仅前1章' },
+  { value: 3, label: '前3章（推荐）' },
+  { value: 5, label: '前5章' },
+  { value: 10, label: '前10章' },
+]
 
 interface BatchGeneratorProps {
   projectId: number
@@ -36,14 +58,18 @@ export function BatchGenerator({ projectId, chapters, onGenerate }: BatchGenerat
   const [temperature, setTemperature] = useState(0.7)
   const [targetWordCount, setTargetWordCount] = useState(3000)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
 
   const pendingChapters = chapters.filter(
     (ch) => !ch.content || ch.wordCount === 0
   )
-  
-  const chapterCountToGenerate = generationType === 'all' 
-    ? pendingChapters.length 
+
+  const chapterCountToGenerate = generationType === 'all'
+    ? pendingChapters.length
     : selectedChapterIds.length
+
+  // 获取当前选中的风格预设索引
+  const currentStyleIndex = STYLE_PRESETS.findIndex(s => s.temperature === temperature)
 
   const handleOpen = () => {
     setSelectedChapterIds(pendingChapters.map((ch) => ch.id))
@@ -60,7 +86,7 @@ export function BatchGenerator({ projectId, chapters, onGenerate }: BatchGenerat
     setShowCostModal(false)
     setIsOpen(false)
     setIsGenerating(true)
-    
+
     const options = {
       useContext,
       contextChapterCount,
@@ -68,7 +94,7 @@ export function BatchGenerator({ projectId, chapters, onGenerate }: BatchGenerat
       targetWordCount,
       ...(generationType === 'selected' ? { chapterIds: selectedChapterIds } : {}),
     }
-    
+
     onGenerate(options)
     setTimeout(() => setIsGenerating(false), 500)
   }
@@ -108,131 +134,185 @@ export function BatchGenerator({ projectId, chapters, onGenerate }: BatchGenerat
         }
         className="max-w-lg"
       >
-        <div className="space-y-5">
-          {/* 生成范围 */}
-          <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-gray-800 dark:to-gray-800 rounded-xl p-4">
-            <label className="block text-sm font-medium mb-3">生成范围</label>
+        <div className="space-y-4">
+          {/* ===== 生成范围 ===== */}
+          <SectionCard icon={<BookOpen className="w-4 h-4" />} title="生成范围">
+            <RadioGroup
+              options={[
+                {
+                  value: 'all',
+                  label: '全部待生成章节',
+                  badge: `${pendingChapters.length} 章`,
+                },
+                {
+                  value: 'selected',
+                  label: '选择特定章节',
+                  badge: generationType === 'selected'
+                    ? `${selectedChapterIds.length} 章`
+                    : undefined,
+                },
+              ]}
+              value={generationType}
+              onChange={(v) => setGenerationType(v as 'all' | 'selected')}
+            />
 
+            {generationType === 'selected' && (
+              <div className="mt-3 max-h-36 overflow-y-auto space-y-1 bg-gray-50 dark:bg-gray-800/50 rounded-lg p-2 border border-gray-100 dark:border-gray-700">
+                {chapters.map((chapter) => {
+                  const isPending = pendingChapters.some((p) => p.id === chapter.id)
+                  return (
+                    <label
+                      key={chapter.id}
+                      className={`flex items-center gap-2 cursor-pointer px-2 py-1.5 rounded-md transition-colors ${
+                        isPending ? 'hover:bg-white/70 dark:hover:bg-gray-700/50' : 'opacity-40'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedChapterIds.includes(chapter.id)}
+                        onChange={() => toggleChapter(chapter.id)}
+                        disabled={!isPending}
+                        className="w-4 h-4 accent-blue-600 rounded"
+                      />
+                      <span className="text-sm flex-1 truncate">
+                        第{chapter.chapterNumber}章 {chapter.title || '无标题'}
+                      </span>
+                      {!isPending && (
+                        <span className="text-xs text-gray-400">已完成</span>
+                      )}
+                    </label>
+                  )
+                })}
+              </div>
+            )}
+          </SectionCard>
+
+          {/* ===== 创作风格 ===== */}
+          <SectionCard icon={<PenLine className="w-4 h-4" />} title="创作风格">
+            {/* 字数选择 - 按钮组 */}
             <div className="space-y-2">
-              <label className="flex items-center gap-3 cursor-pointer p-2.5 rounded-lg hover:bg-white/50 dark:hover:bg-gray-700/50 transition-colors">
-                <input
-                  type="radio"
-                  name="generationType"
-                  value="all"
-                  checked={generationType === 'all'}
-                  onChange={() => setGenerationType('all')}
-                  className="w-4 h-4 accent-blue-600"
-                />
-                <span className="flex-1">全部待生成章节</span>
-                <span className="text-sm text-blue-600 dark:text-blue-400 font-medium">
-                  {pendingChapters.length} 章
-                </span>
-              </label>
-
-              <label className="flex items-center gap-3 cursor-pointer p-2.5 rounded-lg hover:bg-white/50 dark:hover:bg-gray-700/50 transition-colors">
-                <input
-                  type="radio"
-                  name="generationType"
-                  value="selected"
-                  checked={generationType === 'selected'}
-                  onChange={() => setGenerationType('selected')}
-                  className="w-4 h-4 accent-blue-600"
-                />
-                <span className="flex-1">选择特定章节</span>
-              </label>
-
-              {generationType === 'selected' && (
-                <div className="ml-7 mt-2 max-h-40 overflow-y-auto space-y-1 bg-white/30 dark:bg-gray-700/30 rounded-lg p-2">
-                  {chapters.map((chapter) => {
-                    const isPending = pendingChapters.some((p) => p.id === chapter.id)
-                    return (
-                      <label
-                        key={chapter.id}
-                        className={`flex items-center gap-2 cursor-pointer p-1.5 rounded ${
-                          isPending ? 'hover:bg-white/50 dark:hover:bg-gray-600/50' : 'opacity-50'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedChapterIds.includes(chapter.id)}
-                          onChange={() => toggleChapter(chapter.id)}
-                          disabled={!isPending}
-                          className="w-4 h-4 accent-blue-600"
-                        />
-                        <span className="text-sm">
-                          第{chapter.chapterNumber}章 {chapter.title || '无标题'}
-                        </span>
-                        {!isPending && (
-                          <span className="text-xs text-gray-400 ml-auto">已有内容</span>
-                        )}
-                      </label>
-                    )
-                  })}
-                </div>
-              )}
+              <label className="text-xs font-medium text-gray-500">目标字数</label>
+              <div className="flex gap-2">
+                {WORD_COUNT_PRESETS.map((preset) => (
+                  <button
+                    key={preset.value}
+                    type="button"
+                    onClick={() => setTargetWordCount(preset.value)}
+                    className={`flex-1 px-3 py-2 text-sm rounded-lg border transition-all ${
+                      targetWordCount === preset.value
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                        : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:border-blue-300 hover:text-blue-600'
+                    }`}
+                  >
+                    <div className="font-medium">{preset.label}</div>
+                    <div className={`text-xs ${targetWordCount === preset.value ? 'text-blue-100' : 'text-gray-400'}`}>
+                      {preset.desc}
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
 
-          {/* 生成设置 */}
-          <div className="space-y-3">
-            <label className="block text-sm font-medium">生成设置</label>
+            {/* 风格选择 - 卡片式 */}
+            <div className="space-y-2 mt-3">
+              <label className="text-xs font-medium text-gray-500">AI 创作风格</label>
+              <div className="grid grid-cols-3 gap-2">
+                {STYLE_PRESETS.map((style) => {
+                  const isActive = style.temperature === temperature
+                  return (
+                    <button
+                      key={style.label}
+                      type="button"
+                      onClick={() => setTemperature(style.temperature)}
+                      className={`relative p-2.5 rounded-lg border text-left transition-all ${
+                        isActive
+                          ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-400 ring-1 ring-blue-400/30'
+                          : 'bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 hover:border-gray-300'
+                      }`}
+                    >
+                      <div className={`font-medium text-sm ${isActive ? 'text-blue-700 dark:text-blue-300' : 'text-gray-700 dark:text-gray-300'}`}>
+                        {style.label}
+                      </div>
+                      <div className={`text-xs mt-0.5 ${isActive ? 'text-blue-500' : 'text-gray-400'}`}>
+                        {style.desc}
+                      </div>
+                      {isActive && (
+                        <div className="absolute top-1.5 right-1.5 w-2 h-2 bg-blue-500 rounded-full" />
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </SectionCard>
 
-            <label className="flex items-center gap-2.5 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={useContext}
-                onChange={(e) => setUseContext(e.target.checked)}
-                className="w-4 h-4 accent-blue-600"
-              />
-              <span>使用上下文（参考前文章节）</span>
-            </label>
+          {/* ===== 高级选项（可折叠）===== */}
+          <div className="border border-dashed border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+            >
+              <span className="flex items-center gap-2">
+                <Sliders className="w-4 h-4" />
+                高级选项
+              </span>
+              {showAdvanced ? (
+                <ChevronUp className="w-4 h-4" />
+              ) : (
+                <ChevronDown className="w-4 h-4" />
+              )}
+            </button>
 
-            {useContext && (
-              <div className="ml-6 space-y-2">
-                <div className="flex items-center gap-2">
-                  <label className="text-sm whitespace-nowrap">参考章节数：</label>
+            {showAdvanced && (
+              <div className="px-4 pb-4 space-y-3 pt-1 border-t border-gray-100 dark:border-gray-700">
+                {/* 上下文开关 */}
+                <label className="flex items-center gap-2.5 cursor-pointer py-1">
                   <input
-                    type="number"
-                    value={contextChapterCount}
-                    onChange={(e) => setContextChapterCount(Math.max(1, parseInt(e.target.value) || 1))}
-                    min={1}
-                    max={10}
-                    className="w-20 h-8 px-2 border rounded dark:bg-gray-800 dark:border-gray-600"
+                    type="checkbox"
+                    checked={useContext}
+                    onChange={(e) => setUseContext(e.target.checked)}
+                    className="w-4 h-4 accent-blue-600 rounded"
                   />
-                  <span className="text-sm text-gray-500">（最多10章）</span>
+                  <div>
+                    <span className="text-sm">启用上下文参考</span>
+                    <p className="text-xs text-gray-400">AI 会参考已生成的前文章节内容</p>
+                  </div>
+                </label>
+
+                {/* 参考章节数 - 下拉选择 */}
+                {useContext && (
+                  <div className="ml-6 flex items-center gap-2">
+                    <label className="text-sm text-gray-500 whitespace-nowrap">参考范围：</label>
+                    <select
+                      value={contextChapterCount}
+                      onChange={(e) => setContextChapterCount(Number(e.target.value))}
+                      className="h-9 px-3 pr-8 border rounded-lg bg-white dark:bg-gray-800 dark:border-gray-600 text-sm appearance-none bg-no-repeat bg-right"
+                      style={{
+                        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`,
+                        backgroundPosition: `right 0.5rem center`,
+                      }}
+                    >
+                      {CONTEXT_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                    <Info className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                  </div>
+                )}
+
+                {/* 自定义温度显示 */}
+                <div className="ml-6 flex items-center gap-2 text-xs text-gray-400">
+                  <span>当前温度值：</span>
+                  <kbd className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 rounded font-mono">{temperature}</kbd>
+                  <span>· 由上方风格选项自动设定</span>
                 </div>
               </div>
             )}
-
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <label className="text-sm whitespace-nowrap">温度参数：</label>
-                <input
-                  type="number"
-                  value={temperature}
-                  onChange={(e) => setTemperature(Math.max(0, Math.min(2, parseFloat(e.target.value) || 0.7)))}
-                  min={0}
-                  max={2}
-                  step={0.1}
-                  className="w-20 h-8 px-2 border rounded dark:bg-gray-800 dark:border-gray-600"
-                />
-              </div>
-
-              <div className="flex items-center gap-2">
-                <label className="text-sm whitespace-nowrap">目标字数：</label>
-                <input
-                  type="number"
-                  value={targetWordCount}
-                  onChange={(e) => setTargetWordCount(Math.max(100, parseInt(e.target.value) || 3000))}
-                  min={100}
-                  className="w-24 h-8 px-2 border rounded dark:bg-gray-800 dark:border-gray-600"
-                />
-              </div>
-            </div>
           </div>
 
-          {/* 操作按钮 */}
-          <div className="flex justify-end gap-3 pt-4 border-t">
+          {/* ===== 底部操作栏 ===== */}
+          <div className="flex justify-end gap-3 pt-3 border-t border-gray-100 dark:border-gray-700">
             <Button variant="outline" onClick={() => setIsOpen(false)}>
               取消
             </Button>
@@ -247,7 +327,7 @@ export function BatchGenerator({ projectId, chapters, onGenerate }: BatchGenerat
           </div>
         </div>
       </Modal>
-      
+
       {/* 成本预估确认模态框 */}
       <CostEstimationModal
         open={showCostModal}
@@ -259,5 +339,71 @@ export function BatchGenerator({ projectId, chapters, onGenerate }: BatchGenerat
         loading={isGenerating}
       />
     </>
+  )
+}
+
+// ===== 子组件 =====
+
+function SectionCard({
+  icon,
+  title,
+  children,
+}: {
+  icon: React.ReactNode
+  title: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className="bg-gradient-to-br from-slate-50 to-gray-50/50 dark:from-gray-800/80 dark:to-gray-800/40 rounded-xl p-4 border border-gray-100/80 dark:border-gray-700/50">
+      <div className="flex items-center gap-2 mb-3 text-gray-700 dark:text-gray-200">
+        <span className="text-blue-500">{icon}</span>
+        <span className="text-sm font-semibold">{title}</span>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function RadioGroup({
+  options,
+  value,
+  onChange,
+}: {
+  options: { value: string; label: string; badge?: string }[]
+  value: string
+  onChange: (value: string) => void
+}) {
+  return (
+    <div className="space-y-1.5">
+      {options.map((opt) => (
+        <label
+          key={opt.value}
+          className={`flex items-center gap-3 cursor-pointer p-2.5 rounded-lg transition-all ${
+            value === opt.value
+              ? 'bg-blue-50/60 dark:bg-blue-900/15 ring-1 ring-blue-200/50 dark:ring-blue-800/30'
+              : 'hover:bg-white/60 dark:hover:bg-gray-700/40'
+          }`}
+        >
+          <input
+            type="radio"
+            name="generationType"
+            value={opt.value}
+            checked={value === opt.value}
+            onChange={() => onChange(opt.value)}
+            className="w-4 h-4 accent-blue-600"
+          />
+          <span className="flex-1 text-sm">{opt.label}</span>
+          {opt.badge && (
+            <span className={`text-sm font-medium px-2 py-0.5 rounded-full ${
+              value === opt.value
+                ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300'
+                : 'text-gray-500 dark:text-gray-400'
+            }`}>
+              {opt.badge}
+            </span>
+          )}
+        </label>
+      ))}
+    </div>
   )
 }
