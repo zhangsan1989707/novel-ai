@@ -112,7 +112,7 @@ export function ChapterListGenerator({
         endingPlan,
         outline,
         outlineStages,
-        totalChapters,
+        totalChapters: chapters.length > 0 ? chapters.length + totalChapters : totalChapters,
         titleStyle,
         aiModelId,
         existingChapters: chapters.length > 0 ? chapters : undefined,
@@ -245,7 +245,7 @@ export function ChapterListGenerator({
             <div className="flex flex-wrap items-end gap-6">
               {/* 章节数 */}
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-gray-500 dark:text-gray-400">章节数量</label>
+                <label className="text-xs font-medium text-gray-500 dark:text-gray-400">{chapters.length > 0 ? '追加章节数' : '章节数量'}</label>
                 <div className="flex items-center gap-2">
                   <Input
                     type="number"
