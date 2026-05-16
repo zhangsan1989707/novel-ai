@@ -543,6 +543,8 @@ export default function ProjectDetailPage() {
                           protagonistGoal={project.protagonistGoal || undefined}
                           antagonistSetting={project.antagonistSetting || undefined}
                           endingPlan={project.endingPlan || undefined}
+                          outline={project.outline || undefined}
+                          outlineStages={project.outlineStages || undefined}
                           aiModelId={project.aiModelId || undefined}
                           chapters={project.chapters}
                           onApply={handleApplyChapters}
