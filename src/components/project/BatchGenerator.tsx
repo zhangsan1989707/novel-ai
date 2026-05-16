@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Button, Modal } from '@/components/ui'
 import { Sparkles, CheckSquare, Square, Loader2 } from 'lucide-react'
+import { CostEstimationModal } from './CostEstimationModal'
 
 interface Chapter {
   id: number
@@ -27,23 +28,39 @@ interface BatchGeneratorProps {
 
 export function BatchGenerator({ projectId, chapters, onGenerate }: BatchGeneratorProps) {
   const [isOpen, setIsOpen] = useState(false)
+  const [showCostModal, setShowCostModal] = useState(false)
   const [generationType, setGenerationType] = useState<'all' | 'selected'>('all')
   const [selectedChapterIds, setSelectedChapterIds] = useState<number[]>([])
   const [useContext, setUseContext] = useState(true)
   const [contextChapterCount, setContextChapterCount] = useState(3)
   const [temperature, setTemperature] = useState(0.7)
   const [targetWordCount, setTargetWordCount] = useState(3000)
+  const [isGenerating, setIsGenerating] = useState(false)
 
   const pendingChapters = chapters.filter(
     (ch) => !ch.content || ch.wordCount === 0
   )
+  
+  const chapterCountToGenerate = generationType === 'all' 
+    ? pendingChapters.length 
+    : selectedChapterIds.length
 
   const handleOpen = () => {
     setSelectedChapterIds(pendingChapters.map((ch) => ch.id))
     setIsOpen(true)
   }
 
-  const handleGenerate = () => {
+  const handleGenerateClick = () => {
+    if (chapterCountToGenerate > 0) {
+      setShowCostModal(true)
+    }
+  }
+
+  const handleConfirmGenerate = () => {
+    setShowCostModal(false)
+    setIsOpen(false)
+    setIsGenerating(true)
+    
     const options = {
       useContext,
       contextChapterCount,
@@ -51,8 +68,9 @@ export function BatchGenerator({ projectId, chapters, onGenerate }: BatchGenerat
       targetWordCount,
       ...(generationType === 'selected' ? { chapterIds: selectedChapterIds } : {}),
     }
+    
     onGenerate(options)
-    setIsOpen(false)
+    setTimeout(() => setIsGenerating(false), 500)
   }
 
   const toggleChapter = (id: number) => {
@@ -220,15 +238,26 @@ export function BatchGenerator({ projectId, chapters, onGenerate }: BatchGenerat
             </Button>
             <Button
               variant="primary"
-              onClick={handleGenerate}
+              onClick={handleGenerateClick}
               disabled={generationType === 'selected' && selectedChapterIds.length === 0}
             >
               <Sparkles className="h-4 w-4 mr-2" />
-              开始生成
+              下一步：确认成本
             </Button>
           </div>
         </div>
       </Modal>
+      
+      {/* 成本预估确认模态框 */}
+      <CostEstimationModal
+        open={showCostModal}
+        onClose={() => setShowCostModal(false)}
+        onConfirm={handleConfirmGenerate}
+        projectId={projectId}
+        chapterCount={chapterCountToGenerate}
+        targetWordCount={targetWordCount}
+        loading={isGenerating}
+      />
     </>
   )
 }
