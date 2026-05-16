@@ -76,3 +76,11 @@ export {
   type PlotAnalysisInput,
   type PlotAnalysisOptions,
 } from './analysis'
+
+// ============================================
+// 研究提示词
+// ============================================
+export {
+  buildResearchPrompt,
+  type ResearchPromptInput,
+} from './research'

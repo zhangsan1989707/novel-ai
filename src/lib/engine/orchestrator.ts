@@ -125,6 +125,20 @@ export async function runChapterGenerationPipeline(
       chapterNo
     )
 
+    // ========== Phase 1.5: 研究 Agent (可选) ==========
+    const existingRefs = await prisma.researchRef.findMany({
+      where: { projectId },
+      select: { topic: true, summary: true, keyFacts: true, creativeMaterials: true },
+    })
+
+    if (existingRefs.length > 0) {
+      emit({ type: 'research', data: { refsCount: existingRefs.length } })
+    }
+
+    const researchContext = existingRefs
+      .map(r => `【${r.topic}】${r.summary}\n关键事实: ${r.keyFacts.join('; ')}\n创作素材: ${r.creativeMaterials.join('; ')}`)
+      .join('\n\n')
+
     // ========== Phase 2: 写作 Agent ==========
     emit({ type: 'agent_switch', data: { agent: 'writer' } })
 
@@ -136,7 +150,9 @@ export async function runChapterGenerationPipeline(
         projectTitle: project.title,
         genre: project.genre,
         writingStyle: project.writingStyle,
-        worldSetting: project.worldSetting,
+        worldSetting: researchContext
+          ? `${project.worldSetting || ''}\n\n【研究参考资料】\n${researchContext}`
+          : project.worldSetting,
         powerSystem: project.powerSystem,
         protagonistProfile: project.protagonistProfile,
         antagonistSetting: project.antagonistSetting,

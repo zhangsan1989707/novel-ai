@@ -7,6 +7,7 @@ export const AgentTypeEnum = {
   POLISHER: 'POLISHER',
   VALIDATOR: 'VALIDATOR',
   SUMMARIZER: 'SUMMARIZER',
+  RESEARCHER: 'RESEARCHER',
 } as const
 export type AgentType = typeof AgentTypeEnum[keyof typeof AgentTypeEnum]
 
@@ -144,6 +145,6 @@ export interface AgentResult {
 
 // SSE 事件类型
 export interface SSEEvent {
-  type: 'start' | 'token' | 'agent_switch' | 'validation' | 'done' | 'error' | 'wordCount'
+  type: 'start' | 'token' | 'agent_switch' | 'validation' | 'done' | 'error' | 'wordCount' | 'research'
   data: Record<string, unknown>
 }
