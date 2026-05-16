@@ -84,9 +84,21 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       )
     }
 
-    return NextResponse.json({ success: true, data: project })
+    // 实时计算当前总字数
+    const totalWordCount = project.chapters.reduce((sum, chapter) => {
+      return sum + (chapter.wordCount || 0)
+    }, 0)
+
+    // 返回带计算后字数的项目数据
+    return NextResponse.json({
+      success: true,
+      data: {
+        ...project,
+        currentWordCount: totalWordCount, // 实时计算替换数据库字段
+      }
+    })
   } catch (error) {
-    logError(error instanceof Error ? error : new Error(String(error)), { type: $1 })
+    logError(error instanceof Error ? error : new Error(String(error)), { type: 'get_project', projectId: id })
     return NextResponse.json(
       { success: false, error: { code: 'FETCH_ERROR', message: '获取项目详情失败' } },
       { status: 500 }
@@ -159,7 +171,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({ success: true, data: { id } })
   } catch (error) {
-    logError(error instanceof Error ? error : new Error(String(error)), { type: $1 })
+    logError(error instanceof Error ? error : new Error(String(error)), { type: 'delete_project', projectId: id })
     return NextResponse.json(
       { success: false, error: { code: 'DELETE_ERROR', message: '删除项目失败' } },
       { status: 500 }

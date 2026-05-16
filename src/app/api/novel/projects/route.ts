@@ -75,6 +75,9 @@ export async function GET(request: NextRequest) {
         include: {
           aiModelConfig: true,
           _count: { select: { chapters: true } },
+          chapters: {
+            select: { wordCount: true },
+          },
         },
         orderBy: { updatedAt: 'desc' },
         skip,
@@ -83,10 +86,18 @@ export async function GET(request: NextRequest) {
       prisma.novelProject.count({ where: { ...where, creatorId } }),
     ])
 
+    // 为每个项目实时计算总字数
+    const projectsWithWordCount = projects.map(project => ({
+      ...project,
+      currentWordCount: project.chapters.reduce((sum, chapter) => {
+        return sum + (chapter.wordCount || 0)
+      }, 0)
+    }))
+
     return NextResponse.json({
       success: true,
       data: {
-        projects,
+        projects: projectsWithWordCount,
         pagination: {
           page,
           pageSize,
