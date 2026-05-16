@@ -2,8 +2,7 @@
  * 润色 Agent - 文风优化
  */
 import { prisma } from '@/lib/prisma'
-import { getAIProvider, createProviderFromDefaultConfig } from '@/lib/ai/factory'
-import { AIVendor } from '@/types'
+import { AIService } from '@/lib/ai/service'
 import { buildPolisherPrompt } from './prompts'
 
 interface PolisherInput {
@@ -19,23 +18,11 @@ export async function polisherAgent(
 ): Promise<{ content: string; tokens?: number }> {
   const { projectId, chapterNo, content, styleGuide } = input
 
-  // 获取 AI Provider
-  let provider
-  const project = await prisma.novelProject.findUnique({
-    where: { id: projectId },
-    include: { aiModelConfig: true },
+  // 获取可追踪的 AI Provider
+  const provider = await AIService.createProvider({
+    projectId,
+    usageType: 'POLISHER',
   })
-
-  if (project?.aiModelConfig) {
-    provider = getAIProvider(project.aiModelConfig.vendor as AIVendor, {
-      vendor: project.aiModelConfig.vendor as AIVendor,
-      modelId: project.aiModelConfig.modelId,
-      apiKey: project.aiModelConfig.apiKey || '',
-      apiEndpoint: project.aiModelConfig.apiEndpoint || undefined,
-    })
-  } else {
-    provider = await createProviderFromDefaultConfig()
-  }
 
   // 构建提示词
   const prompt = buildPolisherPrompt({

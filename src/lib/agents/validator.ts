@@ -2,8 +2,7 @@
  * 校验 Agent - 一致性检查
  */
 import { prisma } from '@/lib/prisma'
-import { getAIProvider, createProviderFromDefaultConfig } from '@/lib/ai/factory'
-import { AIVendor } from '@/types'
+import { AIService } from '@/lib/ai/service'
 import { buildValidatorPrompt } from './prompts'
 import type { ValidationReport, CharacterProfile, PlotlineData } from '../engine/types'
 
@@ -22,23 +21,11 @@ export async function validatorAgent(
 ): Promise<ValidationReport> {
   const { projectId, chapterNo, newChapterContent, characterProfiles, recentSummaries, worldSetting, openPlotlines } = input
 
-  // 获取 AI Provider
-  let provider
-  const project = await prisma.novelProject.findUnique({
-    where: { id: projectId },
-    include: { aiModelConfig: true },
+  // 获取可追踪的 AI Provider
+  const provider = await AIService.createProvider({
+    projectId,
+    usageType: 'VALIDATOR',
   })
-
-  if (project?.aiModelConfig) {
-    provider = getAIProvider(project.aiModelConfig.vendor as AIVendor, {
-      vendor: project.aiModelConfig.vendor as AIVendor,
-      modelId: project.aiModelConfig.modelId,
-      apiKey: project.aiModelConfig.apiKey || '',
-      apiEndpoint: project.aiModelConfig.apiEndpoint || undefined,
-    })
-  } else {
-    provider = await createProviderFromDefaultConfig()
-  }
 
   // 构建角色档案字符串
   const characterProfilesStr = characterProfiles

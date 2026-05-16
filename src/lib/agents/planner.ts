@@ -2,8 +2,7 @@
  * 策划 Agent - 生成章节大纲
  */
 import { prisma } from '@/lib/prisma'
-import { getAIProvider, createProviderFromDefaultConfig } from '@/lib/ai/factory'
-import { AIVendor } from '@/types'
+import { AIService } from '@/lib/ai/service'
 import { buildPlannerPrompt } from './prompts'
 import type { ChapterOutline, AgentContext } from '../engine/types'
 
@@ -21,23 +20,11 @@ export async function plannerAgent(
 ): Promise<{ outline: ChapterOutline; tokens?: number }> {
   const { projectId, chapterNo, ...context } = input
 
-  // 获取 AI Provider
-  let provider
-  const project = await prisma.novelProject.findUnique({
-    where: { id: projectId },
-    include: { aiModelConfig: true },
+  // 获取可追踪的 AI Provider
+  const provider = await AIService.createProvider({
+    projectId,
+    usageType: 'PLANNER',
   })
-
-  if (project?.aiModelConfig) {
-    provider = getAIProvider(project.aiModelConfig.vendor as AIVendor, {
-      vendor: project.aiModelConfig.vendor as AIVendor,
-      modelId: project.aiModelConfig.modelId,
-      apiKey: project.aiModelConfig.apiKey || '',
-      apiEndpoint: project.aiModelConfig.apiEndpoint || undefined,
-    })
-  } else {
-    provider = await createProviderFromDefaultConfig()
-  }
 
   // 获取前 N 章摘要
   const recentChapters = await prisma.chapterSummary.findMany({
