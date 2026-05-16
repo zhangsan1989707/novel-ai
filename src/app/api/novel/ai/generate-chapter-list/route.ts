@@ -25,6 +25,11 @@ const generateChapterListSchema = z.object({
   aiModelId: z.number().int().positive().optional(),
   vendor: vendorEnum.default('DEEPSEEK'),
   temperature: z.number().min(0).max(2).default(0.7),
+  existingChapters: z.array(z.object({
+    chapterNumber: z.number().int().positive(),
+    title: z.string(),
+    summary: z.string(),
+  })).optional(),
 })
 
 export async function POST(request: NextRequest) {
@@ -79,6 +84,7 @@ export async function POST(request: NextRequest) {
       titleStyle,
       outline: dbOutline,
       outlineStages: dbOutlineStages,
+      existingChapters: body.existingChapters,
     })
 
     let provider

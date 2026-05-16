@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button, Input, Modal } from '@/components/ui'
 import { Sparkles, Edit2, Check, X, Plus, Trash2, BookOpen, FileText, Sparkle } from 'lucide-react'
 
@@ -84,6 +84,13 @@ export function ChapterListGenerator({
   const [editTitle, setEditTitle] = useState('')
   const [error, setError] = useState('')
 
+  // 当模态框打开时，使用外部传入的章节初始化内部状态
+  useEffect(() => {
+    if (isOpen && externalChapters.length > 0) {
+      setChapters(externalChapters)
+    }
+  }, [isOpen, externalChapters])
+
   const currentStyle = titleStyleOptions.find((o) => o.value === titleStyle)!
 
   const handleGenerate = async () => {
@@ -91,6 +98,8 @@ export function ChapterListGenerator({
     setError('')
 
     try {
+      // 如果已有章节，那么需要计算还需要生成多少章节，或者直接让用户决定追加数量
+      // 这里我们保持原有逻辑，但将已有章节传给 API
       const requestBody = {
         projectId,
         projectTitle,
@@ -106,6 +115,7 @@ export function ChapterListGenerator({
         totalChapters,
         titleStyle,
         aiModelId,
+        existingChapters: chapters.length > 0 ? chapters : undefined,
       }
 
       const res = await fetch('/api/novel/ai/generate-chapter-list', {
@@ -120,13 +130,8 @@ export function ChapterListGenerator({
         const newChapters: ChapterItem[] = data.data.chapterList.chapters
         setChapters((prev) => {
           if (prev.length === 0) return newChapters
-          // 追加模式：已有章节时继续生成，章节号自动续接
-          const startNum = prev.length + 1
-          const appended = newChapters.map((ch, i) => ({
-            ...ch,
-            chapterNumber: startNum + i,
-          }))
-          return [...prev, ...appended]
+          // 追加模式：已有章节时继续生成，API 应该已经返回正确续接的章节号
+          return [...prev, ...newChapters]
         })
         // 显示警告信息
         if (data.warning) {
@@ -143,12 +148,8 @@ export function ChapterListGenerator({
               const newChapters: ChapterItem[] = parsed.chapters
               setChapters((prev) => {
                 if (prev.length === 0) return newChapters
-                const startNum = prev.length + 1
-                const appended = newChapters.map((ch, i) => ({
-                  ...ch,
-                  chapterNumber: startNum + i,
-                }))
-                return [...prev, ...appended]
+                // 追加模式：已有章节时继续生成
+                return [...prev, ...newChapters]
               })
             } else {
               setError('生成格式有误，请重试')
