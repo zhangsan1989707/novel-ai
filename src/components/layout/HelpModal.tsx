@@ -124,10 +124,10 @@ export function HelpModal({ trigger }: HelpModalProps) {
 
       {/* 帮助 Modal */}
       <Modal
-        isOpen={isOpen}
+        open={isOpen}
         onClose={() => setIsOpen(false)}
         title="帮助中心"
-        size="lg"
+        className="max-w-2xl"
       >
         <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
           {helpSections.map(section => (

@@ -202,7 +202,11 @@ export async function checkQuotaStatus(userId: number) {
     : 0
 
   return {
-    quota,
+    quota: {
+      monthlyLimit: quota.monthlyLimit.toNumber(),
+      alertThreshold: quota.alertThreshold.toNumber(),
+      isLocked: quota.isLocked,
+    },
     usage,
     usagePercent,
     isOverLimit: usagePercent >= 1.0,

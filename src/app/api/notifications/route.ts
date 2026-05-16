@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
+import { Prisma } from '@prisma/client'
 
 // ============================================
 // Schema 验证
@@ -13,7 +14,7 @@ const createNotificationSchema = z.object({
   content: z.string().min(1),
   link: z.string().optional(),
   projectId: z.number().int().positive().optional(),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 })
 
 const DEFAULT_USER_ID = 1 // TODO: 后续接入认证后修改
@@ -89,7 +90,7 @@ export async function POST(request: NextRequest) {
         content: data.content,
         link: data.link,
         projectId: data.projectId,
-        metadata: data.metadata || {},
+        metadata: data.metadata as Prisma.InputJsonValue,
       },
     })
 
@@ -97,7 +98,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: '参数验证失败', details: error.errors },
+        { error: '参数验证失败', details: error.issues },
         { status: 400 }
       )
     }
