@@ -22,3 +22,7 @@ export { StyleConsistencyPanel } from './StyleConsistencyPanel'
 export { ResearchPanel } from './ResearchPanel'
 // Market
 export { MarketScanPanel } from './MarketScanPanel'
+// Cover
+export { CoverGenerator } from './CoverGenerator'
+// Deslop
+export { DeslopPanel } from './DeslopPanel'
