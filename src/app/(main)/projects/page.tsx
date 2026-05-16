@@ -139,38 +139,42 @@ export default function ProjectsPage() {
       </div>
 
       {/* 筛选栏 */}
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center gap-4">
-        <div className="relative flex-1 min-w-[200px] max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <Input
-            placeholder="搜索项目..."
-            value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value)
-              setPage(1)
-            }}
-            className="pl-10 w-full"
-          />
+      <div className="mb-6 flex flex-col gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+          <div className="relative flex-1 min-w-[200px] max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Input
+              placeholder="搜索项目..."
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value)
+                setPage(1)
+              }}
+              className="pl-10 w-full"
+            />
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="text-sm text-gray-500">筛选：</span>
-          <Select
-            options={statusOptions}
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value)
-              setPage(1)
-            }}
-          />
-          <Select
-            options={genreFilterOptions}
-            value={genreFilter}
-            onChange={(e) => {
-              setGenreFilter(e.target.value)
-              setPage(1)
-            }}
-          />
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-gray-500 shrink-0">筛选：</span>
+          <div className="flex flex-wrap items-center gap-3">
+            <Select
+              options={statusOptions}
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value)
+                setPage(1)
+              }}
+            />
+            <Select
+              options={genreFilterOptions}
+              value={genreFilter}
+              onChange={(e) => {
+                setGenreFilter(e.target.value)
+                setPage(1)
+              }}
+            />
+          </div>
         </div>
       </div>
 
