@@ -268,7 +268,7 @@ export default function ProjectDetailPage() {
 
   const progress = project.targetWordCount
     ? Math.round((project.currentWordCount / project.targetWordCount) * 100)
-    : 0
+    : null
 
   return (
     <>
@@ -406,9 +406,15 @@ export default function ProjectDetailPage() {
                   <Target className="h-5 w-5" />
                   写作进度
                 </h2>
-                <span className="text-2xl font-bold text-blue-600">{progress}%</span>
+                <span className="text-2xl font-bold text-blue-600">{progress !== null ? `${progress}%` : '-'}</span>
               </div>
-              <Progress value={progress} showLabel size="lg" />
+              {project.targetWordCount ? (
+                <Progress value={project.currentWordCount} max={project.targetWordCount} showLabel size="lg" />
+              ) : (
+                <div className="w-full h-3 bg-muted rounded-full">
+                  <div className="h-full w-0 bg-primary rounded-full" />
+                </div>
+              )}
               <div className="mt-4 grid grid-cols-3 gap-4 text-center">
                 <div>
                   <p className="text-2xl font-bold">{project.currentWordCount.toLocaleString()}</p>
