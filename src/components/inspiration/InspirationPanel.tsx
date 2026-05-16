@@ -25,6 +25,7 @@ export function InspirationPanel({ onSelect }: InspirationPanelProps) {
   const [inspirations, setInspirations] = useState<HotInspiration[]>([])
   const [loading, setLoading] = useState(true)
   const [activeCategory, setActiveCategory] = useState<InspirationCategory | 'all'>('all')
+  const [isRandom, setIsRandom] = useState(false)
 
   const fetchInspirations = useCallback(async () => {
     setLoading(true)
@@ -35,6 +36,11 @@ export function InspirationPanel({ onSelect }: InspirationPanelProps) {
       }
       params.set('limit', '6')
 
+      // 刷新时使用随机模式
+      if (isRandom) {
+        params.set('random', 'true')
+      }
+
       const res = await fetch(`/api/novel/inspiration?${params}`)
       const data = await res.json()
       if (data.success) {
@@ -44,15 +50,16 @@ export function InspirationPanel({ onSelect }: InspirationPanelProps) {
       console.error('获取创作灵感失败:', error)
     } finally {
       setLoading(false)
+      setIsRandom(false)
     }
-  }, [activeCategory])
+  }, [activeCategory, isRandom])
 
   useEffect(() => {
     fetchInspirations()
   }, [fetchInspirations])
 
   const handleRefresh = () => {
-    fetchInspirations()
+    setIsRandom(true)
   }
 
   return (

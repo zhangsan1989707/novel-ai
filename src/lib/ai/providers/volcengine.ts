@@ -41,11 +41,9 @@ export class VolcEngineProvider extends BaseAIProvider {
 
     return {
       content: data.choices[0]?.message?.content || '',
-      usage: data.usage ? {
-        promptTokens: data.usage.prompt_tokens,
-        completionTokens: data.usage.completion_tokens,
-        totalTokens: data.usage.total_tokens,
-      } : undefined,
+      promptTokens: data.usage?.prompt_tokens,
+      completionTokens: data.usage?.completion_tokens,
+      totalTokens: data.usage?.total_tokens,
       finishReason: data.choices[0]?.finish_reason,
     }
   }

@@ -41,11 +41,9 @@ export class MiniMaxProvider extends BaseAIProvider {
 
     return {
       content: data.choices?.[0]?.message?.content || data.choices?.[0]?.text || '',
-      usage: data.usage ? {
-        promptTokens: data.usage.prompt_tokens,
-        completionTokens: data.usage.completion_tokens,
-        totalTokens: data.usage.total_tokens,
-      } : undefined,
+      promptTokens: data.usage?.prompt_tokens,
+      completionTokens: data.usage?.completion_tokens,
+      totalTokens: data.usage?.total_tokens,
       finishReason: data.choices?.[0]?.finish_reason,
     }
   }

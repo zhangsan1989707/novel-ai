@@ -42,11 +42,9 @@ export class AnthropicProvider extends BaseAIProvider {
 
     return {
       content: data.content[0]?.text || '',
-      usage: data.usage ? {
-        promptTokens: data.usage.input_tokens,
-        completionTokens: data.usage.output_tokens,
-        totalTokens: data.usage.input_tokens + data.usage.output_tokens,
-      } : undefined,
+      promptTokens: data.usage?.input_tokens,
+      completionTokens: data.usage?.output_tokens,
+      totalTokens: data.usage ? data.usage.input_tokens + data.usage.output_tokens : undefined,
       finishReason: data.stop_reason === 'end_turn' ? 'stop' : data.stop_reason,
     }
   }

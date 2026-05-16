@@ -2,6 +2,7 @@ import { AIProviderFactory, BaseAIProvider } from './base'
 import type { AIProvider, AIConfig } from './types'
 import { AIVendor } from '@/types'
 import { logger } from '@/lib/logger'
+import { TraceableAIProvider } from './traceable-provider'
 
 // 导入所有 Provider
 import {
@@ -24,25 +25,42 @@ AIProviderFactory.register(AIVendor.VOLCENGINE, VolcEngineProvider)
 // 导出工厂和 Provider
 export { AIProviderFactory } from './base'
 export type { AIProvider, AIConfig } from './types'
+export { TraceableAIProvider } from './traceable-provider'
 
 // 默认 Provider 实例缓存
 const providerCache: Map<string, AIProvider> = new Map()
 
 /**
- * 获取 AI Provider 实例
+ * 获取普通 AI Provider 实例（无成本追踪）
  */
 export function getAIProvider(vendor: AIVendor, config?: AIConfig): AIProvider {
   const cacheKey = `${vendor}-${config?.apiKey || 'default'}`
 
   if (!providerCache.has(cacheKey)) {
-    const provider = AIProviderFactory.create(vendor)
+    const provider = AIProviderFactory.create(vendor) as BaseAIProvider
     if (config) {
-      (provider as unknown as BaseAIProvider).setConfig(config)
+      provider.setConfig(config)
     }
     providerCache.set(cacheKey, provider)
   }
 
   return providerCache.get(cacheKey)!
+}
+
+/**
+ * 获取可追踪成本的 Provider
+ */
+export function getTraceableAIProvider(
+  vendor: AIVendor,
+  config: AIConfig,
+  options?: {
+    userId?: number
+    projectId?: number | null
+    usageType?: string
+  }
+): AIProvider {
+  const baseProvider = AIProviderFactory.create(vendor) as BaseAIProvider
+  return new TraceableAIProvider(baseProvider, config, options)
 }
 
 /**
