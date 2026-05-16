@@ -129,6 +129,8 @@ model NovelProject {
   // 项目模式: CREATE=创作模式, ANALYZE=拆解模式
   projectMode         String          @default("CREATE")
 
+  storyType           String          @default("LONG")
+
   // 外键
   aiModelId           Int?
   aiModelConfig       AIModelConfig?  @relation(fields: [aiModelId], references: [id])
@@ -152,6 +154,7 @@ model NovelProject {
   researchRefs        ResearchRef[]
   coverDesigns        CoverDesign[]
   reviewReports       ReviewReport[]
+  shortStory          ShortStory?
 
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
@@ -785,4 +788,46 @@ model ReviewReport {
   @@index([projectId])
   @@index([projectId, chapterNo])
   @@map("review_reports")
+}
+
+model ShortStory {
+  id              String    @id @default(cuid())
+  projectId       Int       @unique
+  project         NovelProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  structure       String    @default("three_act")
+  targetWordCount Int       @default(10000)
+  currentWordCount Int      @default(0)
+
+  premise         String?   @db.Text
+  emotionalDesign Json?     @default("{}")
+  reversalDesign  Json?     @default("{}")
+  hookDesign      Json?     @default("{}")
+
+  sections        ShortStorySection[]
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("short_stories")
+}
+
+model ShortStorySection {
+  id              String    @id @default(cuid())
+  storyId         String
+  story           ShortStory @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  sectionNumber   Int
+  title           String
+  content         String?   @db.Text
+  wordCount       Int       @default(0)
+  sectionType     String    @default("setup")
+  emotionalTarget Int       @default(50)
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([storyId, sectionNumber])
+  @@index([storyId])
+  @@map("short_story_sections")
 }

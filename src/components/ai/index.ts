@@ -27,3 +27,9 @@ export { MarketScanPanel } from './MarketScanPanel'
 export { CoverGenerator } from './CoverGenerator'
 // Deslop
 export { DeslopPanel } from './DeslopPanel'
+// Short Story
+export { ShortStoryPanel } from './ShortStoryPanel'
+// Agent Manager
+export { AgentManager } from './AgentManager'
+// Hooks
+export { WorkflowHooksPanel } from './WorkflowHooksPanel'
