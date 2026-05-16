@@ -20,6 +20,7 @@ export { DimensionCorrelationView } from './DimensionCorrelationView'
 export { ChapterRhythmHeatmap } from './ChapterRhythmHeatmap'
 export { StyleConsistencyPanel } from './StyleConsistencyPanel'
 export { ResearchPanel } from './ResearchPanel'
+export { ReviewPanel } from './ReviewPanel'
 // Market
 export { MarketScanPanel } from './MarketScanPanel'
 // Cover

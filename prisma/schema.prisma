@@ -150,6 +150,8 @@ model NovelProject {
   bookSummary         BookSummary?
   aiUsages            AIUsage[]
   researchRefs        ResearchRef[]
+  coverDesigns        CoverDesign[]
+  reviewReports       ReviewReport[]
 
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
@@ -743,4 +745,44 @@ model ResearchRef {
 
   @@index([projectId])
   @@map("research_refs")
+}
+
+model CoverDesign {
+  id            String    @id @default(cuid())
+  projectId     Int
+  project       NovelProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  imageUrl      String
+  prompt        String    @db.Text
+  colorScheme   String[]  @default([])
+  composition   String?
+  elements      String[]  @default([])
+  mood          String?
+  style         String?
+  isApplied     Boolean   @default(false)
+
+  createdAt     DateTime  @default(now())
+
+  @@index([projectId])
+  @@map("cover_designs")
+}
+
+model ReviewReport {
+  id              String    @id @default(cuid())
+  projectId       Int
+  project         NovelProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  chapterNo       Int?
+  content         String    @db.Text
+  reviews         Json      @default("[]")
+  overallScore    Float     @default(0)
+  consensus       String?   @db.Text
+  criticalIssues  String[]  @default([])
+  improvementPriority String[] @default([])
+
+  createdAt       DateTime  @default(now())
+
+  @@index([projectId])
+  @@index([projectId, chapterNo])
+  @@map("review_reports")
 }
