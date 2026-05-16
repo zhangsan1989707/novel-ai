@@ -30,9 +30,15 @@ export interface GenerationParams {
 
 export interface GenerationResult {
   content: string
+  wordCount?: number
   promptTokens?: number
   completionTokens?: number
   totalTokens?: number
+  usage?: {
+    promptTokens: number
+    completionTokens: number
+    totalTokens: number
+  }
   cost?: number // 本次调用的费用（单位：元）
   finishReason?: 'stop' | 'length' | 'content_filter' | 'error'
 }

@@ -41,7 +41,7 @@ export class AIService {
 
       if (project && project.aiModelConfig) {
         config = {
-          vendor: project.aiModelConfig.vendor,
+          vendor: project.aiModelConfig.vendor as AIVendor,
           modelId: project.aiModelConfig.modelId,
           apiKey: project.aiModelConfig.apiKey || '',
           apiEndpoint: project.aiModelConfig.apiEndpoint || undefined,
@@ -57,7 +57,7 @@ export class AIService {
 
       if (dbConfig) {
         config = {
-          vendor: dbConfig.vendor,
+          vendor: dbConfig.vendor as AIVendor,
           modelId: dbConfig.modelId,
           apiKey: dbConfig.apiKey || '',
           apiEndpoint: dbConfig.apiEndpoint || undefined,
@@ -82,7 +82,7 @@ export class AIService {
 
       if (defaultConfig) {
         config = {
-          vendor: defaultConfig.vendor,
+          vendor: defaultConfig.vendor as AIVendor,
           modelId: defaultConfig.modelId,
           apiKey: defaultConfig.apiKey || '',
           apiEndpoint: defaultConfig.apiEndpoint || undefined,

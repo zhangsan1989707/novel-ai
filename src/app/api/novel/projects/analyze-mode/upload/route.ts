@@ -350,7 +350,7 @@ export async function POST(request: NextRequest) {
       },
     })
   } catch (error) {
-    logError(error instanceof Error ? error : new Error(String(error)), { type: $1 })
+    logError(error instanceof Error ? error : new Error(String(error)), { type: 'upload_source_novel' })
     return NextResponse.json(
       { success: false, error: { code: 'UPLOAD_ERROR', message: '文件处理失败' } },
       { status: 500 }

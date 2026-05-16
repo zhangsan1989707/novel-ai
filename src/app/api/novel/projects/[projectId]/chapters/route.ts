@@ -27,9 +27,10 @@ interface RouteParams {
  * 获取章节列表
  */
 export async function GET(request: NextRequest, { params }: RouteParams) {
+  let projectIdNum: number | null = null
   try {
     const { projectId } = await params
-    const projectIdNum = parseInt(projectId)
+    projectIdNum = parseInt(projectId)
 
     if (isNaN(projectIdNum)) {
       return NextResponse.json(
@@ -57,7 +58,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({ success: true, data: chapters })
   } catch (error) {
-    logError(error instanceof Error ? error : new Error(String(error)), { type: $1 })
+    logError(error instanceof Error ? error : new Error(String(error)), { type: 'list_chapters', projectId: projectIdNum })
     return NextResponse.json(
       { success: false, error: { code: 'FETCH_ERROR', message: '获取章节列表失败' } },
       { status: 500 }
@@ -70,9 +71,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
  * 创建章节
  */
 export async function POST(request: NextRequest, { params }: RouteParams) {
+  let projectIdNum: number | null = null
   try {
     const { projectId } = await params
-    const projectIdNum = parseInt(projectId)
+    projectIdNum = parseInt(projectId)
 
     if (isNaN(projectIdNum)) {
       return NextResponse.json(

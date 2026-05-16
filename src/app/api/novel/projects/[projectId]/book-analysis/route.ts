@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
+import { logError } from '@/lib/logger'
 
 // ============================================
 // Schema 验证
@@ -30,9 +31,10 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ projectId: string }> }
 ) {
+  let projectIdNum: number | null = null
   try {
     const { projectId } = await params
-    const projectIdNum = parseInt(projectId, 10)
+    projectIdNum = parseInt(projectId, 10)
 
     if (isNaN(projectIdNum)) {
       return NextResponse.json(

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { DocumentStatus } from '@/types'
+import { logError } from '@/lib/logger'
 
 // ============================================
 // GET /api/novel/virtual-writers/[writerId]/documents
@@ -11,9 +12,10 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ writerId: string }> }
 ) {
+  let writerIdNum: number | null = null
   try {
     const { writerId } = await params
-    const writerIdNum = parseInt(writerId)
+    writerIdNum = parseInt(writerId)
 
     if (isNaN(writerIdNum)) {
       return NextResponse.json(
@@ -49,9 +51,10 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ writerId: string }> }
 ) {
+  let writerIdNum: number | null = null
   try {
     const { writerId } = await params
-    const writerIdNum = parseInt(writerId)
+    writerIdNum = parseInt(writerId)
 
     if (isNaN(writerIdNum)) {
       return NextResponse.json(
@@ -96,7 +99,7 @@ export async function POST(
       data: document,
     })
   } catch (error) {
-    logError(error instanceof Error ? error : new Error(String(error)), { type: $1 })
+    logError(error instanceof Error ? error : new Error(String(error)), { type: 'upload_document', writerId: writerIdNum })
     return NextResponse.json(
       { success: false, error: { code: 'UPLOAD_ERROR', message: '上传失败' } },
       { status: 500 }

@@ -28,9 +28,10 @@ interface RouteParams {
  * 获取章节详情
  */
 export async function GET(request: NextRequest, { params }: RouteParams) {
+  let chapterIdNum: number | null = null
   try {
     const { projectId, chapterId } = await params
-    const chapterIdNum = parseInt(chapterId)
+    chapterIdNum = parseInt(chapterId)
 
     if (isNaN(chapterIdNum)) {
       return NextResponse.json(
@@ -59,7 +60,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({ success: true, data: chapter })
   } catch (error) {
-    logError(error instanceof Error ? error : new Error(String(error)), { type: $1 })
+    logError(error instanceof Error ? error : new Error(String(error)), { type: 'get_chapter', chapterId: chapterIdNum })
     return NextResponse.json(
       { success: false, error: { code: 'FETCH_ERROR', message: '获取章节详情失败' } },
       { status: 500 }
@@ -72,9 +73,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
  * 更新章节
  */
 export async function PUT(request: NextRequest, { params }: RouteParams) {
+  let chapterIdNum: number | null = null
   try {
     const { projectId, chapterId } = await params
-    const chapterIdNum = parseInt(chapterId)
+    chapterIdNum = parseInt(chapterId)
 
     if (isNaN(chapterIdNum)) {
       return NextResponse.json(
@@ -160,9 +162,10 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
  * 删除章节
  */
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
+  let chapterIdNum: number | null = null
   try {
     const { projectId, chapterId } = await params
-    const chapterIdNum = parseInt(chapterId)
+    chapterIdNum = parseInt(chapterId)
 
     if (isNaN(chapterIdNum)) {
       return NextResponse.json(
@@ -199,7 +202,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({ success: true, data: { id: chapterIdNum } })
   } catch (error) {
-    logError(error instanceof Error ? error : new Error(String(error)), { type: $1 })
+    logError(error instanceof Error ? error : new Error(String(error)), { type: 'delete_chapter', chapterId: chapterIdNum })
     return NextResponse.json(
       { success: false, error: { code: 'DELETE_ERROR', message: '删除章节失败' } },
       { status: 500 }

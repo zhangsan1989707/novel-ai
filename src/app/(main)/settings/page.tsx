@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button, Input, Select, Modal, Badge, Card, CardContent } from '@/components/ui'
-import { Plus, Trash2, Edit2, Check, Key, Shield, Play, Loader2, CheckCircle, XCircle, ArrowLeft } from 'lucide-react'
+import { Plus, Trash2, Edit2, Check, Key, Shield, Play, Loader2, CheckCircle, XCircle } from 'lucide-react'
 import { AIVendor } from '@/types'
 
 interface AIConfig {
@@ -65,7 +65,6 @@ export default function SettingsPage() {
     isDefault: false,
   })
 
-  // 获取配置列表
   const fetchConfigs = useCallback(async () => {
     setLoading(true)
     try {
@@ -85,7 +84,6 @@ export default function SettingsPage() {
     fetchConfigs()
   }, [fetchConfigs])
 
-  // 打开新增/编辑弹窗
   const openModal = (config?: AIConfig) => {
     setTestResult(null)
     if (config) {
@@ -94,7 +92,7 @@ export default function SettingsPage() {
         name: config.name,
         vendor: config.vendor,
         modelId: config.modelId,
-        apiKey: '', // 不显示现有 API Key
+        apiKey: '',
         apiEndpoint: config.apiEndpoint || '',
         isDefault: config.isDefault,
       })
@@ -112,7 +110,6 @@ export default function SettingsPage() {
     setShowModal(true)
   }
 
-  // 测试配置
   const handleTest = async () => {
     if (!formData.modelId || !formData.apiKey) {
       setTestResult({ success: false, message: '请先填写模型 ID 和 API Key' })
@@ -148,7 +145,6 @@ export default function SettingsPage() {
     }
   }
 
-  // 测试已有配置
   const handleTestConfig = async (config: AIConfig) => {
     setTesting(true)
     setTestResult(null)
@@ -172,7 +168,6 @@ export default function SettingsPage() {
     }
   }
 
-  // 提交表单
   const handleSubmit = async () => {
     if (!formData.name || !formData.modelId || !formData.apiKey) {
       alert('请填写完整信息')
@@ -207,7 +202,6 @@ export default function SettingsPage() {
     }
   }
 
-  // 删除配置
   const handleDelete = async (id: number) => {
     if (!confirm('确定要删除这个配置吗？')) return
 
@@ -224,7 +218,6 @@ export default function SettingsPage() {
     }
   }
 
-  // 设置默认
   const handleSetDefault = async (id: number) => {
     try {
       const res = await fetch(`/api/novel/ai-configs/${id}`, {
@@ -242,33 +235,20 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Header */}
-      <header className="sticky top-0 z-10 bg-white dark:bg-gray-800 border-b">
-        <div className="px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={() => router.back()}
-                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                title="返回"
-              >
-                <ArrowLeft className="h-5 w-5" />
-              </button>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">AI 配置</h1>
-                <p className="text-sm text-gray-500">配置 AI 模型和 API</p>
-              </div>
-            </div>
-            <Button onClick={() => openModal()}>
-              <Plus className="h-4 w-4 mr-2" />
-              添加配置
-            </Button>
-          </div>
+    <>
+      {/* 页面标题 */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">AI 配置</h1>
+          <p className="text-sm text-gray-500">配置 AI 模型和 API</p>
         </div>
-      </header>
+        <Button onClick={() => openModal()}>
+          <Plus className="h-4 w-4 mr-2" />
+          添加配置
+        </Button>
+      </div>
 
-      <main className="max-w-4xl mx-auto px-4 py-6 space-y-6">
+      <div className="max-w-4xl mx-auto space-y-6">
         {/* 提示信息 */}
         <Card>
           <CardContent className="p-4">
@@ -334,7 +314,7 @@ export default function SettingsPage() {
                       </div>
                       <div className="text-sm text-gray-500 space-y-1">
                         <p>模型: {config.modelId}</p>
-                        <p>API Key: {config.apiKey || '未设置'}</p>
+                        <p>API Key: {config.apiKey ? '已配置' : '未设置'}</p>
                         {config.apiEndpoint && <p>端点: {config.apiEndpoint}</p>}
                       </div>
                     </div>
@@ -382,7 +362,7 @@ export default function SettingsPage() {
             ))}
           </div>
         )}
-      </main>
+      </div>
 
       {/* 新增/编辑弹窗 */}
       <Modal
@@ -478,6 +458,6 @@ export default function SettingsPage() {
           </div>
         </div>
       </Modal>
-    </div>
+    </>
   )
 }

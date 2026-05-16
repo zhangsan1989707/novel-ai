@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-    logError(error instanceof Error ? error : new Error(String(error)), { type: $1 })
+    logError(error instanceof Error ? error : new Error(String(error)), { type: 'test_ai_config' })
     return NextResponse.json(
       { success: false, error: { code: 'TEST_ERROR', message: '测试失败' } },
       { status: 500 }

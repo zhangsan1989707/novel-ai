@@ -11,9 +11,10 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ projectId: string }> }
 ) {
+  let projectIdNum: number | null = null
   try {
     const { projectId } = await params
-    const projectIdNum = parseInt(projectId, 10)
+    projectIdNum = parseInt(projectId, 10)
 
     if (isNaN(projectIdNum)) {
       return NextResponse.json(
@@ -70,7 +71,7 @@ export async function GET(
       },
     })
   } catch (error) {
-    logError(error instanceof Error ? error : new Error(String(error)), { type: $1 })
+    logError(error instanceof Error ? error : new Error(String(error)), { type: 'get_plotline_table', projectId: projectIdNum })
     return NextResponse.json(
       { success: false, error: { code: 'FETCH_ERROR', message: '获取伏笔对照表失败' } },
       { status: 500 }

@@ -55,7 +55,7 @@ export class BatchGenerationQueue {
   private options: Required<BatchGenerationOptions>
   private isProcessing = false
 
-  constructor(options: BatchGenerationOptions = {}) {
+  constructor(options: Partial<BatchGenerationOptions> = {}) {
     this.options = {
       maxConcurrent: options.maxConcurrent ?? 3,
       retryCount: options.retryCount ?? 2,
@@ -278,7 +278,7 @@ export class BatchGenerationQueue {
           
           retryCount++
           if (retryCount <= this.options.retryCount) {
-            logger.warn({ taskId, chapterNo, retryCount }, 'Retrying chapter generation')
+            logger.warn({ taskId: task.id, chapterNo, retryCount }, 'Retrying chapter generation')
             await this.delay(this.options.retryDelay)
           }
         }

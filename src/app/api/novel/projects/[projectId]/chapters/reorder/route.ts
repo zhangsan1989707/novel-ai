@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
+import { logError } from '@/lib/logger'
 
 // ============================================
 // Schema 验证
@@ -23,9 +24,10 @@ interface RouteParams {
  * 批量更新章节排序
  */
 export async function POST(request: NextRequest, { params }: RouteParams) {
+  let projectIdNum: number | null = null
   try {
     const { projectId } = await params
-    const projectIdNum = parseInt(projectId)
+    projectIdNum = parseInt(projectId)
 
     if (isNaN(projectIdNum)) {
       return NextResponse.json(

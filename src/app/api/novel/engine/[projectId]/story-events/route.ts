@@ -4,15 +4,17 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { getStoryEventHistory } from '@/lib/engine/story-state'
+import { logError } from '@/lib/logger'
 
 interface RouteParams {
   params: Promise<{ projectId: string }>
 }
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
+  let projectIdNum: number | null = null
   try {
     const { projectId } = await params
-    const projectIdNum = parseInt(projectId)
+    projectIdNum = parseInt(projectId)
     const { searchParams } = new URL(request.url)
     const limit = parseInt(searchParams.get('limit') || '50')
 

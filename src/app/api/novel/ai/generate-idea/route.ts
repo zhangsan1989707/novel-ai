@@ -2,16 +2,18 @@ import { NextRequest, NextResponse } from 'next/server'
 import { buildIdeaGenerationPrompt } from '@/lib/ai/prompts'
 import { getAIProvider, createProviderFromDefaultConfig } from '@/lib/ai/factory'
 import { AIVendor } from '@/types'
+import { logError } from '@/lib/logger'
 
 /**
  * POST /api/novel/ai/generate-idea
  * AI 生成小说创意设定（世界观、主角人设、力量体系等）
  */
 export async function POST(request: NextRequest) {
+  let projectTitle: string | null = null
   try {
     const body = await request.json()
+    projectTitle = body.projectTitle
     const {
-      projectTitle,
       genre,
       writingStyle,
       existingWorldSetting,
@@ -52,11 +54,11 @@ export async function POST(request: NextRequest) {
     }
 
     // 构建提示词
-    const prompt = buildIdeaGenerationPrompt(
-      projectTitle,
+    const prompt = buildIdeaGenerationPrompt({
+      theme: projectTitle!,
       genre,
       writingStyle
-    )
+    })
 
     // 生成内容
     const result = await provider.generate(prompt, {

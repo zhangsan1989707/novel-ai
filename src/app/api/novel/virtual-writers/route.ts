@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (error) {
-    logError(error instanceof Error ? error : new Error(String(error)), { type: $1 })
+    logError(error instanceof Error ? error : new Error(String(error)), { type: 'list_virtual_writers' })
     return NextResponse.json(
       { success: false, error: { code: 'GET_ERROR', message: '获取列表失败' } },
       { status: 500 }

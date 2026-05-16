@@ -21,9 +21,10 @@ const exportSchema = z.object({
  * 导出小说为指定格式
  */
 export async function POST(request: NextRequest, { params }: RouteParams) {
+  let projectIdNum: number | null = null
   try {
     const { projectId } = await params
-    const projectIdNum = parseInt(projectId, 10)
+    projectIdNum = parseInt(projectId, 10)
 
     if (isNaN(projectIdNum)) {
       return NextResponse.json(
@@ -36,7 +37,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const { format, includeMetadata, includeChapterTitles } = exportSchema.parse(body)
 
     // 如果是 EPUB，使用原有逻辑
-    if (format === 'epub') {
+    if (format === 'epub' && projectIdNum !== null) {
       return await exportEpub(projectIdNum)
     }
 
@@ -69,7 +70,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         { status: 400 }
       )
     }
-    logError(error instanceof Error ? error : new Error(String(error)), { type: $1 })
+    logError(error instanceof Error ? error : new Error(String(error)), { type: 'export_novel', projectId: projectIdNum })
     return NextResponse.json(
       { success: false, error: { code: 'EXPORT_ERROR', message: '导出失败' } },
       { status: 500 }
@@ -80,10 +81,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 /**
  * 导出为 EPUB 格式
  */
-async function exportEpub(projectIdNum: number): Promise<NextResponse> {
+async function exportEpub(projectId: number): Promise<NextResponse> {
   try {
     const project = await prisma.novelProject.findUnique({
-      where: { id: projectIdNum },
+      where: { id: projectId },
       include: {
         chapters: {
           orderBy: { chapterNumber: 'asc' },
@@ -131,7 +132,7 @@ async function exportEpub(projectIdNum: number): Promise<NextResponse> {
   <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
     <dc:title>${escapeXml(project.title)}</dc:title>
     <dc:language>zh-CN</dc:language>
-    <dc:identifier id="bookid">urn:uuid:${projectIdNum}</dc:identifier>
+    <dc:identifier id="bookid">urn:uuid:${projectId}</dc:identifier>
   </metadata>
   <manifest>
     ${manifestItems}
@@ -167,9 +168,9 @@ async function exportEpub(projectIdNum: number): Promise<NextResponse> {
     // 生成 ZIP 文件
     const epubBuffer = zip.toBuffer()
 
-    const safeFilename = `novel-export-${projectIdNum}.epub`
+    const safeFilename = `novel-export-${projectId}.epub`
 
-    return new Response(epubBuffer, {
+    return new NextResponse(epubBuffer, {
       status: 200,
       headers: {
         'Content-Type': 'application/epub+zip',
@@ -177,7 +178,7 @@ async function exportEpub(projectIdNum: number): Promise<NextResponse> {
       },
     })
   } catch (error) {
-    logError(error instanceof Error ? error : new Error(String(error)), { type: $1 })
+    logError(error instanceof Error ? error : new Error(String(error)), { type: 'export_novel', projectId })
     const message = error instanceof Error ? error.message : '未知错误'
     return NextResponse.json(
       { success: false, error: { code: 'EXPORT_ERROR', message: '导出失败: ' + message } },

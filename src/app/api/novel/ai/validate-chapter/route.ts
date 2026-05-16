@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { validateChapter, validateProject } from '@/lib/engine/validation/validator'
 import { prisma } from '@/lib/prisma'
+import { logError } from '@/lib/logger'
 
 const vendorEnum = z.enum(['OPENAI', 'ANTHROPIC', 'ALIBABA', 'DEEPSEEK', 'MINIMAX', 'VOLCENGINE'])
 
@@ -15,9 +16,12 @@ const validateChapterSchema = z.object({
  * 验证单章内容质量
  */
 export async function POST(request: NextRequest) {
+  let chapterId: number | null = null
   try {
     const body = await request.json()
-    const { chapterId, vendor } = validateChapterSchema.parse(body)
+    const parsed = validateChapterSchema.parse(body)
+    chapterId = parsed.chapterId
+    const { vendor } = parsed
 
     // 获取章节信息
     const chapter = await prisma.novelChapter.findUnique({

@@ -16,9 +16,12 @@ const requestSchema = z.object({
  * 生成全书摘要 (L3)
  */
 export async function POST(request: NextRequest) {
+  let projectId: number | null = null
   try {
     const body = await request.json()
-    const { projectId, vendor } = requestSchema.parse(body)
+    const parsed = requestSchema.parse(body)
+    projectId = parsed.projectId
+    const { vendor } = parsed
 
     const result = await generateBookSummary(projectId, vendor as AIVendor)
 
@@ -37,7 +40,7 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-    logError(error instanceof Error ? error : new Error(String(error)), { type: $1 })
+    logError(error instanceof Error ? error : new Error(String(error)), { type: 'generate_book_summary', projectId })
     return NextResponse.json(
       { success: false, error: { code: 'GENERATE_ERROR', message: '生成全书摘要失败' } },
       { status: 500 }

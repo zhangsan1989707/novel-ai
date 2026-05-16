@@ -42,15 +42,27 @@ export async function exportNovel(
     // 根据格式生成内容
     switch (options.format) {
       case 'txt':
-        content = buildTxtContent(project, chapters, options)
+        content = buildTxtContent({
+          ...project,
+          description: project.description ?? undefined,
+          genre: project.genre ?? undefined
+        }, chapters, options)
         fileName = `${sanitizedTitle}_${timestamp}.txt`
         break
       case 'md':
-        content = buildMarkdownContent(project, chapters, options)
+        content = buildMarkdownContent({
+          ...project,
+          description: project.description ?? undefined,
+          genre: project.genre ?? undefined
+        }, chapters, options)
         fileName = `${sanitizedTitle}_${timestamp}.md`
         break
       case 'json':
-        content = buildJsonContent(project, chapters, options)
+        content = buildJsonContent({
+          ...project,
+          description: project.description ?? undefined,
+          genre: project.genre ?? undefined
+        }, chapters, options)
         fileName = `${sanitizedTitle}_${timestamp}.json`
         break
       default:
@@ -222,11 +234,19 @@ export async function exportChapters(
 
     switch (options.format) {
       case 'txt':
-        content = buildTxtContent(project!, chapters, options)
+        content = buildTxtContent({
+          ...project!,
+          description: project?.description ?? undefined,
+          genre: project?.genre ?? undefined
+        }, chapters, options)
         extension = 'txt'
         break
       case 'md':
-        content = buildMarkdownContent(project!, chapters, options)
+        content = buildMarkdownContent({
+          ...project!,
+          description: project?.description ?? undefined,
+          genre: project?.genre ?? undefined
+        }, chapters, options)
         extension = 'md'
         break
       default:

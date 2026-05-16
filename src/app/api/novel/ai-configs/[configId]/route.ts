@@ -27,9 +27,10 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ configId: string }> }
 ) {
+  let id: number | null = null
   try {
     const { configId } = await params
-    const id = parseInt(configId)
+    id = parseInt(configId)
 
     if (isNaN(id)) {
       return NextResponse.json(
@@ -74,9 +75,10 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ configId: string }> }
 ) {
+  let id: number | null = null
   try {
     const { configId } = await params
-    const id = parseInt(configId)
+    id = parseInt(configId)
 
     if (isNaN(id)) {
       return NextResponse.json(
@@ -145,9 +147,10 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ configId: string }> }
 ) {
+  let id: number | null = null
   try {
     const { configId } = await params
-    const id = parseInt(configId)
+    id = parseInt(configId)
 
     if (isNaN(id)) {
       return NextResponse.json(
@@ -162,7 +165,7 @@ export async function DELETE(
 
     return NextResponse.json({ success: true, data: null })
   } catch (error) {
-    logError(error instanceof Error ? error : new Error(String(error)), { type: $1 })
+    logError(error instanceof Error ? error : new Error(String(error)), { type: 'delete_ai_config', configId: id })
     return NextResponse.json(
       { success: false, error: { code: 'DELETE_ERROR', message: '删除配置失败' } },
       { status: 500 }

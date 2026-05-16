@@ -12,9 +12,10 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ writerId: string }> }
 ) {
+  let id: number | null = null
   try {
     const { writerId } = await params
-    const id = parseInt(writerId)
+    id = parseInt(writerId)
 
     if (isNaN(id)) {
       return NextResponse.json(
@@ -62,7 +63,7 @@ export async function POST(
     setTimeout(async () => {
       try {
         await prisma.virtualWriter.update({
-          where: { id },
+          where: { id: id as number },
           data: {
             trainingStatus: TrainingStatus.TRAINED,
             trainingProgress: 100,
@@ -78,7 +79,7 @@ export async function POST(
       } catch (err) {
         logError(err instanceof Error ? err : new Error(String(err)), { type: 'training_update', writerId: id })
         await prisma.virtualWriter.update({
-          where: { id },
+          where: { id: id as number },
           data: {
             trainingStatus: TrainingStatus.FAILED,
           },
@@ -94,7 +95,7 @@ export async function POST(
       },
     })
   } catch (error) {
-    logError(error instanceof Error ? error : new Error(String(error)), { type: $1 })
+    logError(error instanceof Error ? error : new Error(String(error)), { type: 'start_training', writerId: id })
     return NextResponse.json(
       { success: false, error: { code: 'TRAIN_ERROR', message: '启动训练失败' } },
       { status: 500 }
@@ -111,9 +112,10 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ writerId: string }> }
 ) {
+  let id: number | null = null
   try {
     const { writerId } = await params
-    const id = parseInt(writerId)
+    id = parseInt(writerId)
 
     if (isNaN(id)) {
       return NextResponse.json(

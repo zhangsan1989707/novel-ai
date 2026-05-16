@@ -262,7 +262,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
             successCount++
           } catch (error) {
-            logError(error instanceof Error ? error : new Error(String(error)), { type: $1 })
+            logError(error instanceof Error ? error : new Error(String(error)), { type: 'generate_chapter', chapterId: chapter.id, projectId: projectIdNum })
 
             // 恢复章节状态为 DRAFT
             await prisma.novelChapter.update({

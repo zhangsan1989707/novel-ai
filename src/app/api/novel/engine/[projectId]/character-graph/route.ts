@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import type { CharacterProfile } from '@/lib/engine/types'
+import { logError } from '@/lib/logger'
 
 /**
  * GET /api/novel/engine/[projectId]/character-graph
@@ -10,9 +11,10 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ projectId: string }> }
 ) {
+  let projectIdNum: number | null = null
   try {
     const { projectId } = await params
-    const projectIdNum = parseInt(projectId, 10)
+    projectIdNum = parseInt(projectId, 10)
 
     if (isNaN(projectIdNum)) {
       return NextResponse.json(

@@ -178,7 +178,7 @@ export class ContextAssembler {
       summary: s.summary,
       keyEvents: s.keyEvents,
       emotionalArc: s.emotionalArc as any[],
-      chapterOverviews: s.chapterOverviews as any[]
+      chapterOverviews: []
     }))
   }
 
@@ -203,7 +203,7 @@ export class ContextAssembler {
       title: undefined,
       summary: s.summary,
       keyEvents: s.keyEvents,
-      emotionalTone: s.emotionalTone,
+      emotionalTone: s.emotionalTone ?? undefined,
       importanceScore: this.calculateImportance(s)
     }))
 

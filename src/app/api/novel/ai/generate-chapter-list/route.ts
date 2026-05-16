@@ -61,8 +61,8 @@ export async function POST(request: NextRequest) {
       
       if (project) {
         // 如果传入的没有大纲，使用数据库中的
-        if (!dbOutline) dbOutline = project.outline
-        if (!dbOutlineStages) dbOutlineStages = project.outlineStages
+        if (!dbOutline) dbOutline = project.outline ?? undefined
+        if (!dbOutlineStages) dbOutlineStages = project.outlineStages ?? undefined
       }
     }
 

@@ -48,9 +48,10 @@ interface RouteParams {
  * 获取项目详情
  */
 export async function GET(request: NextRequest, { params }: RouteParams) {
+  let id: number | null = null
   try {
     const { projectId } = await params
-    const id = parseInt(projectId)
+    id = parseInt(projectId)
 
     if (isNaN(id)) {
       return NextResponse.json(
@@ -111,9 +112,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
  * 更新项目
  */
 export async function PUT(request: NextRequest, { params }: RouteParams) {
+  let id: number | null = null
   try {
     const { projectId } = await params
-    const id = parseInt(projectId)
+    id = parseInt(projectId)
 
     if (isNaN(id)) {
       return NextResponse.json(
@@ -154,9 +156,10 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
  * 删除项目
  */
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
+  let id: number | null = null
   try {
     const { projectId } = await params
-    const id = parseInt(projectId)
+    id = parseInt(projectId)
 
     if (isNaN(id)) {
       return NextResponse.json(

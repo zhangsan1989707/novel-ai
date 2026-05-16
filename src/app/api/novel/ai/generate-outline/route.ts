@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
     } = generateOutlineSchema.parse(body)
 
     // 构建提示词
-    const prompt = buildOutlineGenerationPrompt(
+    const prompt = buildOutlineGenerationPrompt({
       projectTitle,
       genre,
       writingStyle,
@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
       protagonistGoal,
       antagonistSetting,
       endingPlan
-    )
+    })
 
     // 获取 AI Provider - 优先使用数据库默认配置
     const provider = await createProviderFromDefaultConfig()

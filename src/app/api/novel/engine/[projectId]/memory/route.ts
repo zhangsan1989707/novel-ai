@@ -14,9 +14,10 @@ interface RouteParams {
 }
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
+  let projectIdNum: number | null = null
   try {
     const { projectId } = await params
-    const projectIdNum = parseInt(projectId)
+    projectIdNum = parseInt(projectId)
 
     if (isNaN(projectIdNum)) {
       return NextResponse.json(
@@ -47,7 +48,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       },
     })
   } catch (error) {
-    logError(error instanceof Error ? error : new Error(String(error)), { type: $1 })
+    logError(error instanceof Error ? error : new Error(String(error)), { type: 'get_memory', projectId: projectIdNum })
     return NextResponse.json(
       { success: false, error: { code: 'MEMORY_ERROR', message: '获取记忆快照失败' } },
       { status: 500 }

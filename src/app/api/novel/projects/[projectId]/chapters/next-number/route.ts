@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { logError } from '@/lib/logger'
 
 // ============================================
 // API Handler
@@ -14,9 +15,10 @@ interface RouteParams {
  * 获取下一个可用章节编号
  */
 export async function GET(request: NextRequest, { params }: RouteParams) {
+  let projectIdNum: number | null = null
   try {
     const { projectId } = await params
-    const projectIdNum = parseInt(projectId)
+    projectIdNum = parseInt(projectId)
 
     if (isNaN(projectIdNum)) {
       return NextResponse.json(

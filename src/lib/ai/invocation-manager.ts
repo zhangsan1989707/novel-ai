@@ -1,4 +1,4 @@
-import type { AIVendor } from '@prisma/client'
+import { AIVendor } from '@/types'
 import { logger } from '../logger'
 import { getAIProvider } from '../ai/factory'
 
@@ -256,11 +256,13 @@ export class AIInvocationManager {
       vendor,
       modelId,
       async (selectedVendor, selectedModelId) => {
-        const provider = await getAIProvider({
+        const provider = getAIProvider(selectedVendor, {
           vendor: selectedVendor,
-          modelId: selectedModelId
+          modelId: selectedModelId,
+          apiKey: ''
         })
-        return provider.generate(prompt)
+        const result = await provider.generate(prompt)
+        return result.content
       },
       options?.customFallbackVendors
     )

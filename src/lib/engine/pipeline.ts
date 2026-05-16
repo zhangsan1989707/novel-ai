@@ -99,7 +99,7 @@ export class PipelineBuilder {
     this.steps.push(...built.steps.map(step => ({
       ...step,
       condition: step.condition 
-        ? async (ctx) => (await condition(ctx)) && (await step.condition!(ctx))
+        ? async (ctx: PipelineContext) => (await condition(ctx)) && (await step.condition!(ctx))
         : condition
     })))
     return this

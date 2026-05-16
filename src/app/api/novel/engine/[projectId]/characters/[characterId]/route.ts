@@ -12,9 +12,13 @@ interface RouteParams {
 }
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
+  let projectId: string | null = null
+  let characterId: string | null = null
   try {
-    const { projectId, characterId } = await params
-    const projectIdNum = parseInt(projectId)
+    const { projectId: paramProjectId, characterId: paramCharacterId } = await params
+    projectId = paramProjectId
+    characterId = paramCharacterId
+    const projectIdNum = parseInt(paramProjectId)
 
     if (isNaN(projectIdNum)) {
       return NextResponse.json(
@@ -24,7 +28,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     const character = await prisma.character.findUnique({
-      where: { id: characterId },
+      where: { id: paramCharacterId },
     })
 
     if (!character || character.projectId !== projectIdNum) {
@@ -39,7 +43,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       data: character,
     })
   } catch (error) {
-    logError(error instanceof Error ? error : new Error(String(error)), { type: $1 })
+    logError(error instanceof Error ? error : new Error(String(error)), { type: 'get_character', characterId, projectId })
     return NextResponse.json(
       { success: false, error: { code: 'CHARACTER_ERROR', message: '获取角色失败' } },
       { status: 500 }
@@ -48,9 +52,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 }
 
 export async function PUT(request: NextRequest, { params }: RouteParams) {
+  let characterId: string | null = null
   try {
-    const { projectId, characterId } = await params
-    const projectIdNum = parseInt(projectId)
+    const { projectId: paramProjectId, characterId: paramCharacterId } = await params
+    characterId = paramCharacterId
+    const projectIdNum = parseInt(paramProjectId)
 
     if (isNaN(projectIdNum)) {
       return NextResponse.json(
@@ -63,7 +69,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
     // 验证角色归属
     const existing = await prisma.character.findUnique({
-      where: { id: characterId },
+      where: { id: paramCharacterId },
     })
 
     if (!existing || existing.projectId !== projectIdNum) {
@@ -74,7 +80,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
 
     // 更新角色档案
-    await updateCharacterProfile(characterId, {
+    await updateCharacterProfile(paramCharacterId, {
       name: body.name,
       role: body.role,
       aliases: body.aliases,
@@ -88,7 +94,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({
       success: true,
-      data: { id: characterId },
+      data: { id: paramCharacterId },
     })
   } catch (error) {
     logError(error instanceof Error ? error : new Error(String(error)), { type: 'update_character', characterId })

@@ -4,6 +4,14 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { Button, Modal } from '@/components/ui'
 import { Loader2, CheckCircle, AlertCircle } from 'lucide-react'
 
+interface BatchProgressOptions {
+  chapterIds?: number[]
+  useContext: boolean
+  contextChapterCount: number
+  temperature: number
+  targetWordCount: number
+}
+
 interface BatchProgressProps {
   projectId: number
   chapterIds?: number[]
@@ -11,6 +19,7 @@ interface BatchProgressProps {
   contextChapterCount?: number
   temperature?: number
   targetWordCount?: number
+  options?: BatchProgressOptions
   open: boolean
   onClose: () => void
   onComplete?: (successCount: number, failCount: number) => void
@@ -33,10 +42,17 @@ export function BatchProgress({
   contextChapterCount = 3,
   temperature = 0.7,
   targetWordCount = 3000,
+  options,
   open,
   onClose,
   onComplete,
 }: BatchProgressProps) {
+  // 优先使用 options 参数，否则使用单独参数
+  const effectiveChapterIds = options?.chapterIds ?? chapterIds
+  const effectiveUseContext = options?.useContext ?? useContext
+  const effectiveContextChapterCount = options?.contextChapterCount ?? contextChapterCount
+  const effectiveTemperature = options?.temperature ?? temperature
+  const effectiveTargetWordCount = options?.targetWordCount ?? targetWordCount
   const [isGenerating, setIsGenerating] = useState(false)
   const [currentChapterIndex, setCurrentChapterIndex] = useState(0)
   const [chapters, setChapters] = useState<ChapterState[]>([])
@@ -68,13 +84,13 @@ export function BatchProgress({
     setChapters([])
 
     const requestBody: Record<string, unknown> = {
-      useContext,
-      contextChapterCount,
-      temperature,
-      targetWordCount,
+      useContext: effectiveUseContext,
+      contextChapterCount: effectiveContextChapterCount,
+      temperature: effectiveTemperature,
+      targetWordCount: effectiveTargetWordCount,
     }
-    if (chapterIds && chapterIds.length > 0) {
-      requestBody.chapterIds = chapterIds
+    if (effectiveChapterIds && effectiveChapterIds.length > 0) {
+      requestBody.chapterIds = effectiveChapterIds
     }
 
     abortControllerRef.current = new AbortController()
@@ -206,7 +222,7 @@ export function BatchProgress({
         abortControllerRef.current.abort()
       }
     }
-  }, [open, projectId, chapterIds, useContext, contextChapterCount, temperature, targetWordCount, onComplete])
+  }, [open, projectId, effectiveChapterIds, effectiveUseContext, effectiveContextChapterCount, effectiveTemperature, effectiveTargetWordCount, onComplete])
 
   useEffect(() => {
     if (totalChapters > 0) {

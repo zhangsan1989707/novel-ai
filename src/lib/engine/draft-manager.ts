@@ -82,7 +82,7 @@ export class DraftManager {
     }
 
     // 根据 Agent 类型更新对应字段
-    const updateData: Partial<NovelChapter> = {
+    const updateData: any = {
       lastAgentType: agentType
     }
 

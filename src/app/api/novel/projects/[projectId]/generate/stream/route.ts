@@ -35,31 +35,34 @@ interface RouteParams {
  */
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const startTime = Date.now()
-  const { projectId } = await params
-  const projectIdNum = parseInt(projectId)
-
-  if (isNaN(projectIdNum)) {
-    return NextResponse.json(
-      { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
-      { status: 400 }
-    )
-  }
-
-  const rateLimitResponse = aiGenerationLimiter(request)
-  if (rateLimitResponse) {
-    return rateLimitResponse
-  }
-
+  let projectIdNum: number | null = null
+  let chapterId: number | undefined
   try {
+    const { projectId } = await params
+    projectIdNum = parseInt(projectId)
+
+    if (isNaN(projectIdNum)) {
+      return NextResponse.json(
+        { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
+        { status: 400 }
+      )
+    }
+
+    const rateLimitResponse = aiGenerationLimiter(request)
+    if (rateLimitResponse) {
+      return rateLimitResponse
+    }
+
     const body = await request.json()
+    const parsedData = generateSchema.parse(body)
+    chapterId = parsedData.chapterId
     const {
-      chapterId,
       useContext,
       contextChapterCount,
       targetWordCount,
       temperature,
       virtualWriterId,
-    } = generateSchema.parse(body)
+    } = parsedData
 
     // 获取项目信息
     const rawProject = await prisma.novelProject.findUnique({
@@ -220,11 +223,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           // 更新项目总字数
           if (wordCountDiff !== 0) {
             await prisma.novelProject.update({
-              where: { id: projectIdNum },
-              data: {
-                currentWordCount: { increment: wordCountDiff },
-              },
-            })
+            where: { id: projectIdNum as number },
+            data: {
+              currentWordCount: { increment: wordCountDiff },
+            },
+          })
           }
 
           // 发送完成事件
@@ -265,7 +268,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         { status: 400 }
       )
     }
-    logError(error instanceof Error ? error : new Error(String(error)), { type: 'stream_generate', projectId, chapterId })
+    logError(error instanceof Error ? error : new Error(String(error)), { type: 'stream_generate', projectId: projectIdNum, chapterId })
     return NextResponse.json(
       { success: false, error: { code: 'GENERATE_ERROR', message: '生成失败' } },
       { status: 500 }

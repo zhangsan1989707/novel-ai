@@ -41,7 +41,7 @@ export async function GET() {
       data: safeConfigs,
     })
   } catch (error) {
-    logError(error instanceof Error ? error : new Error(String(error)), { type: $1 })
+    logError(error instanceof Error ? error : new Error(String(error)), { type: 'get_ai_configs' })
     return NextResponse.json(
       { success: false, error: { code: 'GET_ERROR', message: '获取配置失败' } },
       { status: 500 }
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-    logError(error instanceof Error ? error : new Error(String(error)), { type: $1 })
+    logError(error instanceof Error ? error : new Error(String(error)), { type: 'create_ai_config' })
     return NextResponse.json(
       { success: false, error: { code: 'CREATE_ERROR', message: '创建配置失败' } },
       { status: 500 }

@@ -3,7 +3,7 @@
  * 支持多阶段进度报告
  */
 
-import { logger } from './logger'
+import { logger } from '@/lib/logger'
 
 // ============================================
 // 类型定义

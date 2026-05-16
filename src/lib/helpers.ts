@@ -186,21 +186,22 @@ export function isObject(value: unknown): value is Record<string, unknown> {
  * 合并对象
  */
 export function merge<T extends object>(target: T, ...sources: Partial<T>[]): T {
-  return sources.reduce((acc, source) => {
+  const result = { ...target } as any
+  for (const source of sources) {
     for (const key in source) {
       if (Object.prototype.hasOwnProperty.call(source, key)) {
         const sourceValue = source[key]
-        const targetValue = acc[key]
+        const targetValue = result[key]
         
         if (isObject(sourceValue) && isObject(targetValue)) {
-          acc[key] = merge(targetValue as Record<string, unknown>, sourceValue as Record<string, unknown>) as T[keyof T]
+          result[key] = merge(targetValue as Record<string, unknown>, sourceValue as Record<string, unknown>)
         } else {
-          acc[key] = sourceValue as T[keyof T]
+          result[key] = sourceValue
         }
       }
     }
-    return acc
-  }, { ...target })
+  }
+  return result as T
 }
 
 /**

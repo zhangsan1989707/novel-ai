@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
+import { logError } from '@/lib/logger'
 
 const createCharacterSchema = z.object({
   projectId: z.number().int().positive(),
@@ -63,7 +64,7 @@ export async function GET(request: NextRequest) {
       data: characters,
     })
   } catch (error) {
-    logError(error instanceof Error ? error : new Error(String(error)), { type: $1 })
+    logError(error instanceof Error ? error : new Error(String(error)), { type: 'get_characters' })
     return NextResponse.json(
       { success: false, error: { code: 'GET_ERROR', message: '获取角色列表失败' } },
       { status: 500 }
@@ -76,9 +77,10 @@ export async function GET(request: NextRequest) {
  * 创建角色
  */
 export async function POST(request: NextRequest) {
+  let data: any = null
   try {
     const body = await request.json()
-    const data = createCharacterSchema.parse(body)
+    data = createCharacterSchema.parse(body)
 
     // 获取项目的创建者
     const project = await prisma.novelProject.findUnique({

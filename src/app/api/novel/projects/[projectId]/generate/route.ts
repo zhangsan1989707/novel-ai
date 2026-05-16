@@ -32,25 +32,28 @@ interface RouteParams {
  * 非流式生成章节内容
  */
 export async function POST(request: NextRequest, { params }: RouteParams) {
-  const { projectId } = await params
-  const projectIdNum = parseInt(projectId)
-
-  if (isNaN(projectIdNum)) {
-    return NextResponse.json(
-      { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
-      { status: 400 }
-    )
-  }
-
+  let projectIdNum: number | null = null
+  let chapterId: number | undefined
   try {
+    const { projectId } = await params
+    projectIdNum = parseInt(projectId)
+
+    if (isNaN(projectIdNum)) {
+      return NextResponse.json(
+        { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
+        { status: 400 }
+      )
+    }
+
     const body = await request.json()
+    const parsedData = generateSchema.parse(body)
+    chapterId = parsedData.chapterId
     const {
-      chapterId,
       useContext,
       contextChapterCount,
       targetWordCount,
       temperature,
-    } = generateSchema.parse(body)
+    } = parsedData
 
     // 获取项目信息
     const rawProject = await prisma.novelProject.findUnique({

@@ -178,7 +178,12 @@ export class ModelComparator {
 
     for (let retry = 0; retry < this.defaultOptions.maxRetries; retry++) {
       try {
-        const provider = getAIProvider(vendor, { vendor })
+        const config = {
+          vendor,
+          modelId: '',
+          apiKey: ''
+        }
+        const provider = getAIProvider(vendor, config)
         const tokens: string[] = []
 
         // 带超时的生成
@@ -205,7 +210,7 @@ export class ModelComparator {
 
         return {
           vendor,
-          modelId: provider.modelId,
+          modelId: '',
           success: true,
           content,
           duration,

@@ -120,7 +120,7 @@ export class TraceableAIProvider implements AIProvider {
           vendor: this.vendor,
           modelId: this.config.modelId,
           duration: Date.now() - startTime,
-          tokens: estimateTokens(prompt) + estimateTokens(completion.length),
+          tokens: estimateTokens(prompt) + estimateTokens(completion),
         },
         'AI stream generation completed'
       )
@@ -189,6 +189,10 @@ export class TraceableAIProvider implements AIProvider {
 
   getConfig(): AIConfig | null {
     return this.config
+  }
+
+  validateConfig(config: AIConfig): boolean {
+    return this.provider.validateConfig(config)
   }
 }
 

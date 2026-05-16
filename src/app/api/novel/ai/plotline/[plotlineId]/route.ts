@@ -17,8 +17,10 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ plotlineId: string }> }
 ) {
+  let plotlineId: string | null = null
   try {
-    const { plotlineId } = await params
+    const { plotlineId: paramPlotlineId } = await params
+    plotlineId = paramPlotlineId
 
     const body = await request.json()
     const updates = requestSchema.parse(body)
@@ -41,7 +43,7 @@ export async function PATCH(
     }
 
     const updated = await prisma.plotline.update({
-      where: { id: plotlineId },
+      where: { id: paramPlotlineId },
       data: updateData,
     })
 

@@ -97,7 +97,7 @@ export async function POST(request: Request) {
         } else {
           // 使用默认定价
           const defaultPricing = DEFAULT_PRICING[vendor] || DEFAULT_PRICING[AIVendor.DEEPSEEK]
-          const modelPricing = defaultPricing.models?.[modelId] || { 
+          const modelPricing = (defaultPricing.models as Record<string, { input: number; output: number }>)?.[modelId] || { 
             input: defaultPricing.input, 
             output: defaultPricing.output 
           }
@@ -128,7 +128,7 @@ export async function POST(request: Request) {
             outputPricePerMTokens = pricing.outputPrice.toNumber()
           } else {
             const defaultPricing = DEFAULT_PRICING[vendor] || DEFAULT_PRICING[AIVendor.DEEPSEEK]
-            const modelPricing = defaultPricing.models?.[modelId] || { 
+            const modelPricing = (defaultPricing.models as Record<string, { input: number; output: number }>)?.[modelId] || { 
               input: defaultPricing.input, 
               output: defaultPricing.output 
             }

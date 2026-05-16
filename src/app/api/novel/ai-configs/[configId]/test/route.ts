@@ -14,9 +14,10 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ configId: string }> }
 ) {
+  let id: number | null = null
   try {
     const { configId } = await params
-    const id = parseInt(configId)
+    id = parseInt(configId)
 
     if (isNaN(id)) {
       return NextResponse.json(
@@ -89,7 +90,7 @@ export async function POST(
       }, { status: 200 })
     }
   } catch (error) {
-    logError(error instanceof Error ? error : new Error(String(error)), { type: $1 })
+    logError(error instanceof Error ? error : new Error(String(error)), { type: 'test_ai_config', configId: id })
     return NextResponse.json(
       { success: false, error: { code: 'TEST_ERROR', message: '测试失败' } },
       { status: 500 }

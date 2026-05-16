@@ -10,8 +10,8 @@ const defaultOptions: Required<CacheOptions> = {
   maxSize: 1000,
 }
 
-class MemoryCache<T> {
-  private cache: LRUCache<string, T>
+class MemoryCache<T extends {} = object> {
+  private cache: any
 
   constructor(options: CacheOptions = {}) {
     const opts = { ...defaultOptions, ...options }
@@ -42,9 +42,9 @@ class MemoryCache<T> {
   }
 }
 
-const projectCache = new MemoryCache<unknown>({ ttl: 60 * 1000, maxSize: 100 })
-const characterCache = new MemoryCache<unknown>({ ttl: 5 * 60 * 1000, maxSize: 500 })
-const chapterCache = new MemoryCache<unknown>({ ttl: 2 * 60 * 1000, maxSize: 200 })
+const projectCache = new MemoryCache<any>({ ttl: 60 * 1000, maxSize: 100 })
+const characterCache = new MemoryCache<any>({ ttl: 5 * 60 * 1000, maxSize: 500 })
+const chapterCache = new MemoryCache<any>({ ttl: 2 * 60 * 1000, maxSize: 200 })
 
 export function getProjectCache() {
   return projectCache

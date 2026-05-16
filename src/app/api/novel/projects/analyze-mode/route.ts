@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-    logError(error instanceof Error ? error : new Error(String(error)), { type: $1 })
+    logError(error instanceof Error ? error : new Error(String(error)), { type: 'create_analyze_project' })
     return NextResponse.json(
       { success: false, error: { code: 'CREATE_ERROR', message: '创建项目失败' } },
       { status: 500 }

@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getChapterGenerationStatus } from '@/lib/engine/orchestrator'
 import { z } from 'zod'
+import { logError } from '@/lib/logger'
 
 const statusSchema = z.object({
   projectId: z.number().int().positive(),
@@ -12,10 +13,12 @@ const statusSchema = z.object({
 })
 
 export async function GET(request: NextRequest) {
+  let projectId: number | null = null
+  let chapterNo: number | null = null
   try {
     const { searchParams } = new URL(request.url)
-    const projectId = parseInt(searchParams.get('projectId') || '')
-    const chapterNo = parseInt(searchParams.get('chapterNo') || '')
+    projectId = parseInt(searchParams.get('projectId') || '')
+    chapterNo = parseInt(searchParams.get('chapterNo') || '')
 
     if (isNaN(projectId) || isNaN(chapterNo)) {
       return NextResponse.json(

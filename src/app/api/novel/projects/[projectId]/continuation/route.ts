@@ -40,17 +40,18 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ projectId: string }> }
 ) {
-  const { projectId } = await params
-  const projectIdNum = parseInt(projectId, 10)
-
-  if (isNaN(projectIdNum)) {
-    return NextResponse.json(
-      { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
-      { status: 400 }
-    )
-  }
-
+  let projectIdNum: number | null = null
   try {
+    const { projectId } = await params
+    projectIdNum = parseInt(projectId, 10)
+
+    if (isNaN(projectIdNum)) {
+      return NextResponse.json(
+        { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
+        { status: 400 }
+      )
+    }
+
     const body = await request.json()
     const {
       mode,
@@ -164,12 +165,15 @@ export async function POST(
       )
 
       // 构建结局提示词
-      prompt = buildEndingPrompt(context, {
-        unresolvedForeshadowing,
-        openPlotlines,
-        characterArcs,
-        endingDirection: endingDirection as 'happy' | 'tragic' | 'open' | undefined,
-        targetChapterCount,
+      prompt = buildEndingPrompt({
+        context,
+        options: {
+          unresolvedForeshadowing,
+          openPlotlines,
+          characterArcs,
+          endingDirection: endingDirection as 'happy' | 'tragic' | 'open' | undefined,
+          targetChapterCount,
+        }
       })
     } else if (mode === 'continue') {
       // 继续创作模式
@@ -306,7 +310,7 @@ export async function POST(
         { status: 400 }
       )
     }
-    logError(error instanceof Error ? error : new Error(String(error)), { type: $1 })
+    logError(error instanceof Error ? error : new Error(String(error)), { type: 'generate_continuation', projectId: projectIdNum })
     return NextResponse.json(
       { success: false, error: { code: 'GENERATION_ERROR', message: '续写生成失败' } },
       { status: 500 }

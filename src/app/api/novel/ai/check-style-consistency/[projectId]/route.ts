@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { checkStyleConsistency } from '@/lib/ai/style-analyzer'
 import { AIVendor } from '@/types'
+import { logError } from '@/lib/logger'
 
 const vendorEnum = z.enum(['OPENAI', 'ANTHROPIC', 'ALIBABA', 'DEEPSEEK', 'MINIMAX', 'VOLCENGINE'])
 
@@ -18,9 +19,10 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ projectId: string }> }
 ) {
+  let projectIdNum: number | null = null
   try {
     const { projectId } = await params
-    const projectIdNum = parseInt(projectId, 10)
+    projectIdNum = parseInt(projectId, 10)
 
     if (isNaN(projectIdNum)) {
       return NextResponse.json(

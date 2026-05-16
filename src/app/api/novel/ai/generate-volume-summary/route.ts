@@ -17,9 +17,14 @@ const requestSchema = z.object({
  * 生成指定卷的摘要 (L2)
  */
 export async function POST(request: NextRequest) {
+  let projectId: number | null = null
+  let volumeNumber: number | null = null
   try {
     const body = await request.json()
-    const { projectId, volumeNumber, vendor } = requestSchema.parse(body)
+    const parsed = requestSchema.parse(body)
+    projectId = parsed.projectId
+    volumeNumber = parsed.volumeNumber
+    const { vendor } = parsed
 
     const result = await generateVolumeSummary(projectId, volumeNumber, vendor as AIVendor)
 
@@ -38,7 +43,7 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-    logError(error instanceof Error ? error : new Error(String(error)), { type: $1 })
+    logError(error instanceof Error ? error : new Error(String(error)), { type: 'generate_volume_summary', projectId, volumeNumber })
     return NextResponse.json(
       { success: false, error: { code: 'GENERATE_ERROR', message: '生成卷摘要失败' } },
       { status: 500 }

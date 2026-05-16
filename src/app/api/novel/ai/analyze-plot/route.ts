@@ -6,7 +6,7 @@ import { getVolumeChapterRange } from '@/lib/ai/context-manager'
 import { prisma } from '@/lib/prisma'
 import { AIVendor, AnalysisDimension, AnalysisType } from '@/types'
 import { getChapterSummariesInRange, saveChapterSummary } from '@/lib/memory/chapter-summary'
-import { logger } from '@/lib/logger'
+import { logger, logError } from '@/lib/logger'
 
 // ============================================
 // 常量配置
@@ -357,16 +357,18 @@ ${dimensions.map(dim => {
  * AI 拆书分析（支持分层分析）
  */
 export async function POST(request: NextRequest) {
+  let projectId: number | null = null
   try {
     const body = await request.json()
+    const parsed = analyzePlotSchema.parse(body)
+    projectId = parsed.projectId
     const {
-      projectId,
       volumeNumber,
       dimensions,
       contextChapterCount,
       vendor,
       temperature,
-    } = analyzePlotSchema.parse(body)
+    } = parsed
 
     // 获取项目信息
     const project = await prisma.novelProject.findUnique({

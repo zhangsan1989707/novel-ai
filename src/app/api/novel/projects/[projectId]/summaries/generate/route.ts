@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { createProviderFromDefaultConfig } from '@/lib/ai'
 import { saveChapterSummary } from '@/lib/memory/chapter-summary'
 import type { ChapterSummaryData } from '@/lib/engine/types'
-import { logger } from '@/lib/logger'
+import { logError } from '@/lib/logger'
 
 const BATCH_SIZE = 5 // 每批处理章节数
 

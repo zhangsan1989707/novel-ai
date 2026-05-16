@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { WriterType } from '@/types'
+import { logError } from '@/lib/logger'
 
 // ============================================
 // Schema 验证
@@ -29,9 +30,10 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ writerId: string }> }
 ) {
+  let id: number | null = null
   try {
     const { writerId } = await params
-    const id = parseInt(writerId)
+    id = parseInt(writerId)
 
     if (isNaN(id)) {
       return NextResponse.json(
@@ -87,9 +89,10 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ writerId: string }> }
 ) {
+  let id: number | null = null
   try {
     const { writerId } = await params
-    const id = parseInt(writerId)
+    id = parseInt(writerId)
 
     if (isNaN(id)) {
       return NextResponse.json(
@@ -135,9 +138,10 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ writerId: string }> }
 ) {
+  let id: number | null = null
   try {
     const { writerId } = await params
-    const id = parseInt(writerId)
+    id = parseInt(writerId)
 
     if (isNaN(id)) {
       return NextResponse.json(
@@ -155,7 +159,7 @@ export async function DELETE(
       data: null,
     })
   } catch (error) {
-    logError(error instanceof Error ? error : new Error(String(error)), { type: $1 })
+    logError(error instanceof Error ? error : new Error(String(error)), { type: 'delete_virtual_writer', writerId: id })
     return NextResponse.json(
       { success: false, error: { code: 'DELETE_ERROR', message: '删除失败' } },
       { status: 500 }

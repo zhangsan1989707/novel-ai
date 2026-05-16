@@ -330,6 +330,9 @@ export interface AIConfig {
 export interface GenerationResult {
   content: string
   wordCount: number
+  promptTokens?: number
+  completionTokens?: number
+  totalTokens?: number
   usage?: {
     promptTokens: number
     completionTokens: number

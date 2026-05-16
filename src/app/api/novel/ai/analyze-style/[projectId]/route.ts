@@ -18,9 +18,10 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ projectId: string }> }
 ) {
+  let projectIdNum: number | null = null
   try {
     const { projectId } = await params
-    const projectIdNum = parseInt(projectId, 10)
+    projectIdNum = parseInt(projectId, 10)
 
     if (isNaN(projectIdNum)) {
       return NextResponse.json(
@@ -46,7 +47,7 @@ export async function POST(
         { status: 400 }
       )
     }
-    logError(error instanceof Error ? error : new Error(String(error)), { type: $1 })
+    logError(error instanceof Error ? error : new Error(String(error)), { type: 'analyze_style', projectId: projectIdNum })
     return NextResponse.json(
       { success: false, error: { code: 'ANALYZE_ERROR', message: '分析文风失败' } },
       { status: 500 }

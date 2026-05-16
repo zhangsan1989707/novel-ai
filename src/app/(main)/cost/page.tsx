@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
 import { Button, Input, Card, CardContent, Badge, Progress, Modal } from '@/components/ui'
 import {
   DollarSign,
@@ -9,7 +8,6 @@ import {
   AlertTriangle,
   Settings,
   RefreshCw,
-  ArrowLeft,
   PieChart,
   Calendar,
   Target,
@@ -66,7 +64,6 @@ const vendorLabels: Record<AIVendor, string> = {
 }
 
 export default function CostPage() {
-  const router = useRouter()
   const [data, setData] = useState<CostData | null>(null)
   const [loading, setLoading] = useState(true)
   const [showSettingsModal, setShowSettingsModal] = useState(false)
@@ -76,7 +73,6 @@ export default function CostPage() {
   })
   const [savingSettings, setSavingSettings] = useState(false)
 
-  // 获取成本数据
   const fetchCostData = useCallback(async () => {
     setLoading(true)
     try {
@@ -100,7 +96,6 @@ export default function CostPage() {
     fetchCostData()
   }, [fetchCostData])
 
-  // 保存设置
   const handleSaveSettings = async () => {
     setSavingSettings(true)
     try {
@@ -124,15 +119,6 @@ export default function CostPage() {
     }
   }
 
-  // 获取状态颜色
-  const getStatusColor = () => {
-    if (!data) return 'bg-gray-200'
-    if (data.quota.isOverLimit) return 'bg-red-500'
-    if (data.quota.isWarning) return 'bg-yellow-500'
-    return 'bg-green-500'
-  }
-
-  // 估算一本书的成本（示例）
   const estimateBookCost = (chapters: number, wordsPerChapter: number) => {
     const avgTokensPerChapter = wordsPerChapter * 1.5
     const estimatedInputTokens = avgTokensPerChapter * 2
@@ -140,7 +126,6 @@ export default function CostPage() {
     const totalInputTokens = estimatedInputTokens * chapters
     const totalOutputTokens = estimatedOutputTokens * chapters
 
-    // 使用默认 DeepSeek 价格估算
     const inputPrice = 1.0 / 1000000
     const outputPrice = 2.0 / 1000000
 
@@ -148,39 +133,26 @@ export default function CostPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Header */}
-      <header className="sticky top-0 z-10 bg-white dark:bg-gray-800 border-b">
-        <div className="px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={() => router.back()}
-                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                title="返回"
-              >
-                <ArrowLeft className="h-5 w-5" />
-              </button>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">成本管理</h1>
-                <p className="text-sm text-gray-500">追踪 AI 调用成本和配额</p>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={fetchCostData} disabled={loading}>
-                <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-                刷新
-              </Button>
-              <Button onClick={() => setShowSettingsModal(true)}>
-                <Settings className="h-4 w-4 mr-2" />
-                配额设置
-              </Button>
-            </div>
-          </div>
+    <>
+      {/* 页面标题 */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">成本管理</h1>
+          <p className="text-sm text-gray-500">追踪 AI 调用成本和配额</p>
         </div>
-      </header>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={fetchCostData} disabled={loading}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            刷新
+          </Button>
+          <Button onClick={() => setShowSettingsModal(true)}>
+            <Settings className="h-4 w-4 mr-2" />
+            配额设置
+          </Button>
+        </div>
+      </div>
 
-      <main className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+      <div className="space-y-6">
         {loading ? (
           <div className="text-center py-12 text-gray-500">加载中...</div>
         ) : data ? (
@@ -401,7 +373,7 @@ export default function CostPage() {
             </CardContent>
           </Card>
         )}
-      </main>
+      </div>
 
       {/* 配额设置弹窗 */}
       <Modal
@@ -440,6 +412,6 @@ export default function CostPage() {
           </div>
         </div>
       </Modal>
-    </div>
+    </>
   )
 }

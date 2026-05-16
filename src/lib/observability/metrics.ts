@@ -180,9 +180,27 @@ class MetricsCollector {
 // 追踪器
 // ================================
 
+// ================================
+// 辅助栈类型
+// ================================
+
+class Stack<T> extends Array<T> {
+  push(item: T): number {
+    return super.push(item)
+  }
+
+  pop(): T | undefined {
+    return super.pop()
+  }
+
+  peek(): T | undefined {
+    return this[this.length - 1]
+  }
+}
+
 class Tracer {
   private spans: Map<string, Span> = new Map()
-  private activeSpans: Stack<Span> = []
+  private activeSpans: Stack<Span> = new Stack()
 
   // ================================
   // 创建 Span
@@ -300,24 +318,6 @@ class Tracer {
 
   private generateId(): string {
     return `span-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-  }
-}
-
-// ================================
-// 辅助栈类型
-// ================================
-
-class Stack<T> extends Array<T> {
-  push(item: T): number {
-    return super.push(item)
-  }
-
-  pop(): T | undefined {
-    return super.pop()
-  }
-
-  peek(): T | undefined {
-    return this[this.length - 1]
   }
 }
 

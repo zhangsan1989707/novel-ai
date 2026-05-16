@@ -35,11 +35,14 @@ type RevisionType = 'rewrite' | 'continue' | 'expand' | 'condense' | 'polish'
  * 改稿功能 - SSE 流式返回
  */
 export async function POST(request: NextRequest) {
+  let projectId: number | null = null
+  let chapterId: number | null = null
   try {
     const body = await request.json()
+    const parsed = revisionSchema.parse(body)
+    projectId = parsed.projectId
+    chapterId = parsed.chapterId
     const {
-      projectId,
-      chapterId,
       revisionType,
       currentContent,
       suggestion,
@@ -48,7 +51,7 @@ export async function POST(request: NextRequest) {
       temperature,
       targetWordCount,
       aiModelId,
-    } = revisionSchema.parse(body)
+    } = parsed
 
     // 获取项目信息
     const rawProject = await prisma.novelProject.findUnique({
@@ -174,7 +177,7 @@ export async function POST(request: NextRequest) {
             status: 'completed',
           })
         } catch (error) {
-          logError(error instanceof Error ? error : new Error(String(error)), { type: $1 })
+          logError(error instanceof Error ? error : new Error(String(error)), { type: 'revision_stream', chapterId })
           sendEvent('error', {
             message: error instanceof Error ? error.message : '改稿失败',
           })

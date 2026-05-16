@@ -91,7 +91,7 @@ export async function createProviderFromDefaultConfig(): Promise<AIProvider> {
       })
     }
   } catch (error) {
-    logger.warn({ error, vendor }, 'Failed to get default config from database, falling back to env')
+    logger.warn({ error }, 'Failed to get default config from database, falling back to env')
   }
 
   // 回退到环境变量

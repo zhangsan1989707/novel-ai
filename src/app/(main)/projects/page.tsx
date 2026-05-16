@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button, Select, Input, Pagination, Modal, Card, CardContent, ProjectsEmptyState, toast } from '@/components/ui'
 import { ProjectCard, genreOptions, AnalyzeWizard } from '@/components/project'
-import { Plus, Search, BookOpen, Sparkles, Settings } from 'lucide-react'
+import { Plus, Search, Sparkles } from 'lucide-react'
 import type { ProjectStatus } from '@/types'
 
 interface Project {
@@ -55,18 +55,15 @@ export default function ProjectsPage() {
   const [totalPages, setTotalPages] = useState(1)
   const [total, setTotal] = useState(0)
 
-  // 筛选状态
   const [statusFilter, setStatusFilter] = useState('')
   const [genreFilter, setGenreFilter] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
 
-  // Modal 状态
   const [showAnalyzeModal, setShowAnalyzeModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleteProjectId, setDeleteProjectId] = useState<number | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
-  // 获取项目列表
   const fetchProjects = useCallback(async () => {
     setLoading(true)
     try {
@@ -97,7 +94,6 @@ export default function ProjectsPage() {
     fetchProjects()
   }, [fetchProjects])
 
-  // 删除项目
   const handleDelete = async () => {
     if (!deleteProjectId) return
     setSubmitting(true)
@@ -123,117 +119,104 @@ export default function ProjectsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Header */}
-      <header className="sticky top-0 z-10 bg-white dark:bg-gray-800 border-b">
-        <div className="mx-auto max-7xl px-4 py-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">我的小说</h1>
-              <p className="text-sm text-gray-500">{total} 个项目</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => setShowAnalyzeModal(true)}>
-                <Sparkles className="h-4 w-4 mr-1.5" />
-                拆解小说
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => router.push('/settings')}>
-                <Settings className="h-4 w-4 mr-1.5" />
-                AI 配置
-              </Button>
-              <Button size="sm" onClick={() => router.push('/projects/new')}>
-                <Plus className="h-4 w-4 mr-1.5" />
-                创作小说
-              </Button>
-            </div>
-          </div>
+    <>
+      {/* 页面标题和操作 */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">我的小说</h1>
+          <p className="text-sm text-gray-500">{total} 个项目</p>
         </div>
-      </header>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setShowAnalyzeModal(true)}>
+            <Sparkles className="h-4 w-4 mr-1.5" />
+            拆解小说
+          </Button>
+          <Button size="sm" onClick={() => router.push('/projects/new')}>
+            <Plus className="h-4 w-4 mr-1.5" />
+            创作小说
+          </Button>
+        </div>
+      </div>
 
-      <main className="mx-auto max-7xl px-4 py-6 sm:px-6 lg:px-8">
-        {/* 筛选栏 */}
-        <div className="mb-6 flex flex-col sm:flex-row sm:items-center gap-4">
-          {/* 搜索 */}
-          <div className="relative flex-1 min-w-[200px] max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <Input
-              placeholder="搜索项目..."
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value)
-                setPage(1)
-              }}
-              className="pl-10 w-full"
-            />
-          </div>
-
-          {/* 筛选条件 */}
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="text-sm text-gray-500">筛选：</span>
-            <Select
-              options={statusOptions}
-              value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value)
-                setPage(1)
-              }}
-            />
-            <Select
-              options={genreFilterOptions}
-              value={genreFilter}
-              onChange={(e) => {
-                setGenreFilter(e.target.value)
-                setPage(1)
-              }}
-            />
-          </div>
+      {/* 筛选栏 */}
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-center gap-4">
+        <div className="relative flex-1 min-w-[200px] max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Input
+            placeholder="搜索项目..."
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value)
+              setPage(1)
+            }}
+            className="pl-10 w-full"
+          />
         </div>
 
-        {/* 项目列表 */}
-        {loading ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-sm text-gray-500">筛选：</span>
+          <Select
+            options={statusOptions}
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value)
+              setPage(1)
+            }}
+          />
+          <Select
+            options={genreFilterOptions}
+            value={genreFilter}
+            onChange={(e) => {
+              setGenreFilter(e.target.value)
+              setPage(1)
+            }}
+          />
+        </div>
+      </div>
+
+      {/* 项目列表 */}
+      {loading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {[...Array(8)].map((_, i) => (
+            <Card key={i} className="animate-pulse">
+              <div className="h-32 bg-gray-200 dark:bg-gray-700" />
+              <CardContent className="p-4 space-y-3">
+                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4" />
+                <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/2" />
+                <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : projects.length === 0 ? (
+        <ProjectsEmptyState onCreate={() => router.push('/projects/new')} />
+      ) : (
+        <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {[...Array(8)].map((_, i) => (
-              <Card key={i} className="animate-pulse">
-                <div className="h-32 bg-gray-200 dark:bg-gray-700" />
-                <CardContent className="p-4 space-y-3">
-                  <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4" />
-                  <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/2" />
-                  <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded" />
-                </CardContent>
-              </Card>
+            {projects.map((project) => (
+              <ProjectCard
+                key={project.id}
+                project={project}
+                onEdit={(id) => router.push(`/projects/${id}`)}
+                onDelete={(id) => {
+                  setDeleteProjectId(id)
+                  setShowDeleteModal(true)
+                }}
+              />
             ))}
           </div>
-        ) : projects.length === 0 ? (
-          <ProjectsEmptyState onCreate={() => router.push('/projects/new')} />
-        ) : (
-          <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {projects.map((project) => (
-                <ProjectCard
-                  key={project.id}
-                  project={project}
-                  onEdit={(id) => router.push(`/projects/${id}`)}
-                  onDelete={(id) => {
-                    setDeleteProjectId(id)
-                    setShowDeleteModal(true)
-                  }}
-                />
-              ))}
-            </div>
 
-            {/* 分页 */}
-            {totalPages > 1 && (
-              <div className="mt-8 flex justify-center">
-                <Pagination
-                  currentPage={page}
-                  totalPages={totalPages}
-                  onPageChange={setPage}
-                />
-              </div>
-            )}
-          </>
-        )}
-      </main>
+          {totalPages > 1 && (
+            <div className="mt-8 flex justify-center">
+              <Pagination
+                currentPage={page}
+                totalPages={totalPages}
+                onPageChange={setPage}
+              />
+            </div>
+          )}
+        </>
+      )}
 
       {/* 拆解小说 Modal */}
       <Modal
@@ -261,6 +244,6 @@ export default function ProjectsPage() {
           </Button>
         </div>
       </Modal>
-    </div>
+    </>
   )
 }

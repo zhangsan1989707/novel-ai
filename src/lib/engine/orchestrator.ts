@@ -112,7 +112,7 @@ export async function runChapterGenerationPipeline(
     await prisma.novelChapter.update({
       where: { id: chapter.id },
       data: {
-        chapterOutline: outline as unknown as JsonValue,
+        chapterOutline: outline as any,
         lastAgentType: 'VALIDATOR',
       },
     })
@@ -204,7 +204,7 @@ export async function runChapterGenerationPipeline(
             content: polishedContent,
             status: ChapterStatus.REVIEWING,
             retryCount,
-            validationReport: validationReport as unknown as JsonValue,
+            validationReport: validationReport as any,
             wordCount: polishedContent.length,
             lastAgentType: 'VALIDATOR',
           },
@@ -299,7 +299,7 @@ export async function runChapterGenerationPipeline(
         content: polishedContent,
         summary: summaryData.summary,
         status: ChapterStatus.COMPLETED,
-        validationReport: validationReport as unknown as JsonValue,
+        validationReport: validationReport as any,
         wordCount: polishedContent.length,
         lastAgentType: 'VALIDATOR',
       },

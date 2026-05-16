@@ -10,10 +10,11 @@ import { logError } from '@/lib/logger'
  * AI 生成/润色小说简介
  */
 export async function POST(request: NextRequest) {
+  let projectId: number | null = null
   try {
     const body = await request.json()
+    projectId = body.projectId
     const {
-      projectId,
       projectTitle,
       existingSynopsis,
       targetAudience,
@@ -89,7 +90,7 @@ export async function POST(request: NextRequest) {
       },
     })
   } catch (error) {
-    logError(error instanceof Error ? error : new Error(String(error)), { type: $1 })
+    logError(error instanceof Error ? error : new Error(String(error)), { type: 'generate_synopsis', projectId })
     return NextResponse.json(
       { success: false, error: { code: 'GENERATION_ERROR', message: '生成简介失败' } },
       { status: 500 }

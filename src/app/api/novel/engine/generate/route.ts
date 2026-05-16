@@ -13,9 +13,13 @@ const generateSchema = z.object({
 })
 
 export async function POST(request: NextRequest) {
+  let projectId: number | null = null
+  let chapterNo: number | null = null
   try {
     const body = await request.json()
-    const { projectId, chapterNo } = generateSchema.parse(body)
+    const parsed = generateSchema.parse(body)
+    projectId = parsed.projectId
+    chapterNo = parsed.chapterNo
 
     // 生成 jobId
     const jobId = `job_${projectId}_${chapterNo}_${Date.now()}`
@@ -38,7 +42,7 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-    logError(error instanceof Error ? error : new Error(String(error)), { type: $1 })
+    logError(error instanceof Error ? error : new Error(String(error)), { type: 'engine_generate', projectId, chapterNo })
     return NextResponse.json(
       { success: false, error: { code: 'GENERATION_ERROR', message: '章节生成失败' } },
       { status: 500 }
