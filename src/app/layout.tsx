@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import { ToastContainer } from '@/components/ui/Toast'
+import '@/lib/agents/adapters'
 
 export const metadata: Metadata = {
   title: 'SoulKey 小说生成器',
