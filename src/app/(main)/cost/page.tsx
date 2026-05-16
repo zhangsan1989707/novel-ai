@@ -169,7 +169,7 @@ export default function CostPage() {
                     <div>
                       <p className="text-sm text-gray-500">本月已用</p>
                       <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                        ¥{data.usage.totalCost.toFixed(2)}
+                        ¥{(data.usage.totalCost ?? 0).toFixed(2)}
                       </p>
                       <p className="text-xs text-gray-400">
                         {data.usage.totalTokens.toLocaleString()} tokens
@@ -189,10 +189,10 @@ export default function CostPage() {
                     <div>
                       <p className="text-sm text-gray-500">剩余配额</p>
                       <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                        ¥{data.quota.remaining.toFixed(2)}
+                        ¥{(data.quota.remaining ?? 0).toFixed(2)}
                       </p>
                       <p className="text-xs text-gray-400">
-                        限额 ¥{data.quota.quota.monthlyLimit.toFixed(2)}
+                        限额 ¥{(data.quota.quota.monthlyLimit ?? 0).toFixed(2)}
                       </p>
                     </div>
                   </div>
@@ -210,7 +210,7 @@ export default function CostPage() {
                       <div className="flex justify-between text-sm mb-1">
                         <span className="text-gray-500">使用率</span>
                         <span className="font-medium text-gray-900 dark:text-white">
-                          {(data.quota.usagePercent * 100).toFixed(1)}%
+                          {((data.quota.usagePercent ?? 0) * 100).toFixed(1)}%
                         </span>
                       </div>
                       <Progress
@@ -272,7 +272,7 @@ export default function CostPage() {
                       <p className="text-sm text-gray-600 dark:text-gray-300">
                         {data.quota.isOverLimit
                           ? '您本月的 AI 调用配额已用尽，新的生成请求将被拒绝。请调整配额设置或等待下月。'
-                          : `您已使用了 ${(data.quota.usagePercent * 100).toFixed(
+                          : `您已使用了 ${((data.quota.usagePercent ?? 0) * 100).toFixed(
                               1
                             )}% 的配额，请合理控制使用量。`}
                       </p>
