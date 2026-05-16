@@ -2,8 +2,10 @@
 
 import { useRouter, usePathname } from 'next/navigation'
 import { Button } from '@/components/ui'
-import { BookOpen, Settings, DollarSign, HelpCircle, Bell, Search } from 'lucide-react'
+import { BookOpen, Settings, DollarSign, Search } from 'lucide-react'
 import { ThemeToggle } from './ThemeToggle'
+import { NotificationDropdown } from './NotificationDropdown'
+import { HelpModal } from './HelpModal'
 
 interface TopNavigationProps {
   children: React.ReactNode
@@ -70,15 +72,10 @@ export function TopNavigation({ children }: TopNavigationProps) {
               </div>
 
               {/* 通知 */}
-              <button className="p-2 hover:bg-muted rounded-lg transition-colors relative">
-                <Bell className="h-5 w-5 text-foreground" />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-              </button>
+              <NotificationDropdown />
 
               {/* 帮助 */}
-              <button className="p-2 hover:bg-muted rounded-lg transition-colors">
-                <HelpCircle className="h-5 w-5 text-foreground" />
-              </button>
+              <HelpModal />
 
               {/* 主题切换 */}
               <ThemeToggle />

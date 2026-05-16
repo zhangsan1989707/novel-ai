@@ -73,6 +73,7 @@ model User {
   publicCharacters Character[]   @relation("CharacterCreator")
   quota         UserQuota?
   aiUsages      AIUsage[]
+  notifications Notification[]
 
   @@map("users")
 }
@@ -570,6 +571,47 @@ model BookSummary {
   updatedAt       DateTime        @updatedAt
 
   @@map("book_summaries")
+}
+
+// ============================================
+// 通知系统
+// ============================================
+
+enum NotificationType {
+  SYSTEM     // 系统通知
+  TASK       // 任务通知
+  QUOTA      // 配额提醒
+  ERROR      // 错误通知
+}
+
+enum NotificationPriority {
+  LOW
+  NORMAL
+  HIGH
+}
+
+model Notification {
+  id          Int                 @id @default(autoincrement())
+  userId      Int
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type        NotificationType    @default(SYSTEM)
+  priority    NotificationPriority @default(NORMAL)
+  title       String              // 通知标题
+  content     String              @db.Text  // 通知内容
+  link        String?             // 点击跳转链接
+  isRead      Boolean             @default(false)
+
+  // 关联信息（可选）
+  projectId   Int?
+  metadata    Json?               @default("{}")
+
+  createdAt   DateTime            @default(now())
+  readAt      DateTime?
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
+  @@map("notifications")
 }
 
 // ============================================
