@@ -6,6 +6,7 @@ import { Button, Input, Textarea, Select, Card, CardContent, CardHeader, CardTit
 import { ProjectForm, ProjectFormData, genreOptions, writingStyleOptions, ChapterListGenerator, BatchGenerator } from '@/components/project'
 import { BatchProgress } from '@/components/ai/BatchProgress'
 import { PlotAnalyzer, BookAnalysisPanel, ContinuationPanel, ContinuationResults } from '@/components/ai'
+import { OutlineGenerator } from '@/components/ai/OutlineGenerator'
 import { ArrowLeft, Pencil, Trash2, BookOpen, Clock, Target, Users, Layers, Plus, ListChecks, Sparkles, FileText, RefreshCw } from 'lucide-react'
 import type { ProjectStatus } from '@/types'
 
@@ -91,6 +92,7 @@ export default function ProjectDetailPage() {
   const [submitting, setSubmitting] = useState(false)
   const [activeTab, setActiveTab] = useState<'chapters' | 'outline' | 'settings'>('chapters')
   const [showGenerator, setShowGenerator] = useState(false)
+  const [showOutlineGenerator, setShowOutlineGenerator] = useState(false)
 
   const fetchProject = useCallback(async () => {
     try {
@@ -340,7 +342,7 @@ export default function ProjectDetailPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setShowGenerator(true)}
+                onClick={() => setShowOutlineGenerator(true)}
                 className="gap-1.5"
               >
                 <FileText className="h-4 w-4" />
@@ -606,6 +608,29 @@ export default function ProjectDetailPage() {
           )}
 
           {/* 大纲生成器 */}
+      {showOutlineGenerator && project.projectMode === 'CREATE' && (
+        <Card className="mb-6">
+          <CardContent className="p-6">
+            <OutlineGenerator
+              projectTitle={project.title}
+              genre={project.genre || undefined}
+              writingStyle={project.writingStyle || undefined}
+              worldSetting={project.worldSetting || undefined}
+              protagonistProfile={project.protagonistProfile || undefined}
+              protagonistGoal={project.protagonistGoal || undefined}
+              antagonistSetting={project.antagonistSetting || undefined}
+              endingPlan={project.endingPlan || undefined}
+              onApply={(outline) => {
+                // 可以在这里添加应用到项目设定的逻辑
+                console.log('生成的大纲:', outline)
+                setShowOutlineGenerator(false)
+              }}
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 目录生成器 */}
       {showGenerator && project.projectMode === 'CREATE' && (
         <ChapterListGenerator
           projectId={projectId}
