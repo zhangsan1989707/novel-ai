@@ -3,6 +3,7 @@
  */
 import { CHAPTER_WORD_COUNT, CHAPTER_PACING, AI_WRITE_FORBIDDEN } from '../shared/constants'
 import type { ChapterOutline } from '@/lib/engine/types'
+import { getKnowledgeForGenre, getAntiAiPromptFragment } from '@/lib/knowledge'
 
 interface WriterPromptInput {
   projectTitle: string
@@ -93,6 +94,45 @@ export function buildWriterPrompt(input: WriterPromptInput): string {
   parts.push(`- 限制"内心OS"数量，每章不超过3次`)
   parts.push(`- 允许轻微的视角漂移作为插叙使用`)
 
+  const genre = input.genre || ''
+  const knowledge = genre ? getKnowledgeForGenre(genre) : null
+
+  if (knowledge) {
+    if (knowledge.hooks.chapterStart.length > 0 || knowledge.hooks.chapterEnd.length > 0) {
+      parts.push(`\n### 钩子技法参考`)
+      if (knowledge.hooks.chapterStart.length > 0) {
+        parts.push('章首钩子：')
+        for (const h of knowledge.hooks.chapterStart) {
+          parts.push(`- ${h.name}：${h.description}（例：${h.example}）`)
+        }
+      }
+      if (knowledge.hooks.chapterEnd.length > 0) {
+        parts.push('章尾钩子：')
+        for (const h of knowledge.hooks.chapterEnd) {
+          parts.push(`- ${h.name}：${h.description}（例：${h.example}）`)
+        }
+      }
+      if (knowledge.hooks.paragraph.length > 0) {
+        parts.push('段落钩子：')
+        for (const h of knowledge.hooks.paragraph) {
+          parts.push(`- ${h.name}：${h.description}（例：${h.example}）`)
+        }
+      }
+    }
+
+    if (knowledge.styles.length > 0) {
+      parts.push(`\n### 风格技法参考`)
+      for (const s of knowledge.styles) {
+        parts.push(`- ${s.name}：${s.description}`)
+        parts.push(`  规则：${s.rules.join('；')}`)
+        if (s.examples.length > 0) {
+          parts.push(`  ✓ ${s.examples[0].good}`)
+          parts.push(`  ✗ ${s.examples[0].bad}`)
+        }
+      }
+    }
+  }
+
   parts.push(`\n### 禁止事项（去AI味）`)
   parts.push(`- 禁止排比句堆砌（如"他感到愤怒、悲伤、迷茫"）`)
   parts.push(`- 禁止"宛如""仿佛""犹如"等过度比喻`)
@@ -103,6 +143,12 @@ export function buildWriterPrompt(input: WriterPromptInput): string {
   parts.push(`- 禁止大段连续的环境描写（超过3段）`)
   parts.push(`- 禁止总结性陈述（不要写"这一战，他明白了一个道理..."）`)
 
+  const antiAiExtra = getAntiAiPromptFragment()
+  if (antiAiExtra) {
+    parts.push(`\n### 去AI味扩展规则`)
+    parts.push(antiAiExtra)
+  }
+
   parts.push(`\n### 鼓励事项（增强人味）`)
   parts.push(`- 口语化表达，允许不完整的句子`)
   parts.push(`- 人物内心独白要有语气词（"妈的""这也太离谱了吧"）`)
@@ -112,6 +158,26 @@ export function buildWriterPrompt(input: WriterPromptInput): string {
   parts.push(`- 情绪通过行为细节体现，用身体反应代替心理描写`)
   parts.push(`- 允许轻微的作者吐槽式插叙`)
   parts.push(`- 关键时刻可以使用"留白"艺术`)
+
+  if (knowledge) {
+    if (knowledge.formula) {
+      parts.push(`\n### 题材公式`)
+      parts.push(`- 公式名称：${knowledge.formula.name}`)
+      parts.push(`- 结构：${knowledge.formula.structure}`)
+      parts.push(`- 核心要素：${knowledge.formula.keyElements.join('、')}`)
+      parts.push(`- 节奏指南：${knowledge.formula.pacingGuide}`)
+      parts.push(`- 读者期待：${knowledge.formula.readerExpectations.join('、')}`)
+      parts.push(`- 常见陷阱（避免）：${knowledge.formula.commonPitfalls.join('、')}`)
+    }
+
+    if (knowledge.arcs.length > 0) {
+      parts.push(`\n### 情绪弧线参考`)
+      for (const arc of knowledge.arcs) {
+        const phaseDescs = arc.phases.map(p => `${p.name}(情绪值${p.emotion})`)
+        parts.push(`- ${arc.name}：${arc.description}（${phaseDescs.join(' → ')}）`)
+      }
+    }
+  }
 
   parts.push(`\n## 字数要求`)
   parts.push(`目标字数：${input.targetWordCount}字`)
