@@ -1,7 +1,7 @@
 /**
  * 写作 Agent Prompt - 生成章节正文
  */
-import { CHAPTER_WORD_COUNT, AI_WRITE_FORBIDDEN } from '../shared/constants'
+import { CHAPTER_WORD_COUNT, CHAPTER_PACING, AI_WRITE_FORBIDDEN } from '../shared/constants'
 import type { ChapterOutline } from '@/lib/engine/types'
 
 interface WriterPromptInput {
