@@ -2,7 +2,7 @@
 
 import { useRouter, usePathname } from 'next/navigation'
 import { Button } from '@/components/ui'
-import { BookOpen, Plus, Settings, DollarSign, HelpCircle, Bell, Search } from 'lucide-react'
+import { BookOpen, Settings, DollarSign, HelpCircle, Bell, Search } from 'lucide-react'
 
 interface TopNavigationProps {
   children: React.ReactNode
@@ -10,7 +10,6 @@ interface TopNavigationProps {
 
 const navItems = [
   { label: '我的小说', href: '/projects', icon: BookOpen },
-  { label: '创作小说', href: '/projects/new', icon: Plus },
   { label: 'AI 配置', href: '/settings', icon: Settings },
   { label: '成本管理', href: '/cost', icon: DollarSign },
 ]

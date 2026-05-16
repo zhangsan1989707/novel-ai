@@ -104,6 +104,10 @@ export async function GET(request: NextRequest) {
           total,
           totalPages: Math.ceil(total / pageSize),
         },
+        stats: {
+          totalProjects: total,
+          totalWordCount: projectsWithWordCount.reduce((sum, p) => sum + p.currentWordCount, 0),
+        },
       },
     })
   } catch (error) {

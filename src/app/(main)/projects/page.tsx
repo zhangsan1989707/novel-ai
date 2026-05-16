@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Button, Select, Input, Pagination, Modal, Card, CardContent, ProjectsEmptyState, toast } from '@/components/ui'
+import { Button, Input, Pagination, Modal, Card, CardContent, FilterChip, FilterChipGroup, EnhancedProjectsEmptyState, toast } from '@/components/ui'
 import { ProjectCard, genreOptions, AnalyzeWizard } from '@/components/project'
-import { Plus, Search, Sparkles } from 'lucide-react'
+import { Plus, Search, Sparkles, SlidersHorizontal } from 'lucide-react'
 import type { ProjectStatus } from '@/types'
 
 interface Project {
@@ -33,19 +33,22 @@ interface ProjectsResponse {
       total: number
       totalPages: number
     }
+    stats?: {
+      totalProjects: number
+      totalWordCount: number
+    }
   }
 }
 
-const statusOptions = [
-  { label: '全部状态', value: '' },
+const statusChips = [
+  { label: '全部', value: '' },
   { label: '草稿', value: 'DRAFT' },
-  { label: '写作中', value: 'WRITING' },
-  { label: '已完成', value: 'COMPLETED' },
-  { label: '已暂停', value: 'PAUSED' },
+  { label: '连载中', value: 'WRITING' },
+  { label: '已完结', value: 'COMPLETED' },
+  { label: '暂停', value: 'PAUSED' },
 ]
 
-const emptyGenreOption = { label: '全部类型', value: '' }
-const genreFilterOptions = [emptyGenreOption, ...genreOptions]
+const genreChips = genreOptions.map(opt => ({ label: opt.label, value: opt.value }))
 
 export default function ProjectsPage() {
   const router = useRouter()
@@ -54,10 +57,13 @@ export default function ProjectsPage() {
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [total, setTotal] = useState(0)
+  const [totalWordCount, setTotalWordCount] = useState(0)
+  const [aiCallCount] = useState(0)
 
   const [statusFilter, setStatusFilter] = useState('')
   const [genreFilter, setGenreFilter] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
+  const [showFilterPanel, setShowFilterPanel] = useState(false)
 
   const [showAnalyzeModal, setShowAnalyzeModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
@@ -82,6 +88,9 @@ export default function ProjectsPage() {
         setProjects(data.data.projects)
         setTotalPages(data.data.pagination.totalPages)
         setTotal(data.data.pagination.total)
+        if (data.data.stats) {
+          setTotalWordCount(data.data.stats.totalWordCount)
+        }
       }
     } catch (error) {
       console.error('获取项目列表失败:', error)
@@ -139,9 +148,10 @@ export default function ProjectsPage() {
       </div>
 
       {/* 筛选栏 */}
-      <div className="mb-6 flex flex-col gap-4">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-          <div className="relative flex-1 min-w-[200px] max-w-md">
+      <div className="mb-6 flex flex-col gap-3">
+        {/* 搜索 + 筛选按钮同行 */}
+        <div className="flex items-center gap-3">
+          <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <Input
               placeholder="搜索项目..."
@@ -153,29 +163,47 @@ export default function ProjectsPage() {
               className="pl-10 w-full"
             />
           </div>
+          <Button
+            variant={showFilterPanel ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setShowFilterPanel(!showFilterPanel)}
+            className="gap-1.5 shrink-0"
+          >
+            <SlidersHorizontal className="h-4 w-4" />
+            筛选
+          </Button>
         </div>
 
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-gray-500 shrink-0">筛选：</span>
-          <div className="flex flex-wrap items-center gap-3">
-            <Select
-              options={statusOptions}
-              value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value)
-                setPage(1)
-              }}
-            />
-            <Select
-              options={genreFilterOptions}
-              value={genreFilter}
-              onChange={(e) => {
-                setGenreFilter(e.target.value)
-                setPage(1)
-              }}
-            />
-          </div>
-        </div>
+        {/* 标签式筛选 - 状态 + 类型合并 */}
+        {(showFilterPanel || statusFilter || genreFilter) && (
+          <FilterChipGroup>
+            <div className="text-xs text-gray-500 dark:text-gray-400 self-center mr-1">状态：</div>
+            {statusChips.map((chip) => (
+              <FilterChip
+                key={chip.value}
+                label={chip.label}
+                active={statusFilter === chip.value}
+                onClick={() => {
+                  setStatusFilter(chip.value)
+                  setPage(1)
+                }}
+              />
+            ))}
+            <div className="w-px h-5 bg-gray-200 dark:bg-gray-700 mx-1" />
+            <div className="text-xs text-gray-500 dark:text-gray-400 self-center mr-1">类型：</div>
+            {genreChips.map((chip) => (
+              <FilterChip
+                key={chip.value}
+                label={chip.label}
+                active={genreFilter === chip.value}
+                onClick={() => {
+                  setGenreFilter(genreFilter === chip.value ? '' : chip.value)
+                  setPage(1)
+                }}
+              />
+            ))}
+          </FilterChipGroup>
+        )}
       </div>
 
       {/* 项目列表 */}
@@ -193,7 +221,15 @@ export default function ProjectsPage() {
           ))}
         </div>
       ) : projects.length === 0 ? (
-        <ProjectsEmptyState onCreate={() => router.push('/projects/new')} />
+        <EnhancedProjectsEmptyState
+          onCreate={() => router.push('/projects/new')}
+          onAnalyze={() => setShowAnalyzeModal(true)}
+          stats={{
+            projectCount: total,
+            totalWordCount,
+            aiCallCount,
+          }}
+        />
       ) : (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
