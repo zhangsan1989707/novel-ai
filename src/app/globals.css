@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Configure dark mode to use .dark class */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* ============================================
    Design System Tokens
    ============================================ */
@@ -89,41 +92,41 @@
    ============================================ */
 
 .dark {
-  /* Neutral - Dark Mode */
-  --color-background: #0a0a0a;
-  --color-foreground: #ededed;
-  --color-card: #18181b;
-  --color-card-foreground: #ededed;
-  --color-border: #27272a;
-  --color-input: #27272a;
-  --color-muted: #27272a;
+  /* Neutral - Dark Mode (舒适的中性灰，避免纯黑) */
+  --color-background: #1a1a2e;
+  --color-foreground: #e4e4e7;
+  --color-card: #252542;
+  --color-card-foreground: #e4e4e7;
+  --color-border: #3a3a5c;
+  --color-input: #3a3a5c;
+  --color-muted: #3a3a5c;
   --color-muted-foreground: #a1a1aa;
 
   /* Shadows - Dark Mode */
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.3);
-  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -2px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.4);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
 }
 
 /* Also support system preference by default */
 @media (prefers-color-scheme: dark) {
   :root:not(.light) {
     /* Neutral - Dark Mode */
-    --color-background: #0a0a0a;
-    --color-foreground: #ededed;
-    --color-card: #18181b;
-    --color-card-foreground: #ededed;
-    --color-border: #27272a;
-    --color-input: #27272a;
-    --color-muted: #27272a;
+    --color-background: #1a1a2e;
+    --color-foreground: #e4e4e7;
+    --color-card: #252542;
+    --color-card-foreground: #e4e4e7;
+    --color-border: #3a3a5c;
+    --color-input: #3a3a5c;
+    --color-muted: #3a3a5c;
     --color-muted-foreground: #a1a1aa;
 
     /* Shadows - Dark Mode */
-    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
-    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
-    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.3);
-    --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.4);
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -2px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.4);
+    --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
   }
 }
 

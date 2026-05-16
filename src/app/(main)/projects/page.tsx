@@ -132,8 +132,8 @@ export default function ProjectsPage() {
       {/* 页面标题和操作 */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">我的小说</h1>
-          <p className="text-sm text-gray-500">{total} 个项目</p>
+          <h1 className="text-2xl font-bold text-foreground">我的小说</h1>
+          <p className="text-sm text-muted-foreground">{total} 个项目</p>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => setShowAnalyzeModal(true)}>
@@ -152,7 +152,7 @@ export default function ProjectsPage() {
         {/* 搜索 + 筛选按钮同行 */}
         <div className="flex items-center gap-3">
           <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="搜索项目..."
               value={searchQuery}
@@ -177,7 +177,7 @@ export default function ProjectsPage() {
         {/* 标签式筛选 - 状态 + 类型合并 */}
         {(showFilterPanel || statusFilter || genreFilter) && (
           <FilterChipGroup>
-            <div className="text-xs text-gray-500 dark:text-gray-400 self-center mr-1">状态：</div>
+            <div className="text-xs text-muted-foreground self-center mr-1">状态：</div>
             {statusChips.map((chip) => (
               <FilterChip
                 key={chip.value}
@@ -189,8 +189,8 @@ export default function ProjectsPage() {
                 }}
               />
             ))}
-            <div className="w-px h-5 bg-gray-200 dark:bg-gray-700 mx-1" />
-            <div className="text-xs text-gray-500 dark:text-gray-400 self-center mr-1">类型：</div>
+            <div className="w-px h-5 bg-border mx-1" />
+            <div className="text-xs text-muted-foreground self-center mr-1">类型：</div>
             {genreChips.map((chip) => (
               <FilterChip
                 key={chip.value}
@@ -211,11 +211,11 @@ export default function ProjectsPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {[...Array(8)].map((_, i) => (
             <Card key={i} className="animate-pulse">
-              <div className="h-32 bg-gray-200 dark:bg-gray-700" />
+              <div className="h-32 bg-muted" />
               <CardContent className="p-4 space-y-3">
-                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4" />
-                <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/2" />
-                <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded" />
+                <div className="h-4 bg-muted rounded w-3/4" />
+                <div className="h-3 bg-muted rounded w-1/2" />
+                <div className="h-2 bg-muted rounded" />
               </CardContent>
             </Card>
           ))}

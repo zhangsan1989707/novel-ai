@@ -69,7 +69,7 @@ const Modal: React.FC<ModalProps> = ({ open, onClose, title, description, childr
       <div
         ref={modalRef}
         className={cn(
-          'relative z-50 w-full max-w-lg max-h-[85vh] rounded-xl bg-white dark:bg-gray-800 p-6 shadow-xl overflow-y-auto',
+          'relative z-50 w-full max-w-lg max-h-[85vh] rounded-xl bg-card text-card-foreground p-6 shadow-xl overflow-y-auto',
           'animate-zoom-in-95',
           className
         )}

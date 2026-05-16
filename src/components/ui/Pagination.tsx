@@ -31,7 +31,7 @@ const Pagination: React.FC<PaginationProps> = ({ currentPage, totalPages, onPage
       <button
         onClick={() => onPageChange(currentPage - 1)}
         disabled={currentPage === 1}
-        className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:border-gray-500 transition-colors"
+        className="flex h-9 w-9 items-center justify-center rounded-lg border border-border text-muted-foreground hover:bg-muted hover:border-muted-foreground disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
         aria-label="Previous page"
       >
         <ChevronLeft className="h-4 w-4" />
@@ -39,7 +39,7 @@ const Pagination: React.FC<PaginationProps> = ({ currentPage, totalPages, onPage
 
       {pages.map((page, index) =>
         page === 'ellipsis' ? (
-          <span key={`ellipsis-${index}`} className="flex h-9 w-9 items-center justify-center text-gray-400">
+          <span key={`ellipsis-${index}`} className="flex h-9 w-9 items-center justify-center text-muted-foreground">
             ...
           </span>
         ) : (
@@ -49,8 +49,8 @@ const Pagination: React.FC<PaginationProps> = ({ currentPage, totalPages, onPage
             className={cn(
               'flex h-9 min-w-[2.25rem] items-center justify-center rounded-lg border text-sm font-medium transition-colors',
               currentPage === page
-                ? 'border-blue-500 bg-blue-500 text-white'
-                : 'border-gray-300 text-gray-600 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-800'
+                ? 'border-primary bg-primary text-primary-foreground'
+                : 'border-border text-muted-foreground hover:bg-muted hover:border-muted-foreground'
             )}
             aria-current={currentPage === page ? 'page' : undefined}
           >
@@ -62,7 +62,7 @@ const Pagination: React.FC<PaginationProps> = ({ currentPage, totalPages, onPage
       <button
         onClick={() => onPageChange(currentPage + 1)}
         disabled={currentPage === totalPages}
-        className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:border-gray-500 transition-colors"
+        className="flex h-9 w-9 items-center justify-center rounded-lg border border-border text-muted-foreground hover:bg-muted hover:border-muted-foreground disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
         aria-label="Next page"
       >
         <ChevronRight className="h-4 w-4" />
