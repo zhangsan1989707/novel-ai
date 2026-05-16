@@ -1,7 +1,6 @@
 /**
  * 写作 Agent - 生成章节正文
  */
-import { prisma } from '@/lib/prisma'
 import { AIService } from '@/lib/ai/service'
 import { buildWriterPrompt } from './prompts'
 import type { ChapterOutline, CharacterProfile, AgentContext } from '../engine/types'

@@ -1,7 +1,6 @@
 /**
  * 润色 Agent - 文风优化
  */
-import { prisma } from '@/lib/prisma'
 import { AIService } from '@/lib/ai/service'
 import { buildPolisherPrompt } from './prompts'
 

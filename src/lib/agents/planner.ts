@@ -15,8 +15,7 @@ interface PlannerInput extends AgentContext {
 }
 
 export async function plannerAgent(
-  input: PlannerInput,
-  onChunk?: (text: string) => void
+  input: PlannerInput
 ): Promise<{ outline: ChapterOutline; tokens?: number }> {
   const { projectId, chapterNo, ...context } = input
 

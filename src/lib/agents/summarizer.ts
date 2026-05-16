@@ -1,7 +1,6 @@
 /**
  * 摘要 Agent - 生成章节摘要
  */
-import { prisma } from '@/lib/prisma'
 import { AIService } from '@/lib/ai/service'
 import { buildSummarizerPrompt } from './prompts'
 import type { ChapterSummaryData } from '../engine/types'
