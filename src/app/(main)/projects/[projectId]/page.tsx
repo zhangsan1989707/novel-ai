@@ -621,10 +621,10 @@ export default function ProjectDetailPage() {
               antagonistSetting={project.antagonistSetting || undefined}
               endingPlan={project.endingPlan || undefined}
               onApply={(outline) => {
-                // 可以在这里添加应用到项目设定的逻辑
                 console.log('生成的大纲:', outline)
                 setShowOutlineGenerator(false)
               }}
+              onClose={() => setShowOutlineGenerator(false)}
             />
           </CardContent>
         </Card>
