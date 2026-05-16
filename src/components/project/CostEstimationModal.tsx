@@ -122,13 +122,21 @@ export function CostEstimationModal({
                     <span className="font-medium">{targetWordCount} 字/章</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">预估输入 tokens</span>
-                    <span className="font-medium">{estimation.estimatedInputTokens.toLocaleString()}</span>
+                    <span className="text-sm text-gray-600 dark:text-gray-400">使用模型</span>
+                    <span className="font-medium">{estimation.modelId}</span>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">预估输出 tokens</span>
-                    <span className="font-medium">{estimation.estimatedOutputTokens.toLocaleString()}</span>
+                  
+                  <div className="border-t border-dashed pt-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600 dark:text-gray-400">预估输入 tokens</span>
+                      <span className="font-medium">{estimation.estimatedInputTokens.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600 dark:text-gray-400">预估输出 tokens</span>
+                      <span className="font-medium">{estimation.estimatedOutputTokens.toLocaleString()}</span>
+                    </div>
                   </div>
+                  
                   <div className="border-t border-dashed pt-3">
                     <div className="flex justify-between items-center">
                       <span className="text-base font-semibold text-gray-700 dark:text-gray-300">预估总费用</span>
@@ -136,6 +144,9 @@ export function CostEstimationModal({
                         ¥{estimation.estimatedCost.toFixed(4)}
                       </span>
                     </div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      包含 5 个 Agent 调用：策划 → 写作 → 润色 → 校验 → 摘要
+                    </p>
                   </div>
                   
                   {estimation.willExceedQuota ? (
@@ -143,7 +154,7 @@ export function CostEstimationModal({
                       <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
                       <div>
                         <p className="font-medium">配额警告</p>
-                        <p className="text-sm">本次生成可能会超出您的月度配额。</p>
+                        <p className="text-sm">本次生成可能会超出您的月度配额。已使用 ¥{estimation.quotaUsed?.toFixed(2) || '0.00'} / 剩余 ¥{estimation.quotaRemaining?.toFixed(2) || '50.00'}</p>
                       </div>
                     </div>
                   ) : (
@@ -151,7 +162,7 @@ export function CostEstimationModal({
                       <CheckCircle2 className="h-5 w-5 flex-shrink-0 mt-0.5" />
                       <div>
                         <p className="font-medium">配额充足</p>
-                        <p className="text-sm">本次生成在配额范围内，放心使用。</p>
+                        <p className="text-sm">已使用 ¥{estimation.quotaUsed?.toFixed(2) || '0.00'} / 剩余 ¥{estimation.quotaRemaining?.toFixed(2) || '50.00'}</p>
                       </div>
                     </div>
                   )}
@@ -160,7 +171,7 @@ export function CostEstimationModal({
             </Card>
             
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              注：以上预估为基于历史数据的粗略估算，实际成本可能有所不同。
+              注：以上预估为基于 Agent 流水线的估算，实际成本可能因内容复杂度有所不同。价格以百万 tokens 为单位（输入/输出分别计费）。
             </p>
           </>
         ) : null}

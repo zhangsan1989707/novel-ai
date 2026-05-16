@@ -11,6 +11,8 @@ const DEFAULT_PRICINGS: {
   outputPrice: number
 }[] = [
   { vendor: AIVendor.DEEPSEEK, modelId: 'deepseek-chat', inputPrice: 1.0, outputPrice: 2.0 },
+  { vendor: AIVendor.DEEPSEEK, modelId: 'deepseek-v4-flash', inputPrice: 1.0, outputPrice: 2.0 },
+  { vendor: AIVendor.DEEPSEEK, modelId: 'deepseek-v4-pro', inputPrice: 3.0, outputPrice: 6.0 }, // 2.5 折优惠价
   { vendor: AIVendor.OPENAI, modelId: 'gpt-4o', inputPrice: 5.0, outputPrice: 15.0 },
   { vendor: AIVendor.OPENAI, modelId: 'gpt-4o-mini', inputPrice: 0.15, outputPrice: 0.6 },
   { vendor: AIVendor.ANTHROPIC, modelId: 'claude-3-5-sonnet-20241022', inputPrice: 3.0, outputPrice: 15.0 },
