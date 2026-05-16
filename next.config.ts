@@ -5,6 +5,14 @@ const nextConfig: NextConfig = {
   experimental: {
     serverComponentsExternalPackages: ['@prisma/client', 'pino'],
   },
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'trae-api-cn.mchost.guru',
+      },
+    ],
+  },
 };
 
 export default nextConfig;
