@@ -49,8 +49,8 @@ interface Pricing {
   id: number
   vendor: AIVendor
   modelId: string
-  inputPrice: number
-  outputPrice: number
+  inputPrice: number | string
+  outputPrice: number | string
   currency: string
 }
 
@@ -353,10 +353,10 @@ export default function CostPage() {
                         </div>
                         <div className="text-right text-sm">
                           <p>
-                            输入: ¥{pricing.inputPrice.toFixed(2)}/M tokens
+                            输入: ¥{Number(pricing.inputPrice).toFixed(2)}/M tokens
                           </p>
                           <p className="text-gray-500">
-                            输出: ¥{pricing.outputPrice.toFixed(2)}/M tokens
+                            输出: ¥{Number(pricing.outputPrice).toFixed(2)}/M tokens
                           </p>
                         </div>
                       </div>

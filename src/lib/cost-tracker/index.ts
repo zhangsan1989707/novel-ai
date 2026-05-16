@@ -174,7 +174,18 @@ export async function getUserQuota(userId: number) {
   })
 
   if (!quota) {
-    // 创建默认配额：每月 50 元，80% 预警
+    const user = await prisma.user.findUnique({ where: { id: userId } })
+    if (!user) {
+      await prisma.user.create({
+        data: {
+          id: userId,
+          name: 'Default User',
+          email: 'default@novel-ai.local',
+          password: 'default-not-used',
+        },
+      })
+    }
+
     quota = await prisma.userQuota.create({
       data: {
         userId,
