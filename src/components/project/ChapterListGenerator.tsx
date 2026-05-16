@@ -21,6 +21,7 @@ interface ChapterListGeneratorProps {
   antagonistSetting?: string
   endingPlan?: string
   aiModelId?: number
+  chapters?: ChapterItem[]
   onApply: (chapters: ChapterItem[]) => void
 }
 
@@ -61,6 +62,7 @@ export function ChapterListGenerator({
   antagonistSetting,
   endingPlan,
   aiModelId,
+  chapters: externalChapters = [],
   onApply,
 }: ChapterListGeneratorProps) {
   const [isOpen, setIsOpen] = useState(false)
@@ -266,7 +268,7 @@ export function ChapterListGenerator({
 
               {/* 生成按钮 */}
               <div className="flex gap-2 shrink-0">
-                {chapters.length > 0 && (
+                {externalChapters.length > 0 && (
                   <Button
                     variant="outline"
                     onClick={() => setChapters([])}
@@ -282,7 +284,7 @@ export function ChapterListGenerator({
                   disabled={generating}
                 >
                   <Sparkles className="h-4 w-4 mr-2" />
-                  {generating ? '生成中...' : chapters.length > 0 ? '继续生成' : '生成目录'}
+                  {generating ? '生成中...' : externalChapters.length > 0 ? '继续生成' : '生成目录'}
                 </Button>
               </div>
             </div>

@@ -519,6 +519,7 @@ export default function ProjectDetailPage() {
                           antagonistSetting={project.antagonistSetting || undefined}
                           endingPlan={project.endingPlan || undefined}
                           aiModelId={project.aiModelId || undefined}
+                          chapters={project.chapters}
                           onApply={handleApplyChapters}
                         />
                         <BatchGenerator
