@@ -20,6 +20,8 @@ interface ChapterListGeneratorProps {
   protagonistGoal?: string
   antagonistSetting?: string
   endingPlan?: string
+  outline?: string
+  outlineStages?: any
   aiModelId?: number
   chapters?: ChapterItem[]
   onApply: (chapters: ChapterItem[]) => void
@@ -63,6 +65,8 @@ export function ChapterListGenerator({
   protagonistGoal,
   antagonistSetting,
   endingPlan,
+  outline,
+  outlineStages,
   aiModelId,
   chapters: externalChapters = [],
   onApply,
@@ -88,6 +92,7 @@ export function ChapterListGenerator({
 
     try {
       const requestBody = {
+        projectId,
         projectTitle,
         genre,
         writingStyle,
@@ -96,6 +101,8 @@ export function ChapterListGenerator({
         protagonistGoal,
         antagonistSetting,
         endingPlan,
+        outline,
+        outlineStages,
         totalChapters,
         titleStyle,
         aiModelId,

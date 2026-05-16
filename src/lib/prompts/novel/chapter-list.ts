@@ -14,6 +14,8 @@ interface ChapterListGenerationInput {
   endingPlan?: string
   totalChapters: number
   titleStyle: 'webnovel' | 'traditional' | 'poetry'
+  outline?: string
+  outlineStages?: Record<string, any>
 }
 
 /**
@@ -52,6 +54,30 @@ export function buildChapterListPrompt(input: ChapterListGenerationInput): strin
   if (input.endingPlan) {
     parts.push(`\n【设定 - 结局规划】`)
     parts.push(input.endingPlan)
+  }
+
+  // 【大纲参考】- 如果有大纲，优先参考
+  if (input.outlineStages && Object.keys(input.outlineStages).length > 0) {
+    parts.push(`\n【大纲参考】`)
+    parts.push(`请严格按照以下大纲的阶段规划来生成章节列表：`)
+    
+    // 处理 outlineStages
+    if (input.outlineStages.stages && Array.isArray(input.outlineStages.stages)) {
+      // 标准格式，遍历阶段
+      for (const stage of input.outlineStages.stages) {
+        parts.push(`\n【${stage.name}】`)
+        parts.push(`阶段概述：${stage.description}`)
+        parts.push(`核心事件：${stage.coreEvents?.join('、')}`)
+        parts.push(`章节规划：${stage.chapterPlan}`)
+      }
+    } else {
+      // 其他格式，直接输出 JSON
+      parts.push(JSON.stringify(input.outlineStages, null, 2))
+    }
+  } else if (input.outline) {
+    // 如果只有文本大纲
+    parts.push(`\n【大纲参考】`)
+    parts.push(input.outline)
   }
 
   // 【任务 - 重要：严格控制章节数量】

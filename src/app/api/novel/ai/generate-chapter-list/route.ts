@@ -10,6 +10,7 @@ const vendorEnum = z.enum(['OPENAI', 'ANTHROPIC', 'ALIBABA', 'DEEPSEEK', 'MINIMA
 
 const generateChapterListSchema = z.object({
   projectTitle: z.string().min(1, '请输入小说标题'),
+  projectId: z.number().int().positive().optional(),
   genre: z.string().optional(),
   writingStyle: z.string().optional(),
   worldSetting: z.string().optional(),
@@ -17,6 +18,8 @@ const generateChapterListSchema = z.object({
   protagonistGoal: z.string().optional(),
   antagonistSetting: z.string().optional(),
   endingPlan: z.string().optional(),
+  outline: z.string().optional(),
+  outlineStages: z.any().optional(),
   totalChapters: z.number().int().positive().max(500).default(50),
   titleStyle: z.enum(['webnovel', 'traditional', 'poetry']).default('webnovel'),
   aiModelId: z.number().int().positive().optional(),
@@ -29,6 +32,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const {
       projectTitle,
+      projectId,
       genre,
       writingStyle,
       worldSetting,
@@ -36,6 +40,8 @@ export async function POST(request: NextRequest) {
       protagonistGoal,
       antagonistSetting,
       endingPlan,
+      outline,
+      outlineStages,
       totalChapters,
       titleStyle,
       aiModelId,
@@ -43,7 +49,24 @@ export async function POST(request: NextRequest) {
       temperature,
     } = generateChapterListSchema.parse(body)
 
-    const prompt = buildChapterListPrompt(
+    // 如果有项目ID，从数据库获取大纲
+    let dbOutline = outline
+    let dbOutlineStages = outlineStages
+    
+    if (projectId) {
+      const project = await prisma.novelProject.findUnique({
+        where: { id: projectId },
+        select: { outline: true, outlineStages: true },
+      })
+      
+      if (project) {
+        // 如果传入的没有大纲，使用数据库中的
+        if (!dbOutline) dbOutline = project.outline
+        if (!dbOutlineStages) dbOutlineStages = project.outlineStages
+      }
+    }
+
+    const prompt = buildChapterListPrompt({
       projectTitle,
       genre,
       writingStyle,
@@ -53,8 +76,10 @@ export async function POST(request: NextRequest) {
       antagonistSetting,
       endingPlan,
       totalChapters,
-      titleStyle
-    )
+      titleStyle,
+      outline: dbOutline,
+      outlineStages: dbOutlineStages,
+    })
 
     let provider
     let configError = ''

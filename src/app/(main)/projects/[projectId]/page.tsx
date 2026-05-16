@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { Button, Input, Textarea, Select, Card, CardContent, CardHeader, CardTitle, Badge, Progress, Modal, ChaptersEmptyState, toast } from '@/components/ui'
-import { ProjectForm, ProjectFormData, genreOptions, writingStyleOptions, ChapterListGenerator, BatchGenerator, ExportMenu } from '@/components/project'
+import { Button, Input, Textarea, Select, Card, CardContent, CardHeader, CardTitle, Badge, Progress, Modal, ChaptersEmptyState, toast, MoreActionsMenu, BatchChapterActionBar } from '@/components/ui'
+import { ProjectForm, ProjectFormData, genreOptions, writingStyleOptions, ChapterListGenerator, BatchGenerator } from '@/components/project'
 import { BatchProgress } from '@/components/ai/BatchProgress'
 import { PlotAnalyzer, BookAnalysisPanel, ContinuationPanel, ContinuationResults } from '@/components/ai'
 import { ArrowLeft, Pencil, Trash2, BookOpen, Clock, Target, Users, Layers, Plus, ListChecks, Sparkles } from 'lucide-react'
@@ -332,15 +332,38 @@ export default function ProjectDetailPage() {
                   </Button>
                 </>
               )}
-              <ExportMenu project={project} />
-              <Button variant="outline" size="sm" onClick={() => setShowEditModal(true)}>
-                <Pencil className="h-4 w-4 mr-1.5" />
-                编辑
-              </Button>
-              <Button variant="danger" size="sm" onClick={() => setShowDeleteModal(true)}>
-                <Trash2 className="h-4 w-4 mr-1.5" />
-                删除
-              </Button>
+              <MoreActionsMenu
+                onEdit={() => setShowEditModal(true)}
+                onDelete={() => setShowDeleteModal(true)}
+                onExport={() => {
+                  // 导出默认行为：TXT
+                  const handleExport = async () => {
+                    try {
+                      const res = await fetch(`/api/novel/projects/${projectId}/export-data`)
+                      const data = await res.json()
+                      if (data.success) {
+                        let content = `${project.title}\n\n${'='.repeat(40)}\n\n`
+                        for (const ch of data.data.chapters) {
+                          content += `第${ch.chapterNumber}章 ${ch.title}\n\n${ch.content || ''}\n\n`
+                        }
+                        const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
+                        const url = URL.createObjectURL(blob)
+                        const a = document.createElement('a')
+                        a.href = url
+                        a.download = `${project.title}.txt`
+                        document.body.appendChild(a)
+                        a.click()
+                        document.body.removeChild(a)
+                        URL.revokeObjectURL(url)
+                        toast.success('导出成功')
+                      }
+                    } catch {
+                      toast.error('导出失败')
+                    }
+                  }
+                  handleExport()
+                }}
+              />
             </div>
           </div>
         </div>
@@ -479,6 +502,15 @@ export default function ProjectDetailPage() {
                             className="w-4 h-4"
                           />
                           <span className="text-sm text-gray-500">已选 {selectedChapterIds.length} 章</span>
+                          <button
+                            onClick={() => {
+                              setIsSelectMode(false)
+                              setSelectedChapterIds([])
+                            }}
+                            className="text-sm text-muted-foreground hover:text-foreground"
+                          >
+                            取消
+                          </button>
                         </>
                       )}
                       {!isSelectMode && (
@@ -488,28 +520,9 @@ export default function ProjectDetailPage() {
                         </CardTitle>
                       )}
                     </div>
-                  <div className="flex items-center gap-2">
-                    {isSelectMode ? (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {!isSelectMode && (
                       <>
-                        <Button
-                          variant="danger"
-                          size="sm"
-                          disabled={selectedChapterIds.length === 0}
-                          onClick={handleBatchDeleteChapters}
-                          loading={submitting}
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          删除 ({selectedChapterIds.length})
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={() => {
-                          setIsSelectMode(false)
-                          setSelectedChapterIds([])
-                        }}>
-                          取消
-                        </Button>
-                      </>
-                    ) : (
-                      <div className="flex items-center gap-2 flex-wrap">
                         <Button
                           variant="outline"
                           size="sm"
@@ -884,6 +897,20 @@ export default function ProjectDetailPage() {
           onCancel={() => setShowContinuationModal(false)}
         />
       </Modal>
+
+      {/* 浮动批量操作栏 */}
+      <BatchChapterActionBar
+        selectedCount={selectedChapterIds.length}
+        onClear={() => {
+          setIsSelectMode(false)
+          setSelectedChapterIds([])
+        }}
+        onGenerate={() => {
+          setBatchOptions({ chapterIds: selectedChapterIds, useContext: true, contextChapterCount: 3, temperature: 0.7, targetWordCount: 3000 })
+          setBatchProgressOpen(true)
+        }}
+        onDelete={handleBatchDeleteChapters}
+      />
     </div>
   )
 }
