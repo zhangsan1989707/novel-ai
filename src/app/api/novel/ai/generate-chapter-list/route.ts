@@ -88,6 +88,7 @@ export async function POST(request: NextRequest) {
     const result = await provider.generate(prompt, { temperature })
 
     let chapterList = null
+    let parseError = null
     try {
       const jsonMatch = result.content.match(/\{[\s\S]*\}/)
       if (jsonMatch) {
@@ -95,9 +96,29 @@ export async function POST(request: NextRequest) {
         const cleaned = jsonMatch[0]
           .replace(/,\s*([\]}])/g, '$1')
         chapterList = JSON.parse(cleaned)
+
+        // 验证章节数量是否与请求的一致
+        if (chapterList?.chapters && Array.isArray(chapterList.chapters)) {
+          const generatedCount = chapterList.chapters.length
+          if (generatedCount !== totalChapters) {
+            console.warn(
+              `[generate-chapter-list] 警告：请求 ${totalChapters} 章，AI 返回 ${generatedCount} 章，将自动截取/补足`
+            )
+            // 如果 AI 返回的章节数量不对，截取或记录
+            if (generatedCount > totalChapters) {
+              // 截取多余的章节
+              chapterList.chapters = chapterList.chapters.slice(0, totalChapters)
+            }
+            // 如果少于要求，标记为解析问题
+            if (generatedCount < totalChapters) {
+              parseError = `AI 只生成了 ${generatedCount} 章，少于要求的 ${totalChapters} 章`
+            }
+          }
+        }
       }
-    } catch {
-      // 解析失败
+    } catch (e) {
+      parseError = `JSON 解析失败: ${e instanceof Error ? e.message : String(e)}`
+      chapterList = null
     }
 
     return NextResponse.json({
@@ -107,6 +128,7 @@ export async function POST(request: NextRequest) {
         chapterList,
         usage: result.usage,
       },
+      warning: parseError || undefined,
     })
   } catch (error) {
     if (error instanceof z.ZodError) {

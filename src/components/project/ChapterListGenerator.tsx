@@ -113,6 +113,10 @@ export function ChapterListGenerator({
           }))
           return [...prev, ...appended]
         })
+        // 显示警告信息
+        if (data.warning) {
+          setError(`⚠️ ${data.warning}`)
+        }
       } else if (data.success && data.data.content) {
         const jsonMatch = data.data.content.match(/\{[\s\S]*\}/)
         if (jsonMatch) {

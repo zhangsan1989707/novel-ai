@@ -91,7 +91,9 @@ describe('Prompt Builders', () => {
       }
 
       const result = buildChapterListPrompt(input)
-      expect(result).toContain('共50章')
+      // 新提示词使用 "EXACTLY" 强调章节数量控制
+      expect(result).toContain('EXACTLY 50')
+      expect(result).toContain('50')
     })
   })
 

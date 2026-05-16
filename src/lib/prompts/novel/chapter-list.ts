@@ -54,9 +54,10 @@ export function buildChapterListPrompt(input: ChapterListGenerationInput): strin
     parts.push(input.endingPlan)
   }
 
-  // 【任务】
-  parts.push(`\n【任务】`)
-  parts.push(`请为这部小说生成一个完整的章节列表，共${input.totalChapters}章。`)
+  // 【任务 - 重要：严格控制章节数量】
+  parts.push(`\n【任务 - 重要】`)
+  parts.push(`⚠️ 你必须严格生成 EXACTLY ${input.totalChapters} 章，不多也不少！`)
+  parts.push(`如果生成超过 ${input.totalChapters} 章或少于 ${input.totalChapters} 章，都将导致任务失败。`)
 
   // 【网文章节要求】
   parts.push(`\n【网文章节要求】`)
@@ -75,27 +76,29 @@ export function buildChapterListPrompt(input: ChapterListGenerationInput): strin
   }
   parts.push(`\n【标题风格】${titleStyleGuide[input.titleStyle]}`)
 
-  // 【输出格式】
-  parts.push(`\n【输出格式】`)
-  parts.push(`请以 JSON 格式输出，字段说明：`)
-  parts.push(`- chapters: 章节数组`)
-  parts.push(`- chapters[].chapterNumber: number, 章节序号（1-${input.totalChapters}）`)
-  parts.push(`- chapters[].title: string, 章节标题`)
-  parts.push(`- chapters[].summary: string, 章节概要（50-100字，概括本章核心事件）`)
-  parts.push(`- chapters[].wordCount: number, 预估字数（2000-5000之间）`)
-  parts.push(`- chapters[].plotType: string, 情节类型（setup/develop/climax/resolution/transition）`)
-  parts.push(`\n示例输出：`)
-  parts.push(`{
-  "chapters": [
-    {
-      "chapterNumber": 1,
-      "title": "第1章 平凡少年的意外",
-      "summary": "即将毕业的大学生林凡在兼职途中意外撞见一场神秘事件...",
-      "wordCount": 3500,
-      "plotType": "setup"
-    }
-  ]
-}`)
+  // 【输出格式 - 必须严格遵守】
+  parts.push(`\n【输出格式 - 必须严格遵守】`)
+  parts.push(`⚠️ 重要：你必须输出一个包含 EXACTLY ${input.totalChapters} 个章节的 JSON 数组！`)
+  parts.push(`输出格式要求：`)
+  parts.push(`{`)
+  parts.push(`  "chapters": [`)
+  parts.push(`    {`)
+  parts.push(`      "chapterNumber": 1,`)
+  parts.push(`      "title": "...",`)
+  parts.push(`      "summary": "...",`)
+  parts.push(`      "wordCount": 3000,`)
+  parts.push(`      "plotType": "setup"`)
+  parts.push(`    }`)
+  parts.push(`    // ... 必须恰好 ${input.totalChapters} 个章节条目`)
+  parts.push(`  ]`)
+  parts.push(`}`)
+  parts.push(`字段说明：`)
+  parts.push(`- chapters: 必须恰好包含 ${input.totalChapters} 个元素`)
+  parts.push(`- chapters[].chapterNumber: 必须是从 1 到 ${input.totalChapters} 的连续整数`)
+  parts.push(`- chapters[].title: 章节标题`)
+  parts.push(`- chapters[].summary: 章节概要（50-100字）`)
+  parts.push(`- chapters[].wordCount: 预估字数（2000-5000之间）`)
+  parts.push(`- chapters[].plotType: 情节类型（setup/develop/climax/resolution/transition）`)
 
   return parts.join('\n')
 }
