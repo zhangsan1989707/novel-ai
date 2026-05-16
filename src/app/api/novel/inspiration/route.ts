@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
 
     let inspirations
     if (random) {
-      inspirations = getRandomInspirations(limit)
+      inspirations = getRandomInspirations(category || undefined, limit)
     } else {
       inspirations = getInspirationsByCategory(category || undefined, limit)
     }

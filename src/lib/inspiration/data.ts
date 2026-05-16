@@ -215,7 +215,17 @@ export function getInspirationsByCategory(category?: InspirationCategory, limit?
   return result
 }
 
-export function getRandomInspirations(count: number = 3): HotInspiration[] {
-  const shuffled = [...inspirations].sort(() => Math.random() - 0.5)
-  return shuffled.slice(0, count)
+export function getRandomInspirations(category?: InspirationCategory, count: number = 6): HotInspiration[] {
+  let pool = [...inspirations]
+  
+  if (category) {
+    pool = pool.filter(ins => ins.category === category)
+  }
+  
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[pool[i], pool[j]] = [pool[j], pool[i]]
+  }
+  
+  return pool.slice(0, count)
 }
