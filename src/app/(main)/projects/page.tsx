@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Button, Select, Input, Pagination, Modal, Card, CardContent } from '@/components/ui'
+import { Button, Select, Input, Pagination, Modal, Card, CardContent, ProjectsEmptyState, toast } from '@/components/ui'
 import { ProjectCard, genreOptions, AnalyzeWizard } from '@/components/project'
 import { Plus, Search, BookOpen, Sparkles, Settings } from 'lucide-react'
 import type { ProjectStatus } from '@/types'
@@ -45,6 +45,7 @@ const statusOptions = [
 ]
 
 const emptyGenreOption = { label: '全部类型', value: '' }
+const genreFilterOptions = [emptyGenreOption, ...genreOptions]
 
 export default function ProjectsPage() {
   const router = useRouter()
@@ -109,9 +110,13 @@ export default function ProjectsPage() {
         setShowDeleteModal(false)
         setDeleteProjectId(null)
         fetchProjects()
+        toast.success('项目已删除')
+      } else {
+        toast.error(result.error?.message || '删除失败')
       }
     } catch (error) {
       console.error('删除项目失败:', error)
+      toast.error('删除失败，请重试')
     } finally {
       setSubmitting(false)
     }
@@ -165,32 +170,22 @@ export default function ProjectsPage() {
           {/* 筛选条件 */}
           <div className="flex flex-wrap items-center gap-3">
             <span className="text-sm text-gray-500">筛选：</span>
-            <select
+            <Select
+              options={statusOptions}
               value={statusFilter}
               onChange={(e) => {
                 setStatusFilter(e.target.value)
                 setPage(1)
               }}
-              className="h-10 px-3 pr-8 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm appearance-none cursor-pointer hover:border-gray-400 dark:hover:border-gray-500 transition-colors"
-              style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236b7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center', backgroundSize: '16px' }}
-            >
-              {statusOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-            <select
+            />
+            <Select
+              options={genreFilterOptions}
               value={genreFilter}
               onChange={(e) => {
                 setGenreFilter(e.target.value)
                 setPage(1)
               }}
-              className="h-10 px-3 pr-8 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm appearance-none cursor-pointer hover:border-gray-400 dark:hover:border-gray-500 transition-colors"
-              style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236b7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center', backgroundSize: '16px' }}
-            >
-              {[emptyGenreOption, ...genreOptions].map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
+            />
           </div>
         </div>
 
@@ -209,13 +204,7 @@ export default function ProjectsPage() {
             ))}
           </div>
         ) : projects.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-gray-500 dark:text-gray-400 mb-4">还没有任何项目</p>
-            <Button onClick={() => router.push('/projects/new')}>
-              <Plus className="h-4 w-4 mr-2" />
-              创建第一个项目
-            </Button>
-          </div>
+          <ProjectsEmptyState onCreate={() => router.push('/projects/new')} />
         ) : (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">

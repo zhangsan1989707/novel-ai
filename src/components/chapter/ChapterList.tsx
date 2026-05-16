@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core'
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Button, Badge, Input, Modal } from '@/components/ui'
+import { Button, Badge, Input, Modal, ChaptersEmptyState } from '@/components/ui'
 import { GripVertical, Plus, Pencil, Trash2, Sparkles } from 'lucide-react'
 import type { ChapterStatus } from '@/types'
 
@@ -23,6 +23,7 @@ interface ChapterListProps {
   projectId: number
   chapters: Chapter[]
   onChaptersChange?: (chapters: Chapter[]) => void
+  onOpenGenerator?: () => void
 }
 
 const statusMap: Record<ChapterStatus, { label: string; variant: 'default' | 'primary' | 'secondary' | 'success' | 'warning' | 'danger' }> = {
@@ -114,7 +115,7 @@ function SortableItem({ id, chapter, onEdit, onDelete, onGenerate }: SortableIte
   )
 }
 
-export function ChapterList({ projectId, chapters: initialChapters, onChaptersChange }: ChapterListProps) {
+export function ChapterList({ projectId, chapters: initialChapters, onChaptersChange, onOpenGenerator }: ChapterListProps) {
   const router = useRouter()
   const [chapters, setChapters] = useState(initialChapters)
   const [showNewModal, setShowNewModal] = useState(false)
@@ -242,12 +243,10 @@ export function ChapterList({ projectId, chapters: initialChapters, onChaptersCh
       </div>
 
       {chapters.length === 0 ? (
-        <div className="text-center py-8 text-gray-500">
-          <p>还没有章节</p>
-          <Button variant="outline" className="mt-2" onClick={() => setShowNewModal(true)}>
-            创建第一章
-          </Button>
-        </div>
+        <ChaptersEmptyState
+          onCreate={() => setShowNewModal(true)}
+          onGenerate={onOpenGenerator || (() => {})}
+        />
       ) : (
         <DndContext
           sensors={sensors}

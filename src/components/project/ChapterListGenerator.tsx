@@ -23,6 +23,8 @@ interface ChapterListGeneratorProps {
   aiModelId?: number
   chapters?: ChapterItem[]
   onApply: (chapters: ChapterItem[]) => void
+  isExpanded?: boolean
+  onToggle?: (expanded: boolean) => void
 }
 
 type TitleStyle = 'webnovel' | 'traditional' | 'poetry'
@@ -64,8 +66,12 @@ export function ChapterListGenerator({
   aiModelId,
   chapters: externalChapters = [],
   onApply,
+  isExpanded,
+  onToggle,
 }: ChapterListGeneratorProps) {
-  const [isOpen, setIsOpen] = useState(false)
+  const [internalOpen, setInternalOpen] = useState(false)
+  const isOpen = isExpanded !== undefined ? isExpanded : internalOpen
+  const setIsOpen = onToggle || setInternalOpen
   const [generating, setGenerating] = useState(false)
   const [totalChapters, setTotalChapters] = useState(30)
   const [titleStyle, setTitleStyle] = useState<TitleStyle>('webnovel')

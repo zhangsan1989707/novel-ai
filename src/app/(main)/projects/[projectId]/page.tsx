@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { Button, Input, Textarea, Select, Card, CardContent, CardHeader, CardTitle, Badge, Progress, Modal } from '@/components/ui'
+import { Button, Input, Textarea, Select, Card, CardContent, CardHeader, CardTitle, Badge, Progress, Modal, ChaptersEmptyState, toast } from '@/components/ui'
 import { ProjectForm, ProjectFormData, genreOptions, writingStyleOptions, ChapterListGenerator, BatchGenerator, ExportMenu } from '@/components/project'
 import { BatchProgress } from '@/components/ai/BatchProgress'
 import { PlotAnalyzer, BookAnalysisPanel, ContinuationPanel, ContinuationResults } from '@/components/ai'
@@ -90,6 +90,7 @@ export default function ProjectDetailPage() {
   } | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [activeTab, setActiveTab] = useState<'chapters' | 'outline' | 'settings'>('chapters')
+  const [showGenerator, setShowGenerator] = useState(false)
 
   // 获取项目详情
   const fetchProject = useCallback(async () => {
@@ -142,10 +143,14 @@ export default function ProjectDetailPage() {
       })
       const result = await res.json()
       if (result.success) {
+        toast.success('项目已删除')
         router.push('/projects')
+      } else {
+        toast.error(result.error?.message || '删除失败')
       }
     } catch (err) {
       console.error('删除项目失败:', err)
+      toast.error('删除失败，请重试')
     } finally {
       setSubmitting(false)
     }
@@ -163,9 +168,13 @@ export default function ProjectDetailPage() {
       if (result.success) {
         setDeleteChapterId(null)
         fetchProject()
+        toast.success('章节已删除')
+      } else {
+        toast.error(result.error?.message || '删除失败')
       }
     } catch (err) {
       console.error('删除章节失败:', err)
+      toast.error('删除失败，请重试')
     } finally {
       setSubmitting(false)
     }
@@ -182,11 +191,14 @@ export default function ProjectDetailPage() {
           method: 'DELETE',
         })
       }
+      const count = selectedChapterIds.length
       setSelectedChapterIds([])
       setIsSelectMode(false)
       fetchProject()
+      toast.success(`已删除 ${count} 个章节`)
     } catch (err) {
       console.error('批量删除章节失败:', err)
+      toast.error('删除失败，请重试')
     } finally {
       setSubmitting(false)
     }
@@ -521,6 +533,8 @@ export default function ProjectDetailPage() {
                           aiModelId={project.aiModelId || undefined}
                           chapters={project.chapters}
                           onApply={handleApplyChapters}
+                          isExpanded={showGenerator}
+                          onToggle={setShowGenerator}
                         />
                         <BatchGenerator
                           projectId={projectId}
@@ -546,13 +560,11 @@ export default function ProjectDetailPage() {
                 </CardHeader>
                 <CardContent>
                   {project.chapters.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500">
-                      <p>还没有章节</p>
-                      <Button variant="outline" className="mt-2" onClick={() => router.push(`/projects/${projectId}/chapters/new`)}>
-                        创建第一章
-                      </Button>
-                    </div>
-                ) : (
+                    <ChaptersEmptyState
+                      onCreate={() => router.push(`/projects/${projectId}/chapters/new`)}
+                      onGenerate={() => setShowGenerator(true)}
+                    />
+                  ) : (
                   <div className="space-y-2">
                     {project.chapters.map((chapter) => (
                       <div
