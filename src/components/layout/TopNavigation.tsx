@@ -3,6 +3,7 @@
 import { useRouter, usePathname } from 'next/navigation'
 import { Button } from '@/components/ui'
 import { BookOpen, Settings, DollarSign, HelpCircle, Bell, Search } from 'lucide-react'
+import { ThemeToggle } from './ThemeToggle'
 
 interface TopNavigationProps {
   children: React.ReactNode
@@ -79,6 +80,9 @@ export function TopNavigation({ children }: TopNavigationProps) {
               <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
                 <HelpCircle className="h-5 w-5" />
               </button>
+
+              {/* 主题切换 */}
+              <ThemeToggle />
             </div>
           </div>
         </div>
