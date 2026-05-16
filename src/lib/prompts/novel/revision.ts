@@ -38,16 +38,27 @@ export function buildRevisionPrompt(
     parts.push(context.protagonistGoal)
   }
 
-  // 【上下文】
+  // 【上下文】- 根据修改类型选择合适的上下文
   parts.push(`\n【上下文 - 当前章节】`)
   parts.push(`第${context.currentChapterNumber}章 "${context.currentChapterTitle}"`)
   if (context.currentChapterSummary) {
     parts.push(`章节概要：${context.currentChapterSummary}`)
   }
 
-  const contentSummary = currentContent.slice(-1500)
-  parts.push(`\n【上下文 - 章节内容末尾】`)
-  parts.push(contentSummary)
+  // 根据修改类型选择上下文策略
+  // 对于续写和扩展，需要章节末尾来确保衔接
+  // 对于重写和润色，需要章节开头来了解整体内容
+  let contextContent = ''
+  if (revisionType === 'continue' || revisionType === 'expand') {
+    // 续写和扩展：取章节末尾部分，确保内容衔接
+    contextContent = currentContent.slice(-1500)
+    parts.push(`\n【上下文 - 章节末尾内容（续写起点）】`)
+  } else {
+    // 重写和润色：取章节开头部分，了解整体内容
+    contextContent = currentContent.slice(0, 1500)
+    parts.push(`\n【上下文 - 章节开头内容（参考全文风格）】`)
+  }
+  parts.push(contextContent)
 
   // 【任务】
   parts.push(`\n【任务类型】${getRevisionTypeLabel(revisionType)}`)

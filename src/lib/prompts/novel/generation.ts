@@ -45,13 +45,15 @@ export function buildNovelGenerationPrompt(
     parts.push(context.antagonistSetting)
   }
 
-  // 上下文（前几章内容）
+  // 上下文（前几章内容）- 正确取章节开头部分，保持故事连贯
   if (options.useContext && context.previousChapters && context.previousChapters.length > 0) {
-    parts.push(`\n【上下文 - 前文概要】`)
-    const relevantChapters = context.previousChapters.slice(-options.contextChapterCount)
-    for (const chapter of relevantChapters) {
-      const summary = chapter.content?.slice(-300) || ''
-      parts.push(`第${chapter.chapterNumber}章 "${chapter.title}" 末尾：${summary}`)
+    parts.push(`\n【上下文 - 前文章节内容】`)
+    // 注意：context.previousChapters 已经在 context-manager 中正确处理
+    for (const chapter of context.previousChapters) {
+      // 取章节开头部分，确保故事的延续性和连贯性
+      const relevantContent = chapter.content?.slice(0, 500) || ''
+      parts.push(`\n=== 第${chapter.chapterNumber}章 "${chapter.title}" ===`)
+      parts.push(relevantContent)
     }
   }
 

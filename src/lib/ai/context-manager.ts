@@ -99,15 +99,15 @@ export async function buildPromptContext(
 ): Promise<PromptContext> {
   const maxCharsPerChapter = options.maxCharsPerChapter || 1000
 
-  // 处理前文
+  // 处理前文 - 正确地取章节开头部分，确保上下文连贯
   const processedPreviousChapters = options.useContext
     ? previousChapters
         .filter((ch) => ch.content && ch.status === 'COMPLETED')
-        .slice(-options.contextChapterCount)
+        .slice(-options.contextChapterCount) // 取最后 N 章
         .map((ch) => ({
           chapterNumber: ch.chapterNumber,
           title: ch.title,
-          content: ch.content?.slice(-maxCharsPerChapter) || '',
+          content: ch.content?.slice(0, maxCharsPerChapter) || '', // 正确：取章节开头部分
         }))
     : []
 
