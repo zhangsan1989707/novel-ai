@@ -53,7 +53,7 @@ export function buildWriterPrompt(input: WriterPromptInput): string {
   parts.push(input.outline.mainConflict)
   parts.push(`\n### 关键场景`)
   for (const scene of input.outline.keyScenes || []) {
-    parts.push(`- 场景${(scene as any).sceneNumber || ''}：${scene.scene}`)
+    parts.push(`- 场景${(scene as Record<string, unknown>).sceneNumber || ''}：${scene.scene}`)
     if (scene.emotion) parts.push(`  情感基调：${scene.emotion}`)
     if (scene.characters?.length) parts.push(`  出场人物：${scene.characters.join('、')}`)
   }
