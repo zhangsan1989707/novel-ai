@@ -11,6 +11,7 @@ import { validatorAgent } from '../agents/validator'
 import { summarizerAgent } from '../agents/summarizer'
 import * as memory from '../memory'
 import * as storyState from './story-state'
+import { hookRegistry } from '../hooks/registry'
 import type {
   ChapterOutline,
   CharacterProfile,
@@ -82,6 +83,24 @@ export async function runChapterGenerationPipeline(
   })
 
   try {
+    const startResults = await hookRegistry.execute('chapter_generate_start', {
+      projectId,
+      chapterNo,
+    })
+    const blocked = startResults.find(r => r.action === 'block')
+    if (blocked) {
+      await prisma.novelChapter.update({
+        where: { id: chapter.id },
+        data: { status: ChapterStatus.REVIEWING },
+      })
+      emit({ type: 'error', data: { message: blocked.message || 'Hook 阻断了生成流程' } })
+      return { success: false, chapterId: chapter.id, error: blocked.message || 'Hook 阻断了生成流程' }
+    }
+    const warnings = startResults.filter(r => r.action === 'warn')
+    if (warnings.length > 0) {
+      emit({ type: 'hook_warning', data: { warnings: warnings.map(w => w.message) } })
+    }
+
     // ========== Phase 1: 策划 Agent ==========
     emit({ type: 'start', data: { chapterId: chapter.id, agent: 'planner' } })
 
@@ -330,6 +349,12 @@ export async function runChapterGenerationPipeline(
     await prisma.novelProject.update({
       where: { id: projectId },
       data: { currentWordCount: totalWordCount._sum.wordCount || 0 },
+    })
+
+    await hookRegistry.execute('chapter_generate_end', {
+      projectId,
+      chapterNo,
+      content: polishedContent,
     })
 
     emit({
