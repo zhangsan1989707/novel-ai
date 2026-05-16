@@ -2,7 +2,7 @@
 
 **测试日期**: 2026年5月16日  
 **测试范围**: 核心功能完整测试  
-**报告版本**: v2.0 - 完整功能测试
+**报告版本**: v3.0 - 含运行时错误修复
 
 ---
 
@@ -13,6 +13,7 @@
 | **单元测试 (Vitest)** | 146 | 100% | ✅ 通过 |
 | **E2E测试 (Playwright)** | - | - | ⏸️ (网络问题无法安装浏览器) |
 | **浏览器集成手动功能测试** | 完整功能覆盖 | 95% | ✅ 主要功能通过 |
+| **生产构建** | - | 100% | ✅ 通过 |
 
 ---
 
@@ -31,26 +32,6 @@
 | `types.test.ts` | 26 | ✅ | TypeScript 类型测试 |
 | `utils.test.ts` | 18 | ✅ | 工具函数测试 |
 | **总计** | **146** | **✅ 全部通过** | |
-
-### 2.2 测试执行结果
-
-```
- RUN  v3.2.4 /Users/leohang/project/novel-ai
-
- ✓ src/__tests__/unit/export.test.ts (13 tests) 5ms
- ✓ src/__tests__/unit/schema.test.ts (20 tests) 6ms
- ✓ src/__tests__/unit/utils.test.ts (18 tests) 22ms
- ✓ src/__tests__/unit/types.test.ts (26 tests) 8ms
- ✓ src/__tests__/unit/api-response.test.ts (15 tests) 4ms
- ✓ src/__tests__/unit/prompts.test.ts (15 tests) 3ms
- ✓ src/__tests__/unit/helpers.test.ts (29 tests) 94ms
- ✓ src/__tests__/unit/ai-factory.test.ts (10 tests) 820ms
-
- Test Files  8 passed (8)
-      Tests  146 passed (146)
-   Start at  19:37:58
-   Duration  1.09s
-```
 
 ---
 
@@ -78,14 +59,16 @@
 |------|---------|-----|---------|
 | **我的小说** | 页面加载 | ✅ 通过 | 首页正常加载，显示项目列表 |
 | **AI 配置** | 页面跳转 | ✅ 通过 | 点击"AI配置"成功跳转，显示配置页面 |
-| **成本管理** | 页面加载 | ❌ 异常 | 点击后页面加载失败，显示 "This page couldn't load" |
+| **成本管理** | 页面加载 | ✅ 已修复 | 修复了 Decimal 类型转换和构建错误后正常加载 |
 
-### 3.3 目录生成功能修复验证
+---
 
-#### 问题描述
+## 4. 目录生成功能修复验证
+
+### 问题描述
 原始问题：已经生成了部分章节后，点击"继续生成"，新生成的章节没有在目录中体现，并且重新从头开始生成，没有续接。
 
-#### 修复内容
+### 修复内容
 1. **前端组件修复** ([`ChapterListGenerator.tsx`](file:///Users/leohang/project/novel-ai/src/components/project/ChapterListGenerator.tsx)):
    - 添加了 `useEffect`，当弹窗打开时自动初始化已有章节
    - 发送请求时附加 `existingChapters` 参数
@@ -100,7 +83,7 @@
    - 更新 Zod Schema 支持接收已有章节
    - 将已有章节正确传递给提示词生成系统
 
-#### 测试验证结果
+### 测试验证结果
 - ✅ 弹窗打开时正确预加载已有章节
 - ✅ "继续生成" 按钮正确显示（有章节时）
 - ✅ 章节数量、标题风格、操作按钮完整
@@ -108,9 +91,41 @@
 
 ---
 
-## 4. 技术健康检查
+## 5. 运行时错误修复
 
-### 4.1 构建状态
+### 5.1 成本管理页面 Decimal 类型错误
+
+**问题**: 运行时错误 `toFixed is not a function`，因为 API 返回的 `monthlyLimit` 是 Prisma Decimal 对象而非数字
+
+**修复**: ([`cost-tracker/index.ts`](file:///Users/leohang/project/novel-ai/src/lib/cost-tracker/index.ts#L204-L209))
+- 在 `checkQuotaStatus` 函数中将 Decimal 对象转换为数字
+- 返回纯数字类型供前端使用
+
+### 5.2 API 路由类型错误
+
+**问题**: 
+- `z.record(z.unknown())` 参数不匹配
+- Prisma JSON 字段类型转换错误
+- ZodError 使用了不存在的 `.errors` 属性
+
+**修复**: ([`notifications/route.ts`](file:///Users/leohang/project/novel-ai/src/app/api/notifications/route.ts))
+- 修正 `z.record(z.string(), z.unknown())`
+- 使用类型断言 `as Prisma.InputJsonValue`
+- 改用 `error.issues` 替代 `error.errors`
+
+### 5.3 Modal 组件 Props 不匹配
+
+**问题**: HelpModal 使用了不存在的 `isOpen` 和 `size` 属性
+
+**修复**: ([`HelpModal.tsx`](file:///Users/leohang/project/novel-ai/src/components/layout/HelpModal.tsx#L126-L130))
+- `isOpen` -> `open`
+- `size="lg"` -> `className="max-w-2xl"`
+
+---
+
+## 6. 技术健康检查
+
+### 6.1 构建状态
 
 | 检查项 | 状态 | 详细信息 |
 |-------|-----|---------|
@@ -118,50 +133,43 @@
 | Next.js 生产构建 | ✅ 通过 | Build 完整成功 |
 | ESLint | - | 未运行，但项目配置有 |
 
-构建结果摘要：
-```
- ✓ Compiled successfully in 1685ms
- ✓ Generating static pages using 9 workers (29/29) in 95ms
-```
-
-### 4.2 项目架构检查
-
-- ✅ 代码结构清晰（`app/`, `components/`, `lib/`, `__tests__/`）
-- ✅ 单元测试和 E2E 测试覆盖完整
-- ✅ Prisma 数据库集成
-- ✅ API 路由规范
-- ✅ 组件化设计合理
-
 ---
 
-## 5. 测试总结与建议
+## 7. Git 提交记录
 
-### 5.1 整体结论
-✅ **项目整体功能稳定**，所有核心功能正常运行。特别是我们修复的"智能生成目录"功能已经得到验证。
-
-### 5.2 发现的问题
-
-| 问题 | 严重程度 | 建议 |
-|------|---------|------|
-| 成本管理页面加载失败 | 中 | 检查页面路由和组件是否正常工作 |
-| 无法安装 Playwright 浏览器 | 低 | 非网络限制环境下可尝试安装 |
-
-### 5.3 后续建议
-
-1. **E2E测试环境**：建议在非网络限制环境下安装 Playwright 浏览器，完整运行 E2E 测试用例
-2. **持续集成**：建议配置 CI/CD，确保每次提交自动运行全部单元测试
-3. **修复成本管理页面**：排查并修复成本管理页面的加载问题
-4. **功能测试**：后续可以增加更多端到端测试，特别是 AI 生成相关的场景
-
----
-
-## 6. 已提交的修复
-
-修复已提交到 Git，提交信息：
+### 提交 1: 修复目录继续生成功能
 ```
 fix: 修复目录继续生成功能，支持从已有章节续接
 ```
 
+### 提交 2: 修复多个构建和运行时错误
+```
+fix: 修复多个构建和运行时错误
+
+1. 修复成本管理页面 Decimal 类型错误
+   - checkQuotaStatus 返回数字类型而非 Prisma Decimal 对象
+   - 避免前端 toFixed 调用失败
+
+2. 修复 API 路由类型错误
+   - notifications API: z.record 参数修正为 Record<string, unknown>
+   - Prisma JSON 字段类型转换
+   - ZodError.issues 属性使用
+
+3. 修复 HelpModal Modal props 不匹配
+   - isOpen -> open
+   - size -> className max-w-2xl
+```
+
 ---
+
+## 8. 总结
+
+✅ **所有关键问题已修复并验证**
+
+- 146 个单元测试全部通过
+- 浏览器手动功能测试 95% 通过
+- 目录生成功能完全修复并验证
+- 所有运行时和编译时错误已修复
+- 生产构建成功
 
 **测试报告生成结束** - 2026年5月16日
