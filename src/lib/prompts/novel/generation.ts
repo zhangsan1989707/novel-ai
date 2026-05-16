@@ -78,7 +78,7 @@ export function buildNovelGenerationPrompt(
 
   // 【任务】
   parts.push(`\n【任务】`)
-  parts.push(`请撰写第${context.currentChapterNumber}章 "${context.currentChapterTitle}"`)
+  parts.push(`请为第${context.currentChapterNumber}章生成一个吸引人的标题，然后撰写该章节内容。`)
   
   // 添加阶段大纲（如果有）
   if (context.stageOutline) {
@@ -89,6 +89,13 @@ export function buildNovelGenerationPrompt(
   if (context.currentChapterSummary) {
     parts.push(`\n章节概要：${context.currentChapterSummary}`)
   }
+
+  // 【输出格式】
+  parts.push(`\n【输出格式】`)
+  parts.push(`请按照以下格式输出：`)
+  parts.push(`标题：[章节标题]`)
+  parts.push(`内容：`)
+  parts.push(`[章节内容]`)
 
   // 网文特性引导
   parts.push(`\n【网文写作要求】`)

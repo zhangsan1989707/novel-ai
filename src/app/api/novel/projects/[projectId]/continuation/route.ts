@@ -264,12 +264,25 @@ export async function POST(
             sendEvent('token', { content: token })
           }
 
+          // 解析标题和内容
+          let extractedTitle = chapterTitle
+          let extractedContent = fullContent
+          
+          const titleMatch = fullContent.match(/^标题：(.+)$/m)
+          const contentMatch = fullContent.match(/^内容：$\s*([\s\S]*)$/m)
+          
+          if (titleMatch && contentMatch) {
+            extractedTitle = titleMatch[1].trim() || chapterTitle
+            extractedContent = contentMatch[1].trim()
+          }
+
           // 更新章节内容
           await prisma.novelChapter.update({
             where: { id: newChapter.id },
             data: {
-              content: fullContent,
-              wordCount: fullContent.length,
+              title: extractedTitle,
+              content: extractedContent,
+              wordCount: extractedContent.length,
               status: 'COMPLETED',
             },
           })

@@ -182,11 +182,18 @@ export function ContinuationPanel({
         }
       }
 
+      // 解析标题和内容
+      let displayContent = fullContent
+      const contentMatch = fullContent.match(/^内容：$\s*([\s\S]*)$/m)
+      if (contentMatch) {
+        displayContent = contentMatch[1].trim()
+      }
+
       setGenerationState(prev => ({
         ...prev,
         status: 'done',
-        content: fullContent,
-        wordCount: fullContent.length,
+        content: displayContent,
+        wordCount: displayContent.length,
       }))
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
