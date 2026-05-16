@@ -1,4 +1,22 @@
 services:
+  db:
+    image: postgres:16-alpine
+    container_name: novelai-db
+    environment:
+      POSTGRES_USER: novelai
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: novel_ai
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U novelai -d novel_ai"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   app:
     build:
       context: .
@@ -18,9 +36,15 @@ services:
       - MINIMAX_API_KEY=${MINIMAX_API_KEY}
       - VOLCENGINE_API_KEY=${VOLCENGINE_API_KEY}
     restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:3200"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
+
+volumes:
+  postgres_data:

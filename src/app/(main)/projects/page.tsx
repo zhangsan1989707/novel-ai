@@ -36,6 +36,7 @@ interface ProjectsResponse {
     stats?: {
       totalProjects: number
       totalWordCount: number
+      aiCallCount: number
     }
   }
 }
@@ -58,7 +59,7 @@ export default function ProjectsPage() {
   const [totalPages, setTotalPages] = useState(1)
   const [total, setTotal] = useState(0)
   const [totalWordCount, setTotalWordCount] = useState(0)
-  const [aiCallCount] = useState(0)
+  const [aiCallCount, setAiCallCount] = useState(0)
 
   const [statusFilter, setStatusFilter] = useState('')
   const [genreFilter, setGenreFilter] = useState('')
@@ -90,6 +91,7 @@ export default function ProjectsPage() {
         setTotal(data.data.pagination.total)
         if (data.data.stats) {
           setTotalWordCount(data.data.stats.totalWordCount)
+          setAiCallCount(data.data.stats.aiCallCount)
         }
       }
     } catch (error) {

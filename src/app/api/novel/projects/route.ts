@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
     // TODO: 获取当前用户ID（暂用固定值，后续接入认证后修改）
     const creatorId = 1
 
-    const [projects, total] = await Promise.all([
+    const [projects, total, statsResult] = await Promise.all([
       prisma.novelProject.findMany({
         where: { ...where, creatorId },
         include: {
@@ -84,7 +84,27 @@ export async function GET(request: NextRequest) {
         take: pageSize,
       }),
       prisma.novelProject.count({ where: { ...where, creatorId } }),
+      // 获取统计数据（所有项目的总字数和 AI 调用次数）
+      Promise.all([
+        // 所有项目的总字数
+        prisma.novelProject.aggregate({
+          where: { creatorId },
+          _count: true,
+        }),
+        // AI 调用次数
+        prisma.aiUsage.count({
+          where: { userId: creatorId },
+        }),
+      ]),
     ])
+
+    // 获取所有项目的总字数
+    const allProjectsWordCount = await prisma.novelChapter.aggregate({
+      where: {
+        project: { creatorId },
+      },
+      _sum: { wordCount: true },
+    })
 
     // 为每个项目实时计算总字数
     const projectsWithWordCount = projects.map(project => ({
@@ -106,7 +126,8 @@ export async function GET(request: NextRequest) {
         },
         stats: {
           totalProjects: total,
-          totalWordCount: projectsWithWordCount.reduce((sum, p) => sum + p.currentWordCount, 0),
+          totalWordCount: allProjectsWordCount._sum.wordCount || 0,
+          aiCallCount: statsResult[1],
         },
       },
     })
