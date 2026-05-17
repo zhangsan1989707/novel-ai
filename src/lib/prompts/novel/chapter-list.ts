@@ -139,17 +139,24 @@ export function buildChapterListPrompt(input: ChapterListGenerationInput): strin
   const endChapterNumber = input.totalChapters
 
   parts.push(`⚠️ 重要：你必须输出一个包含 EXACTLY ${outputChapterCount} 个章节的 JSON 数组！`)
-  parts.push(`输出格式要求：`)
+  parts.push(`输出格式要求（请严格参照以下示例）：`)
   parts.push(`{`)
   parts.push(`  "chapters": [`)
   parts.push(`    {`)
   parts.push(`      "chapterNumber": ${startChapterNumber},`)
-  parts.push(`      "title": "...",`)
-  parts.push(`      "summary": "（必填！50-100字的章节概要，不得省略）",`)
+  parts.push(`      "title": "第${startChapterNumber}章 死亡倒计时：第一个规则是别相信任何人",`)
+  parts.push(`      "summary": "主角在上班途中收到一条神秘短信，告知他已被选入死亡游戏，必须遵守规则才能活过今晚。第一条规则是：别相信任何人。他发现身边的同事似乎都在隐藏秘密，而倒计时已经开始。",`)
   parts.push(`      "wordCount": 3000,`)
   parts.push(`      "plotType": "setup"`)
+  parts.push(`    },`)
+  parts.push(`    {`)
+  parts.push(`      "chapterNumber": ${startChapterNumber + 1},`)
+  parts.push(`      "title": "第${startChapterNumber + 1}章 密室里的连环谋杀：谁才是真正的猎手？",`)
+  parts.push(`      "summary": "主角与五名陌生人被困在密室中，每隔一小时就有一人被杀。他必须在下一个倒计时结束前找出凶手，但每个人都可能是猎手，包括他自己。",`)
+  parts.push(`      "wordCount": 3000,`)
+  parts.push(`      "plotType": "develop"`)
   parts.push(`    }`)
-  parts.push(`    // ... 必须恰好 ${outputChapterCount} 个章节条目`)
+  parts.push(`    // ... 必须恰好 ${outputChapterCount} 个章节条目，每个都必须有summary！`)
   parts.push(`  ]`)
   parts.push(`}`)
   parts.push(`字段说明：`)
@@ -176,6 +183,7 @@ export function buildSummaryCompletionPrompt(
   genre?: string
 ): string {
   const parts: string[] = []
+  const missingChapters = chapters.filter(ch => !ch.summary || !ch.summary.trim())
 
   parts.push(`你是一个专业的小说编辑。以下是一部小说的章节列表，其中部分章节缺少概要描述。`)
   parts.push(`请为每个缺少概要的章节补充50-100字的具体情节概要。`)
@@ -184,7 +192,7 @@ export function buildSummaryCompletionPrompt(
   parts.push(`小说标题：${projectTitle}`)
   if (genre) parts.push(`类型：${genre}`)
   parts.push(``)
-  parts.push(`章节列表：`)
+  parts.push(`完整章节列表：`)
 
   for (const ch of chapters) {
     if (ch.summary && ch.summary.trim()) {
@@ -195,12 +203,16 @@ export function buildSummaryCompletionPrompt(
   }
 
   parts.push(``)
-  parts.push(`请输出JSON格式，为每个缺少概要的章节补充：`)
+  parts.push(`请只为缺少概要的章节补充，输出JSON格式：`)
   parts.push(`{`)
   parts.push(`  "summaries": [`)
-  parts.push(`    { "index": 章节在数组中的位置(从0开始), "summary": "该章的概要描述" }`)
+  for (const ch of missingChapters) {
+    parts.push(`    { "chapterNumber": ${ch.chapterNumber}, "summary": "第${ch.chapterNumber}章的概要描述" },`)
+  }
   parts.push(`  ]`)
   parts.push(`}`)
+  parts.push(``)
+  parts.push(`注意：chapterNumber 必须与上面缺少概要的章节号完全对应！`)
 
   return parts.join('\n')
 }

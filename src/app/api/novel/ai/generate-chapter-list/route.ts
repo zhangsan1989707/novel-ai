@@ -145,12 +145,10 @@ export async function POST(request: NextRequest) {
           }
 
           let missingSummaryCount = 0
-          const missingSummaryIndices: number[] = []
           for (let i = 0; i < chapterList.chapters.length; i++) {
             const ch = chapterList.chapters[i]
             if (!ch.summary || typeof ch.summary !== 'string' || ch.summary.trim() === '') {
               missingSummaryCount++
-              missingSummaryIndices.push(i)
             }
           }
 
@@ -163,9 +161,14 @@ export async function POST(request: NextRequest) {
                 const cleaned = summaryMatch[0].replace(/,\s*([\]}])/g, '$1')
                 const summaryData = JSON.parse(cleaned)
                 if (summaryData.summaries && Array.isArray(summaryData.summaries)) {
+                  const chapterMap = new Map<number, number>()
+                  for (let i = 0; i < chapterList.chapters.length; i++) {
+                    chapterMap.set(chapterList.chapters[i].chapterNumber, i)
+                  }
                   for (const item of summaryData.summaries) {
-                    const idx = typeof item.index === 'number' ? item.index : missingSummaryIndices[item.index]
-                    if (idx >= 0 && idx < chapterList.chapters.length && item.summary && typeof item.summary === 'string') {
+                    const chNum = item.chapterNumber || item.index + 1
+                    const idx = chapterMap.get(chNum)
+                    if (idx !== undefined && item.summary && typeof item.summary === 'string' && item.summary.trim()) {
                       chapterList.chapters[idx].summary = item.summary
                     }
                   }
@@ -180,7 +183,13 @@ export async function POST(request: NextRequest) {
             }
 
             if (missingSummaryCount > 0) {
-              const summaryWarning = `有 ${missingSummaryCount} 个章节缺少简介，建议补充`
+              for (let i = 0; i < chapterList.chapters.length; i++) {
+                const ch = chapterList.chapters[i]
+                if (!ch.summary || !ch.summary.trim()) {
+                  ch.summary = ch.title || `第${ch.chapterNumber}章`
+                }
+              }
+              const summaryWarning = `有 ${missingSummaryCount} 个章节AI未生成概要，已用标题作为占位`
               parseError = parseError ? `${parseError}；${summaryWarning}` : summaryWarning
             }
           }
