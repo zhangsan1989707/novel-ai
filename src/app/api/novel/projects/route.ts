@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { logError } from '@/lib/logger'
+import { getCurrentUserId } from '@/lib/auth'
 
 // ============================================
 // Schema 验证
@@ -66,8 +67,7 @@ export async function GET(request: NextRequest) {
       ]
     }
 
-    // TODO: 获取当前用户ID（暂用固定值，后续接入认证后修改）
-    const creatorId = 1
+    const creatorId = getCurrentUserId()
 
     const [projects, total, statsResult] = await Promise.all([
       prisma.novelProject.findMany({
@@ -149,8 +149,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const validatedData = createProjectSchema.parse(body)
 
-    // TODO: 获取当前用户ID（暂用固定值，后续接入认证后修改）
-    let creatorId = 1
+    let creatorId = getCurrentUserId()
 
     // 确保用户存在
     const user = await prisma.user.findUnique({ where: { id: creatorId } })

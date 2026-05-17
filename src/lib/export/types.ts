@@ -21,6 +21,8 @@ export interface ExportResult {
   fileName: string
   filePath?: string
   downloadUrl?: string
+  content?: string
+  contentType?: string
   error?: string
 }
 

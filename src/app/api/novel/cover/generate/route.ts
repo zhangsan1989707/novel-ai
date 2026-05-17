@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { tryCatch, error } from '@/lib/api-response'
-import { generateCover } from '@/lib/cover/service'
+import { generateCover, getCoverCapability } from '@/lib/cover/service'
 
 const generateSchema = z.object({
   projectId: z.number().int().positive(),
@@ -20,6 +20,11 @@ export async function POST(request: NextRequest) {
 
     if (!project) {
       return error('NOT_FOUND', '项目不存在')
+    }
+
+    const capability = await getCoverCapability(data.projectId)
+    if (!capability.available) {
+      return error('AI_PROVIDER_ERROR', capability.reason || '当前未配置支持图片生成的模型')
     }
 
     const result = await generateCover({

@@ -18,6 +18,8 @@ export async function PATCH(
 
     // TODO: 后续接入认证后，需要验证通知是否属于当前用户
     const { prisma } = await import('@/lib/prisma')
+    const { getCurrentUserId } = await import('@/lib/auth')
+    const userId = getCurrentUserId()
 
     const notification = await prisma.notification.update({
       where: { id: notificationId },

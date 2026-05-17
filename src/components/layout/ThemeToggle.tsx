@@ -6,6 +6,18 @@ import { cn } from '@/lib/utils'
 
 type Theme = 'light' | 'dark' | 'system'
 
+function applyTheme(newTheme: Theme) {
+  const root = document.documentElement
+  if (newTheme === 'system') {
+    root.classList.remove('dark', 'light')
+    root.style.removeProperty('color-scheme')
+  } else {
+    root.classList.remove('dark', 'light')
+    root.classList.add(newTheme)
+    root.style.colorScheme = newTheme
+  }
+}
+
 export function ThemeToggle({ className }: { className?: string }) {
   const [theme, setTheme] = useState<Theme>('system')
   const [mounted, setMounted] = useState(false)
@@ -20,18 +32,6 @@ export function ThemeToggle({ className }: { className?: string }) {
       applyTheme('system')
     }
   }, [])
-
-  const applyTheme = (newTheme: Theme) => {
-    const root = document.documentElement
-    if (newTheme === 'system') {
-      root.classList.remove('dark', 'light')
-      root.style.removeProperty('color-scheme')
-    } else {
-      root.classList.remove('dark', 'light')
-      root.classList.add(newTheme)
-      root.style.colorScheme = newTheme
-    }
-  }
 
   const toggleTheme = () => {
     const newTheme = theme === 'dark' ? 'light' : 'dark'

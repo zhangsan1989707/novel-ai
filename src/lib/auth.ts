@@ -52,3 +52,13 @@ export const handlers = {
   GET: () => Response.json({}),
   POST: () => Response.json({}),
 }
+
+/**
+ * 获取当前用户 ID（整数）
+ * 当前为开发模式，固定返回 1
+ * 后续接入认证系统后，从 session/token 获取真实用户 ID
+ */
+export function getCurrentUserId(): number {
+  // TODO: 从 session/token 获取真实用户 ID
+  return 1
+}

@@ -14,6 +14,7 @@ interface OutlineGeneratorProps {
   protagonistGoal?: string
   antagonistSetting?: string
   endingPlan?: string
+  aiModelId?: number
   showIntro?: boolean
   onApply?: (outline: string, outlineStages?: OutlineStages) => void
   onClose?: () => void
@@ -28,6 +29,7 @@ export function OutlineGenerator({
   protagonistGoal,
   antagonistSetting,
   endingPlan,
+  aiModelId,
   showIntro = true,
   onApply,
   onClose,
@@ -60,6 +62,7 @@ export function OutlineGenerator({
           protagonistGoal,
           antagonistSetting,
           endingPlan,
+          aiModelId,
         }),
       })
 

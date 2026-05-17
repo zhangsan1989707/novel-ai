@@ -3,7 +3,6 @@
  * L2 层摘要：每卷 500-800 字
  */
 import { prisma } from '@/lib/prisma'
-import type { ChapterSummaryData } from '@/lib/engine/types'
 
 export interface VolumeSummaryData {
   volumeNumber: number

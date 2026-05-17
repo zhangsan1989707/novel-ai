@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getHierarchicalContext, checkAndGenerateLayeredSummary } from '@/lib/engine/summarizer'
-import { getChapterSummariesInRange } from '@/lib/memory/chapter-summary'
 import { getAllVolumeSummaries } from '@/lib/memory/volume-summary'
 import { getBookSummary } from '@/lib/memory/book-summary'
 import { logError } from '@/lib/logger'

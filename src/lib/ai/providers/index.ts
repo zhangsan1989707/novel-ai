@@ -1,3 +1,4 @@
+export { OpenAICompatibleProvider } from './openai-compatible'
 export { OpenAIProvider } from './openai'
 export { AnthropicProvider } from './anthropic'
 export { AlibabaProvider } from './alibaba'

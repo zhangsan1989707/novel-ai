@@ -26,6 +26,56 @@ interface CoverGenerationResult {
   analysis: CoverAnalysis
 }
 
+interface CoverCapability {
+  available: boolean
+  provider?: string
+  reason?: string
+}
+
+function hasUsableApiKey(apiKey?: string | null): boolean {
+  return Boolean(apiKey && apiKey.trim() && apiKey !== 'your-api-key-placeholder')
+}
+
+export async function getCoverCapability(projectId?: number): Promise<CoverCapability> {
+  if (projectId) {
+    const project = await prisma.novelProject.findUnique({
+      where: { id: projectId },
+      include: { aiModelConfig: true },
+    })
+
+    if (project?.aiModelConfig?.vendor === AIVendor.OPENAI && hasUsableApiKey(project.aiModelConfig.apiKey)) {
+      return {
+        available: true,
+        provider: `${project.aiModelConfig.name} / ${project.aiModelConfig.modelId}`,
+      }
+    }
+  }
+
+  const openAIConfig = await prisma.aIModelConfig.findFirst({
+    where: { vendor: AIVendor.OPENAI },
+    orderBy: [{ isDefault: 'desc' }, { sortOrder: 'asc' }, { createdAt: 'desc' }],
+  })
+
+  if (openAIConfig && hasUsableApiKey(openAIConfig.apiKey)) {
+    return {
+      available: true,
+      provider: `${openAIConfig.name} / ${openAIConfig.modelId}`,
+    }
+  }
+
+  if (hasUsableApiKey(process.env.OPENAI_API_KEY)) {
+    return {
+      available: true,
+      provider: process.env.OPENAI_MODEL_ID || 'OpenAI image model',
+    }
+  }
+
+  return {
+    available: false,
+    reason: '当前未配置支持图片生成的 OpenAI API Key，文本模型只能生成封面提示词和设计建议。',
+  }
+}
+
 function parseAnalysisResult(content: string): CoverAnalysis {
   const defaultAnalysis: CoverAnalysis = {
     colorScheme: [],
@@ -53,6 +103,11 @@ function parseAnalysisResult(content: string): CoverAnalysis {
 }
 
 export async function generateCover(input: CoverGenerationInput): Promise<CoverGenerationResult> {
+  const capability = await getCoverCapability(input.projectId)
+  if (!capability.available) {
+    throw new Error(capability.reason || 'Image generation is not available. Please configure OpenAI API key.')
+  }
+
   const provider = await AIService.createProvider({
     projectId: input.projectId,
     usageType: 'COVER_GENERATION',

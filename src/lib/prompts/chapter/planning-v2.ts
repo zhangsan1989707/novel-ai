@@ -1,7 +1,6 @@
 /**
  * 增强版策划 Agent Prompt - 精细化章节结构设计
  */
-import { CHAPTER_WORD_COUNT, CHAPTER_PACING } from '../shared/constants'
 
 interface PlannerPromptInput {
   projectTitle: string

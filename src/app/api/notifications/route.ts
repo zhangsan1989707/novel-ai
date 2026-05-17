@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { Prisma } from '@prisma/client'
+import { getCurrentUserId } from '@/lib/auth'
 
 // ============================================
 // Schema 验证
@@ -17,7 +18,7 @@ const createNotificationSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional(),
 })
 
-const DEFAULT_USER_ID = 1 // TODO: 后续接入认证后修改
+const DEFAULT_USER_ID = getCurrentUserId()
 
 // ============================================
 // API Handlers

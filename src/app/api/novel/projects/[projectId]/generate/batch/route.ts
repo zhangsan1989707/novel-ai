@@ -109,6 +109,36 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           controller.enqueue(encoder.encode(message))
         }
 
+        const writeAgentLog = async (
+          chapterNo: number,
+          status: 'START' | 'DONE' | 'FAILED',
+          data?: {
+            inputPrompt?: string
+            outputContent?: string
+            errorMessage?: string
+            tokenCount?: number
+            durationMs?: number
+          }
+        ) => {
+          try {
+            await prisma.agentLog.create({
+              data: {
+                projectId: projectIdNum,
+                chapterNo,
+                agentType: 'WRITER',
+                status,
+                inputPrompt: data?.inputPrompt,
+                outputContent: data?.outputContent,
+                errorMessage: data?.errorMessage,
+                tokenCount: data?.tokenCount,
+                durationMs: data?.durationMs,
+              },
+            })
+          } catch (agentLogError) {
+            console.warn('[batch-generate] Failed to write agent log:', agentLogError)
+          }
+        }
+
         let successCount = 0
         let failCount = 0
 
@@ -131,10 +161,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           totalChapters: chaptersToGenerate.length,
           firstChapterId: chaptersToGenerate[0].id,
         })
+        await writeAgentLog(0, 'START', {
+          outputContent: `批量生成开始，共 ${chaptersToGenerate.length} 章`,
+        })
 
         // 按顺序处理每个章节
         for (let i = 0; i < chaptersToGenerate.length; i++) {
           const chapter = chaptersToGenerate[i]
+          const chapterStartTime = Date.now()
 
           // 发送章节开始事件
           sendEvent('chapter_start', {
@@ -194,6 +228,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             await prisma.novelChapter.update({
               where: { id: chapter.id },
               data: { generationPrompt: prompt },
+            })
+            await writeAgentLog(chapter.chapterNumber, 'START', {
+              inputPrompt: prompt,
             })
 
             let fullContent = ''
@@ -260,6 +297,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
               where: { id: chapter.id },
               data: updateData,
             })
+            await writeAgentLog(chapter.chapterNumber, 'DONE', {
+              inputPrompt: prompt,
+              outputContent: extractedContent.slice(0, 10000),
+              tokenCount: wordCount,
+              durationMs: Date.now() - chapterStartTime,
+            })
 
             // 更新项目总字数
             if (wordCountDiff !== 0) {
@@ -292,6 +335,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
                 generationCount: { increment: 1 },
               },
             })
+            await writeAgentLog(chapter.chapterNumber, 'FAILED', {
+              errorMessage: error instanceof Error ? error.message : '生成失败',
+              durationMs: Date.now() - chapterStartTime,
+            })
 
             // 发送章节错误事件
             sendEvent('chapter_error', {
@@ -313,6 +360,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           successCount,
           failCount,
           total: chaptersToGenerate.length,
+        })
+        await writeAgentLog(0, failCount > 0 ? 'FAILED' : 'DONE', {
+          outputContent: `批量生成完成：成功 ${successCount} 章，失败 ${failCount} 章`,
         })
 
         controller.close()

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import JSZip from 'jszip'
-import type { AnalysisDimension } from '@/types'
 import { logError } from '@/lib/logger'
 
 interface EpubChapter {

@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { ProjectMode } from '@/types'
 import { logError } from '@/lib/logger'
+import { getCurrentUserId } from '@/lib/auth'
 
 // ============================================
 // Schema 验证
@@ -47,7 +48,7 @@ export async function POST(request: NextRequest) {
     } = analyzeModeSchema.parse(body)
 
     // 确保用户存在
-    let creatorId = 1
+    let creatorId = getCurrentUserId()
     const user = await prisma.user.findUnique({ where: { id: creatorId } })
     if (!user) {
       const newUser = await prisma.user.create({

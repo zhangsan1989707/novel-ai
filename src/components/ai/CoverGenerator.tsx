@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import NextImage from 'next/image'
 import { Button, Card, CardContent, CardHeader, CardTitle, Badge } from '@/components/ui'
-import { ImageIcon, Trash2, Loader2, Palette, Layout, Sparkles, Check, Wand2 } from 'lucide-react'
+import { AlertCircle, ImageIcon, Trash2, Loader2, Palette, Layout, Sparkles, Check, Wand2 } from 'lucide-react'
 import { toast } from '@/components/ui/Toast'
 
 interface CoverDesign {
@@ -24,6 +24,12 @@ interface CoverGeneratorProps {
   onCoverApplied?: () => void
 }
 
+interface CoverCapability {
+  available: boolean
+  provider?: string
+  reason?: string
+}
+
 const genreOptions = [
   { value: '玄幻', label: '玄幻', emoji: '🏔️' },
   { value: '都市', label: '都市', emoji: '🌃' },
@@ -41,6 +47,7 @@ export function CoverGenerator({ projectId, onCoverApplied }: CoverGeneratorProp
   const [loading, setLoading] = useState(false)
   const [selectedDesign, setSelectedDesign] = useState<CoverDesign | null>(null)
   const [applyingId, setApplyingId] = useState<string | null>(null)
+  const [capability, setCapability] = useState<CoverCapability | null>(null)
   const initializedRef = useRef(false)
 
   const loadCoverDesigns = useCallback(async () => {
@@ -58,12 +65,28 @@ export function CoverGenerator({ projectId, onCoverApplied }: CoverGeneratorProp
     }
   }, [projectId])
 
+  const loadCapability = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/novel/cover/capability?projectId=${projectId}`)
+      const data = await res.json()
+      if (data.success) {
+        setCapability(data.data)
+      }
+    } catch {
+      setCapability({
+        available: false,
+        reason: '无法检查封面模型能力，请稍后重试',
+      })
+    }
+  }, [projectId])
+
   useEffect(() => {
     if (!initializedRef.current) {
       initializedRef.current = true
       loadCoverDesigns()
+      loadCapability()
     }
-  }, [loadCoverDesigns])
+  }, [loadCoverDesigns, loadCapability])
 
   const handleGenerate = useCallback(async () => {
     setGenerating(true)
@@ -146,6 +169,19 @@ export function CoverGenerator({ projectId, onCoverApplied }: CoverGeneratorProp
           <span className="text-sm font-medium">封面生成</span>
         </div>
 
+        {capability && !capability.available && (
+          <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-300">
+            <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+            <span>{capability.reason || '当前模型不支持图片生成，请先配置 OpenAI 图片模型。'}</span>
+          </div>
+        )}
+
+        {capability?.available && capability.provider && (
+          <div className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+            图片模型：{capability.provider}
+          </div>
+        )}
+
         <div className="space-y-2">
           <label className="text-xs text-gray-500">封面风格</label>
           <div className="flex flex-wrap gap-2">
@@ -168,7 +204,7 @@ export function CoverGenerator({ projectId, onCoverApplied }: CoverGeneratorProp
         <Button
           variant="primary"
           onClick={handleGenerate}
-          disabled={generating}
+          disabled={generating || capability?.available === false}
         >
           {generating ? (
             <>

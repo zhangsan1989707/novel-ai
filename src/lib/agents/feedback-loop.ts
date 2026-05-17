@@ -2,7 +2,6 @@
  * Agent 反馈循环管理器
  * 实现写作→校验→重写的自动修正流程
  */
-import { AIService } from '@/lib/ai/service'
 import { writerAgent } from './writer'
 import { validatorAgent } from './validator'
 import { polisherAgent } from './polisher'

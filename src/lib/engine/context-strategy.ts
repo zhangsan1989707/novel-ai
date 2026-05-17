@@ -3,7 +3,6 @@
  * 支持多种上下文范围策略
  */
 import { prisma } from '@/lib/prisma'
-import { calculateVolume } from '@/lib/memory/volume-summary'
 
 export type ContextStrategyType =
   | 'recent'

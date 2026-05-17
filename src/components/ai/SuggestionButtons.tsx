@@ -13,6 +13,7 @@ interface SuggestionButtonsProps {
   protagonistGoal?: string
   antagonistSetting?: string
   endingPlan?: string
+  aiModelId?: number
   onIdeaGenerated?: (idea: string) => void
   onChapterListGenerated?: (list: string) => void
   onOutlineGenerated?: (outline: string) => void
@@ -35,6 +36,7 @@ export function SuggestionButtons({
   protagonistGoal,
   antagonistSetting,
   endingPlan,
+  aiModelId,
   onIdeaGenerated,
   onChapterListGenerated,
   onOutlineGenerated,
@@ -53,6 +55,7 @@ export function SuggestionButtons({
     protagonistGoal,
     antagonistSetting,
     endingPlan,
+    aiModelId,
   })
 
   const handleGenerateIdea = async () => {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { buildIdeaGenerationPrompt } from '@/lib/ai/prompts'
-import { createProviderFromEnv, getDefaultVendor } from '@/lib/ai'
+import { createProviderFromEnv, createProviderFromConfigId, getDefaultVendor } from '@/lib/ai'
+import { AIVendor } from '@/types'
 import { logError } from '@/lib/logger'
 
 /**
@@ -22,6 +23,7 @@ export async function POST(request: NextRequest) {
       existingAntagonistSetting,
       existingEndingPlan,
       vendor,
+      aiModelId,
     } = body
 
     if (!projectTitle) {
@@ -31,18 +33,25 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 获取 AI Provider - 直接使用环境变量
-    const selectedVendor = vendor || getDefaultVendor()
-    const provider = createProviderFromEnv(selectedVendor)
+    // 优先使用指定的 AI 模型配置
+    let provider
+    if (aiModelId) {
+      const dbProvider = await createProviderFromConfigId(aiModelId)
+      if (dbProvider) {
+        provider = dbProvider
+      }
+    }
+    if (!provider) {
+      const selectedVendor = (vendor || getDefaultVendor()) as AIVendor
+      provider = createProviderFromEnv(selectedVendor)
+    }
 
-    // 构建提示词
     const prompt = buildIdeaGenerationPrompt({
       theme: projectTitle!,
       genre,
       writingStyle
     })
 
-    // 生成内容
     const result = await provider.generate(prompt, {
       temperature: 0.8,
       maxTokens: 4000,
@@ -94,7 +103,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     logError(error instanceof Error ? error : new Error(String(error)), { type: 'generate_idea', projectTitle })
     return NextResponse.json(
-      { success: false, error: { code: 'GENERATION_ERROR', message: '生成创意设定失败' } },
+      { success: false, error: { code: 'GENERATION_ERROR', message: error instanceof Error ? error.message : '生成创意设定失败' } },
       { status: 500 }
     )
   }

@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { createProviderFromEnv, buildOutlineGenerationPrompt, getDefaultVendor } from '@/lib/ai'
-import { logger, logError } from '@/lib/logger'
-
-// ============================================
-// Schema 验证
-// ============================================
+import { createProviderFromEnv, createProviderFromConfigId, buildOutlineGenerationPrompt, getDefaultVendor } from '@/lib/ai'
+import { AIVendor } from '@/types'
+import { logError } from '@/lib/logger'
 
 const vendorEnum = z.enum(['OPENAI', 'ANTHROPIC', 'ALIBABA', 'DEEPSEEK', 'MINIMAX', 'VOLCENGINE'])
 
@@ -18,18 +15,11 @@ const generateOutlineSchema = z.object({
   protagonistGoal: z.string().optional(),
   antagonistSetting: z.string().optional(),
   endingPlan: z.string().optional(),
-  vendor: vendorEnum.default('DEEPSEEK'),
+  aiModelId: z.number().int().positive().optional(),
+  vendor: vendorEnum.optional(),
   temperature: z.number().min(0).max(2).default(0.7),
 })
 
-// ============================================
-// API Handler
-// ============================================
-
-/**
- * POST /api/novel/ai/generate-outline
- * AI 生成小说大纲
- */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -42,11 +32,11 @@ export async function POST(request: NextRequest) {
       protagonistGoal,
       antagonistSetting,
       endingPlan,
+      aiModelId,
       vendor: requestedVendor,
       temperature,
     } = generateOutlineSchema.parse(body)
 
-    // 构建提示词
     const prompt = buildOutlineGenerationPrompt({
       projectTitle,
       genre,
@@ -58,17 +48,23 @@ export async function POST(request: NextRequest) {
       endingPlan
     })
 
-    // 获取 AI Provider - 直接使用环境变量，不依赖数据库
-    const vendor = requestedVendor || getDefaultVendor()
-    const provider = createProviderFromEnv(vendor)
+    // 优先使用指定的 AI 模型配置，其次使用 vendor，最后使用默认
+    let provider
+    if (aiModelId) {
+      const dbProvider = await createProviderFromConfigId(aiModelId)
+      if (dbProvider) {
+        provider = dbProvider
+      }
+    }
+    if (!provider) {
+      const vendor = (requestedVendor || getDefaultVendor()) as AIVendor
+      provider = createProviderFromEnv(vendor)
+    }
 
-    // 生成
     const result = await provider.generate(prompt, { temperature })
 
-    // 尝试解析 JSON
     let outlineStages = null
     try {
-      // 尝试从结果中提取 JSON
       const jsonMatch = result.content.match(/\{[\s\S]*\}/)
       if (jsonMatch) {
         outlineStages = JSON.parse(jsonMatch[0])
@@ -94,7 +90,7 @@ export async function POST(request: NextRequest) {
     }
     logError(error instanceof Error ? error : new Error(String(error)), { type: 'generate_outline' })
     return NextResponse.json(
-      { success: false, error: { code: 'GENERATE_ERROR', message: '生成大纲失败' } },
+      { success: false, error: { code: 'GENERATE_ERROR', message: error instanceof Error ? error.message : '生成大纲失败' } },
       { status: 500 }
     )
   }

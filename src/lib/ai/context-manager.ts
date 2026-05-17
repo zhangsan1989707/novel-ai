@@ -1,5 +1,4 @@
 import type { PromptContext } from './types'
-import type { NovelChapter } from '@/types'
 import type { ProjectDTO, ChapterDTO } from '@/types/dto'
 
 /**

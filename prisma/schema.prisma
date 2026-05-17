@@ -136,6 +136,7 @@ model AIModelConfig {
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
 
+  @@index([isDefault])
   @@map("ai_model_configs")
 }
 
@@ -204,6 +205,7 @@ model NovelProject {
 
   @@index([creatorId])
   @@index([status])
+  @@index([creatorId, status])
   @@map("novel_projects")
 }
 

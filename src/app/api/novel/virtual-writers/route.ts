@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { WriterType } from '@/types'
 import { logError } from '@/lib/logger'
+import { getCurrentUserId } from '@/lib/auth'
 
 // ============================================
 // Schema 验证
@@ -98,8 +99,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const data = createVirtualWriterSchema.parse(body)
 
-    // TODO: 从 session 获取真实 creatorId
-    const creatorId = 1
+    const creatorId = getCurrentUserId()
 
     const writer = await prisma.virtualWriter.create({
       data: {

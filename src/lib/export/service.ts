@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import type { ExportOptions, ExportResult, ExportedNovel, ExportedChapter } from './types'
+import type { ExportOptions, ExportResult, ExportedNovel } from './types'
 import { logError } from '@/lib/logger'
 
 /**
@@ -38,6 +38,7 @@ export async function exportNovel(
     const timestamp = new Date().toISOString().slice(0, 10)
     let fileName = ''
     let content = ''
+    let contentType = 'text/plain; charset=utf-8'
 
     // 根据格式生成内容
     switch (options.format) {
@@ -48,6 +49,7 @@ export async function exportNovel(
           genre: project.genre ?? undefined
         }, chapters, options)
         fileName = `${sanitizedTitle}_${timestamp}.txt`
+        contentType = 'text/plain; charset=utf-8'
         break
       case 'md':
         content = buildMarkdownContent({
@@ -56,6 +58,7 @@ export async function exportNovel(
           genre: project.genre ?? undefined
         }, chapters, options)
         fileName = `${sanitizedTitle}_${timestamp}.md`
+        contentType = 'text/markdown; charset=utf-8'
         break
       case 'json':
         content = buildJsonContent({
@@ -64,13 +67,11 @@ export async function exportNovel(
           genre: project.genre ?? undefined
         }, chapters, options)
         fileName = `${sanitizedTitle}_${timestamp}.json`
+        contentType = 'application/json; charset=utf-8'
         break
       default:
         return { success: false, fileName: '', error: `不支持的格式: ${options.format}` }
     }
-
-    // 计算总字数
-    const totalWordCount = chapters.reduce((sum, ch) => sum + (ch.wordCount || 0), 0)
 
     // 如果需要压缩，创建 zip
     if (options.compress) {
@@ -87,7 +88,9 @@ export async function exportNovel(
       success: true,
       fileName,
       filePath: `/exports/${fileName}`,
-      downloadUrl: `/api/novel/projects/${projectId}/export/download?file=${fileName}`,
+      downloadUrl: `/api/novel/projects/${projectId}/export/download?format=${options.format}&includeMetadata=${options.includeMetadata}&includeChapterTitles=${options.includeChapterTitles}`,
+      content,
+      contentType,
     }
   } catch (error) {
     logError(error instanceof Error ? error : new Error(String(error)), { type: 'export_novel', projectId })
@@ -181,7 +184,7 @@ function buildMarkdownContent(
 function buildJsonContent(
   project: { title: string; author?: string; description?: string; genre?: string; createdAt: Date; updatedAt: Date },
   chapters: { chapterNumber: number; title: string; content: string | null; wordCount: number }[],
-  options: ExportOptions
+  _options: ExportOptions
 ): string {
   const exported: ExportedNovel = {
     metadata: {
@@ -229,8 +232,9 @@ export async function exportChapters(
     const project = await prisma.novelProject.findUnique({ where: { id: projectId } })
     const sanitizedTitle = (project?.title || 'novel').replace(/[^a-zA-Z0-9一-龥]/g, '_')
 
-    let content = ''
     let extension = ''
+    let content = ''
+    let contentType = 'text/plain; charset=utf-8'
 
     switch (options.format) {
       case 'txt':
@@ -240,6 +244,7 @@ export async function exportChapters(
           genre: project?.genre ?? undefined
         }, chapters, options)
         extension = 'txt'
+        contentType = 'text/plain; charset=utf-8'
         break
       case 'md':
         content = buildMarkdownContent({
@@ -248,6 +253,7 @@ export async function exportChapters(
           genre: project?.genre ?? undefined
         }, chapters, options)
         extension = 'md'
+        contentType = 'text/markdown; charset=utf-8'
         break
       default:
         return { success: false, fileName: '', error: `不支持的格式: ${options.format}` }
@@ -259,6 +265,8 @@ export async function exportChapters(
       success: true,
       fileName,
       filePath: `/exports/${fileName}`,
+      content,
+      contentType,
     }
   } catch (error) {
     return {

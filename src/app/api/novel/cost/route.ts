@@ -6,6 +6,7 @@ import {
   initializeDefaultPricings,
 } from '@/lib/cost-tracker'
 import { prisma } from '@/lib/prisma'
+import { getCurrentUserId } from '@/lib/auth'
 
 /**
  * GET /api/novel/cost
@@ -15,7 +16,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const action = searchParams.get('action')
-    const userId = 1 // TODO: 后续接入认证后修改
+    const userId = getCurrentUserId()
 
     // 初始化默认定价（首次运行时）
     await initializeDefaultPricings()
@@ -74,7 +75,7 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
-    const userId = 1 // TODO: 后续接入认证后修改
+    const userId = getCurrentUserId()
 
     const { monthlyLimit, alertThreshold } = body
 

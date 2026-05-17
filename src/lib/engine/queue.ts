@@ -4,7 +4,6 @@
  * 生产环境建议使用 BullMQ + Redis
  */
 import { prisma } from '@/lib/prisma'
-import { ChapterStatus } from '@prisma/client'
 
 interface QueueJob {
   id: string

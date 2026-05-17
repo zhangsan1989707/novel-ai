@@ -2,7 +2,6 @@
  * 多模型智能路由系统
  * 根据任务类型自动选择最优模型
  */
-import { AIService } from '@/lib/ai/service'
 import { AIVendor } from '@/types'
 import { getModelPricing as getModelPricingFromTracker } from '@/lib/cost-tracker'
 

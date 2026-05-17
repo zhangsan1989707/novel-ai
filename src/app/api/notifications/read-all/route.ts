@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getCurrentUserId } from '@/lib/auth'
 
-const DEFAULT_USER_ID = 1 // TODO: 后续接入认证后修改
+const DEFAULT_USER_ID = getCurrentUserId()
 
 /**
  * PATCH /api/notifications/read-all

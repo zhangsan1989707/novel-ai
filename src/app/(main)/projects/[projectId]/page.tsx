@@ -1036,6 +1036,7 @@ export default function ProjectDetailPage() {
           protagonistGoal={project.protagonistGoal || undefined}
           antagonistSetting={project.antagonistSetting || undefined}
           endingPlan={project.endingPlan || undefined}
+          aiModelId={project.aiModelId || undefined}
           showIntro={false}
           onApply={async (outline, outlineStages) => {
             try {

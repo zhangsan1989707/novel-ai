@@ -1,7 +1,6 @@
 /**
  * 增强版校验 Agent Prompt - 精细化一致性检查
  */
-import type { CharacterProfile, PlotlineData } from '@/lib/engine/types'
 
 interface ValidatorPromptInput {
   chapterNo: number

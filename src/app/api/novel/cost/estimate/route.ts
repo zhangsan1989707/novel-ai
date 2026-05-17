@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { AIVendor } from '@/types'
+import { getCurrentUserId } from '@/lib/auth'
 
 // 默认定价 (每百万 tokens，元)
 const DEFAULT_PRICING = {
@@ -177,9 +178,8 @@ export async function POST(request: Request) {
     let willExceedQuota = false
     
     try {
-      // 临时：使用默认用户 ID
-      const DEFAULT_USER_ID = 1
-      
+      const DEFAULT_USER_ID = getCurrentUserId()
+
       const quota = await prisma.userQuota.findUnique({
         where: { userId: DEFAULT_USER_ID },
       })
