@@ -153,16 +153,54 @@ export function buildChapterListPrompt(input: ChapterListGenerationInput): strin
   parts.push(`  ]`)
   parts.push(`}`)
   parts.push(`字段说明：`)
-  parts.push(`- chapters: 必须恰好包含 ${outputChapterCount} 个元素`)
   if (hasExistingChapters) {
     parts.push(`- chapters[].chapterNumber: 必须是从 ${startChapterNumber} 到 ${endChapterNumber} 的连续整数`)
   } else {
     parts.push(`- chapters[].chapterNumber: 必须是从 1 到 ${input.totalChapters} 的连续整数`)
   }
   parts.push(`- chapters[].title: 章节标题`)
-  parts.push(`- chapters[].summary: ⚠️ 必填！章节概要（50-100字），每个章节都必须包含，不得省略、留空或输出null！`)
+  parts.push(`- chapters[].summary: ⚠️ 绝对必填！每个章节都必须有50-100字的概要描述！`)
+  parts.push(`  ❌ 严禁出现空字符串""、null、undefined或省略该字段！`)
+  parts.push(`  ❌ 严禁只写"待补充"、"暂无"等占位文字！`)
+  parts.push(`  ✅ 必须为每个章节写出具体的情节概要，包含主要事件和冲突！`)
+  parts.push(`  示例："主角在逃亡中触发银色硬币，被拉入时间裂缝，看到三天前的自己手中握着字条"`)
   parts.push(`- chapters[].wordCount: 预估字数（2000-5000之间）`)
   parts.push(`- chapters[].plotType: 情节类型（setup/develop/climax/resolution/transition）`)
+
+  return parts.join('\n')
+}
+
+export function buildSummaryCompletionPrompt(
+  chapters: Array<{ chapterNumber: number; title: string; summary?: string }>,
+  projectTitle: string,
+  genre?: string
+): string {
+  const parts: string[] = []
+
+  parts.push(`你是一个专业的小说编辑。以下是一部小说的章节列表，其中部分章节缺少概要描述。`)
+  parts.push(`请为每个缺少概要的章节补充50-100字的具体情节概要。`)
+  parts.push(`概要必须包含该章的主要事件、冲突或悬念，不得使用占位文字。`)
+  parts.push(``)
+  parts.push(`小说标题：${projectTitle}`)
+  if (genre) parts.push(`类型：${genre}`)
+  parts.push(``)
+  parts.push(`章节列表：`)
+
+  for (const ch of chapters) {
+    if (ch.summary && ch.summary.trim()) {
+      parts.push(`第${ch.chapterNumber}章 ${ch.title}：${ch.summary}`)
+    } else {
+      parts.push(`第${ch.chapterNumber}章 ${ch.title}：【缺少概要，需要补充】`)
+    }
+  }
+
+  parts.push(``)
+  parts.push(`请输出JSON格式，为每个缺少概要的章节补充：`)
+  parts.push(`{`)
+  parts.push(`  "summaries": [`)
+  parts.push(`    { "index": 章节在数组中的位置(从0开始), "summary": "该章的概要描述" }`)
+  parts.push(`  ]`)
+  parts.push(`}`)
 
   return parts.join('\n')
 }

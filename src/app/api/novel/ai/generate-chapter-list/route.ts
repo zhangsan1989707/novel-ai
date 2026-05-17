@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { createProviderFromDefaultConfig, getAIProvider } from '@/lib/ai'
 import { AIVendor } from '@/types'
 import { prisma } from '@/lib/prisma'
-import { buildChapterListPrompt } from '@/lib/ai/prompts'
+import { buildChapterListPrompt, buildSummaryCompletionPrompt } from '@/lib/ai/prompts'
 import { logError } from '@/lib/logger'
 
 const vendorEnum = z.enum(['OPENAI', 'ANTHROPIC', 'ALIBABA', 'DEEPSEEK', 'MINIMAX', 'VOLCENGINE'])
@@ -145,15 +145,44 @@ export async function POST(request: NextRequest) {
           }
 
           let missingSummaryCount = 0
-          for (const ch of chapterList.chapters) {
+          const missingSummaryIndices: number[] = []
+          for (let i = 0; i < chapterList.chapters.length; i++) {
+            const ch = chapterList.chapters[i]
             if (!ch.summary || typeof ch.summary !== 'string' || ch.summary.trim() === '') {
               missingSummaryCount++
-              ch.summary = ch.summary || ''
+              missingSummaryIndices.push(i)
             }
           }
+
           if (missingSummaryCount > 0) {
-            const summaryWarning = `有 ${missingSummaryCount} 个章节缺少简介，建议补充`
-            parseError = parseError ? `${parseError}；${summaryWarning}` : summaryWarning
+            const summaryPrompt = buildSummaryCompletionPrompt(chapterList.chapters, projectTitle, genre)
+            try {
+              const summaryResult = await provider.generate(summaryPrompt, { temperature: 0.5 })
+              const summaryMatch = summaryResult.content.match(/\{[\s\S]*\}/)
+              if (summaryMatch) {
+                const cleaned = summaryMatch[0].replace(/,\s*([\]}])/g, '$1')
+                const summaryData = JSON.parse(cleaned)
+                if (summaryData.summaries && Array.isArray(summaryData.summaries)) {
+                  for (const item of summaryData.summaries) {
+                    const idx = typeof item.index === 'number' ? item.index : missingSummaryIndices[item.index]
+                    if (idx >= 0 && idx < chapterList.chapters.length && item.summary && typeof item.summary === 'string') {
+                      chapterList.chapters[idx].summary = item.summary
+                    }
+                  }
+                  missingSummaryCount = 0
+                  for (const ch of chapterList.chapters) {
+                    if (!ch.summary || ch.summary.trim() === '') missingSummaryCount++
+                  }
+                }
+              }
+            } catch (e) {
+              console.warn('[generate-chapter-list] Summary completion failed:', e)
+            }
+
+            if (missingSummaryCount > 0) {
+              const summaryWarning = `有 ${missingSummaryCount} 个章节缺少简介，建议补充`
+              parseError = parseError ? `${parseError}；${summaryWarning}` : summaryWarning
+            }
           }
         }
       }

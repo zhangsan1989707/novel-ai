@@ -391,7 +391,11 @@ export function ChapterListGenerator({
                         <td className="px-4 py-3 text-gray-500 text-xs max-w-xs">
                           <div className="flex items-start gap-2">
                             <FileText className="h-3 w-3 mt-0.5 shrink-0 text-gray-400" />
-                            <span className="line-clamp-2">{chapter.summary}</span>
+                            {chapter.summary ? (
+                              <span className="line-clamp-2">{chapter.summary}</span>
+                            ) : (
+                              <span className="text-gray-300 dark:text-gray-600 italic">暂无章节介绍</span>
+                            )}
                           </div>
                         </td>
                         <td className="px-4 py-3 w-24">

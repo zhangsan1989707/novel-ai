@@ -18,6 +18,7 @@ export {
   buildEndingPrompt,
   buildSynopsisGenerationPrompt,
   buildChapterListPrompt,
+  buildSummaryCompletionPrompt,
   buildIdeaGenerationPrompt,
 } from '@/lib/prompts'
 

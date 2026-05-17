@@ -61,6 +61,7 @@ export {
 } from './novel/synopsis'
 export {
   buildChapterListPrompt,
+  buildSummaryCompletionPrompt,
   type ChapterListGenerationInput,
 } from './novel/chapter-list'
 export {
