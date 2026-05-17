@@ -1,11 +1,11 @@
 services:
   db:
-    image: postgres:16-alpine
+    image: postgres:15-alpine
     container_name: novelai-db
     environment:
-      POSTGRES_USER: novelai
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: novel_ai
+      POSTGRES_USER: ${POSTGRES_USER:-novelai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: ${POSTGRES_DB:-novel_ai}
     ports:
       - "5432:5432"
     volumes:
@@ -23,18 +23,10 @@ services:
       dockerfile: Dockerfile
     ports:
       - "3200:3200"
+    env_file: .env
     environment:
       - NODE_ENV=production
-      - DATABASE_URL=${DATABASE_URL}
-      - DEFAULT_AI_VENDOR=${DEFAULT_AI_VENDOR}
-      - DEFAULT_AI_MODEL_ID=${DEFAULT_AI_MODEL_ID}
-      - DEFAULT_AI_API_KEY=${DEFAULT_AI_API_KEY}
-      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - ALIBABA_API_KEY=${ALIBABA_API_KEY}
-      - MINIMAX_API_KEY=${MINIMAX_API_KEY}
-      - VOLCENGINE_API_KEY=${VOLCENGINE_API_KEY}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-novelai}:${POSTGRES_PASSWORD:-password}@db:5432/${POSTGRES_DB:-novel_ai}
     restart: unless-stopped
     depends_on:
       db:
