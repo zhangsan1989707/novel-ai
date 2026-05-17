@@ -130,6 +130,13 @@ export class AIService {
           modelId: process.env.DASHSCOPE_MODEL_ID || 'qwen-max',
           apiKey: process.env.DASHSCOPE_API_KEY || '',
         }
+      case AIVendor.VOLCENGINE:
+        return {
+          vendor: AIVendor.VOLCENGINE,
+          modelId: process.env.VOLCENGINE_MODEL_ID || 'ark-code-latest',
+          apiKey: process.env.VOLCENGINE_API_KEY || '',
+          apiEndpoint: process.env.VOLCENGINE_API_ENDPOINT || 'https://ark.cn-beijing.volces.com/api/coding/v3',
+        }
       case AIVendor.DEEPSEEK:
       default:
         return {
