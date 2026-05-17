@@ -127,7 +127,13 @@ export function ChapterListGenerator({
       const data = await res.json()
 
       if (data.success && data.data.chapterList?.chapters) {
-        const newChapters: ChapterItem[] = data.data.chapterList.chapters
+        const newChapters: ChapterItem[] = data.data.chapterList.chapters.map(
+          (ch: Record<string, unknown>) => ({
+            chapterNumber: ch.chapterNumber as number,
+            title: (ch.title as string) || '',
+            summary: (ch.summary as string) || '',
+          })
+        )
         setChapters((prev) => {
           if (prev.length === 0) return newChapters
           // 追加模式：已有章节时继续生成，API 应该已经返回正确续接的章节号
@@ -145,7 +151,13 @@ export function ChapterListGenerator({
             const cleaned = jsonMatch[0].replace(/,\s*([\]}])/g, '$1')
             const parsed = JSON.parse(cleaned)
             if (parsed.chapters) {
-              const newChapters: ChapterItem[] = parsed.chapters
+              const newChapters: ChapterItem[] = parsed.chapters.map(
+                (ch: Record<string, unknown>) => ({
+                  chapterNumber: ch.chapterNumber as number,
+                  title: (ch.title as string) || '',
+                  summary: (ch.summary as string) || '',
+                })
+              )
               setChapters((prev) => {
                 if (prev.length === 0) return newChapters
                 // 追加模式：已有章节时继续生成

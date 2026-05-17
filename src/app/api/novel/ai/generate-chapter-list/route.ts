@@ -128,22 +128,32 @@ export async function POST(request: NextRequest) {
           .replace(/,\s*([\]}])/g, '$1')
         chapterList = JSON.parse(cleaned)
 
-        // 验证章节数量是否与请求的一致
         if (chapterList?.chapters && Array.isArray(chapterList.chapters)) {
           const generatedCount = chapterList.chapters.length
-          if (generatedCount !== totalChapters) {
+          const existingCount = body.existingChapters?.length || 0
+          const expectedCount = existingCount > 0 ? totalChapters - existingCount : totalChapters
+          if (generatedCount !== expectedCount) {
             console.warn(
-              `[generate-chapter-list] 警告：请求 ${totalChapters} 章，AI 返回 ${generatedCount} 章，将自动截取/补足`
+              `[generate-chapter-list] 警告：期望 ${expectedCount} 章，AI 返回 ${generatedCount} 章，将自动截取/补足`
             )
-            // 如果 AI 返回的章节数量不对，截取或记录
-            if (generatedCount > totalChapters) {
-              // 截取多余的章节
-              chapterList.chapters = chapterList.chapters.slice(0, totalChapters)
+            if (generatedCount > expectedCount) {
+              chapterList.chapters = chapterList.chapters.slice(0, expectedCount)
             }
-            // 如果少于要求，标记为解析问题
-            if (generatedCount < totalChapters) {
-              parseError = `AI 只生成了 ${generatedCount} 章，少于要求的 ${totalChapters} 章`
+            if (generatedCount < expectedCount) {
+              parseError = `AI 只生成了 ${generatedCount} 章，少于要求的 ${expectedCount} 章`
             }
+          }
+
+          let missingSummaryCount = 0
+          for (const ch of chapterList.chapters) {
+            if (!ch.summary || typeof ch.summary !== 'string' || ch.summary.trim() === '') {
+              missingSummaryCount++
+              ch.summary = ch.summary || ''
+            }
+          }
+          if (missingSummaryCount > 0) {
+            const summaryWarning = `有 ${missingSummaryCount} 个章节缺少简介，建议补充`
+            parseError = parseError ? `${parseError}；${summaryWarning}` : summaryWarning
           }
         }
       }

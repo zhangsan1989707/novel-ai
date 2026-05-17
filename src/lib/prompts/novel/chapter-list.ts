@@ -145,7 +145,7 @@ export function buildChapterListPrompt(input: ChapterListGenerationInput): strin
   parts.push(`    {`)
   parts.push(`      "chapterNumber": ${startChapterNumber},`)
   parts.push(`      "title": "...",`)
-  parts.push(`      "summary": "...",`)
+  parts.push(`      "summary": "（必填！50-100字的章节概要，不得省略）",`)
   parts.push(`      "wordCount": 3000,`)
   parts.push(`      "plotType": "setup"`)
   parts.push(`    }`)
@@ -160,7 +160,7 @@ export function buildChapterListPrompt(input: ChapterListGenerationInput): strin
     parts.push(`- chapters[].chapterNumber: 必须是从 1 到 ${input.totalChapters} 的连续整数`)
   }
   parts.push(`- chapters[].title: 章节标题`)
-  parts.push(`- chapters[].summary: 章节概要（50-100字）`)
+  parts.push(`- chapters[].summary: ⚠️ 必填！章节概要（50-100字），每个章节都必须包含，不得省略、留空或输出null！`)
   parts.push(`- chapters[].wordCount: 预估字数（2000-5000之间）`)
   parts.push(`- chapters[].plotType: 情节类型（setup/develop/climax/resolution/transition）`)
 
