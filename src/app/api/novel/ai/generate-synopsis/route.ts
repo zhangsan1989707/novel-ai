@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
 import { buildSynopsisGenerationPrompt } from '@/lib/ai/prompts'
-import { getAIProvider, createProviderFromDefaultConfig } from '@/lib/ai/factory'
-import { AIVendor } from '@/types'
+import { createProviderFromEnv, getDefaultVendor } from '@/lib/ai'
 import { logError } from '@/lib/logger'
 
 /**
@@ -10,12 +8,11 @@ import { logError } from '@/lib/logger'
  * AI 生成/润色小说简介
  */
 export async function POST(request: NextRequest) {
-  let projectId: number | null = null
+  let projectTitle: string | null = null
   try {
     const body = await request.json()
-    projectId = body.projectId
+    projectTitle = body.projectTitle
     const {
-      projectTitle,
       existingSynopsis,
       targetAudience,
       genre,
@@ -28,7 +25,7 @@ export async function POST(request: NextRequest) {
       endingPlan,
       outline,
       targetWordCount,
-      aiModelId,
+      vendor,
     } = body
 
     if (!projectTitle) {
@@ -38,26 +35,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 获取 AI Provider
-    let provider
-    if (aiModelId) {
-      const modelConfig = await prisma.aIModelConfig.findUnique({
-        where: { id: aiModelId },
-      })
-      if (modelConfig) {
-        provider = getAIProvider(modelConfig.vendor as AIVendor, {
-          vendor: modelConfig.vendor as AIVendor,
-          modelId: modelConfig.modelId,
-          apiKey: modelConfig.apiKey || '',
-          apiEndpoint: modelConfig.apiEndpoint || undefined,
-        })
-      }
-    }
-
-    if (!provider) {
-      // 使用默认的 AI provider
-      provider = await createProviderFromDefaultConfig()
-    }
+    // 获取 AI Provider - 直接使用环境变量
+    const selectedVendor = vendor || getDefaultVendor()
+    const provider = createProviderFromEnv(selectedVendor)
 
     // 构建提示词
     const prompt = buildSynopsisGenerationPrompt({
@@ -90,7 +70,7 @@ export async function POST(request: NextRequest) {
       },
     })
   } catch (error) {
-    logError(error instanceof Error ? error : new Error(String(error)), { type: 'generate_synopsis', projectId })
+    logError(error instanceof Error ? error : new Error(String(error)), { type: 'generate_synopsis', projectTitle })
     return NextResponse.json(
       { success: false, error: { code: 'GENERATION_ERROR', message: '生成简介失败' } },
       { status: 500 }

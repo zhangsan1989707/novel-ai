@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { createProviderFromDefaultConfig, getAIProvider } from '@/lib/ai'
-import { AIVendor } from '@/types'
+import { createProviderFromEnv, getDefaultVendor } from '@/lib/ai'
 import { prisma } from '@/lib/prisma'
 import { buildChapterListPrompt, buildSummaryCompletionPrompt } from '@/lib/ai/prompts'
 import { logError } from '@/lib/logger'
@@ -50,24 +49,27 @@ export async function POST(request: NextRequest) {
       totalChapters,
       titleStyle,
       aiModelId,
-      vendor,
+      vendor: requestedVendor,
       temperature,
     } = generateChapterListSchema.parse(body)
 
-    // 如果有项目ID，从数据库获取大纲
+    // 如果有项目ID，从数据库获取大纲（尝试获取，但失败了也不中断）
     let dbOutline = outline
     let dbOutlineStages = outlineStages
     
     if (projectId) {
-      const project = await prisma.novelProject.findUnique({
-        where: { id: projectId },
-        select: { outline: true, outlineStages: true },
-      })
-      
-      if (project) {
-        // 如果传入的没有大纲，使用数据库中的
-        if (!dbOutline) dbOutline = project.outline ?? undefined
-        if (!dbOutlineStages) dbOutlineStages = project.outlineStages ?? undefined
+      try {
+        const project = await prisma.novelProject.findUnique({
+          where: { id: projectId },
+          select: { outline: true, outlineStages: true },
+        })
+        
+        if (project) {
+          if (!dbOutline) dbOutline = project.outline ?? undefined
+          if (!dbOutlineStages) dbOutlineStages = project.outlineStages ?? undefined
+        }
+      } catch {
+        // 数据库操作失败，继续使用传入的参数
       }
     }
 
@@ -87,34 +89,9 @@ export async function POST(request: NextRequest) {
       existingChapters: body.existingChapters,
     })
 
-    let provider
-    let configError = ''
-
-    if (aiModelId) {
-      const config = await prisma.aIModelConfig.findUnique({
-        where: { id: aiModelId },
-      })
-      if (config && config.apiKey && config.apiKey !== 'your-api-key-placeholder') {
-        provider = getAIProvider(config.vendor as AIVendor, {
-          vendor: config.vendor as AIVendor,
-          modelId: config.modelId,
-          apiKey: config.apiKey,
-          apiEndpoint: config.apiEndpoint || undefined,
-        })
-      } else {
-        configError = 'AI模型配置无效或未设置API密钥'
-        provider = await createProviderFromDefaultConfig()
-      }
-    } else {
-      provider = await createProviderFromDefaultConfig()
-    }
-
-    if (configError) {
-      return NextResponse.json(
-        { success: false, error: { code: 'CONFIG_ERROR', message: configError } },
-        { status: 400 }
-      )
-    }
+    // 获取 AI Provider - 直接使用环境变量
+    const vendor = requestedVendor || getDefaultVendor()
+    const provider = createProviderFromEnv(vendor)
 
     const result = await provider.generate(prompt, { temperature })
 
@@ -123,7 +100,6 @@ export async function POST(request: NextRequest) {
     try {
       const jsonMatch = result.content.match(/\{[\s\S]*\}/)
       if (jsonMatch) {
-        // 清理 AI 常见的 JSON 格式问题（尾随逗号）
         const cleaned = jsonMatch[0]
           .replace(/,\s*([\]}])/g, '$1')
         chapterList = JSON.parse(cleaned)

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { buildIdeaGenerationPrompt } from '@/lib/ai/prompts'
-import { getAIProvider, createProviderFromDefaultConfig } from '@/lib/ai/factory'
-import { AIVendor } from '@/types'
+import { createProviderFromEnv, getDefaultVendor } from '@/lib/ai'
 import { logError } from '@/lib/logger'
 
 /**
@@ -22,7 +21,7 @@ export async function POST(request: NextRequest) {
       existingProtagonistGoal,
       existingAntagonistSetting,
       existingEndingPlan,
-      aiModelId,
+      vendor,
     } = body
 
     if (!projectTitle) {
@@ -32,26 +31,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 获取 AI Provider
-    let provider
-    if (aiModelId) {
-      const { prisma } = await import('@/lib/prisma')
-      const modelConfig = await prisma.aIModelConfig.findUnique({
-        where: { id: aiModelId },
-      })
-      if (modelConfig) {
-        provider = getAIProvider(modelConfig.vendor as AIVendor, {
-          vendor: modelConfig.vendor as AIVendor,
-          modelId: modelConfig.modelId,
-          apiKey: modelConfig.apiKey || '',
-          apiEndpoint: modelConfig.apiEndpoint || undefined,
-        })
-      }
-    }
-
-    if (!provider) {
-      provider = await createProviderFromDefaultConfig()
-    }
+    // 获取 AI Provider - 直接使用环境变量
+    const selectedVendor = vendor || getDefaultVendor()
+    const provider = createProviderFromEnv(selectedVendor)
 
     // 构建提示词
     const prompt = buildIdeaGenerationPrompt({
@@ -73,7 +55,6 @@ export async function POST(request: NextRequest) {
       if (jsonMatch) {
         generatedIdea = JSON.parse(jsonMatch[0])
       } else {
-        // 如果无法解析为 JSON，返回原始内容让前端处理
         return NextResponse.json({
           success: true,
           data: {
@@ -90,8 +71,7 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // 合并已有设定和生成设定（优先使用已有设定）
-    // 注意：部分字段可能是嵌套对象，需要转为字符串
+    // 合并已有设定和生成设定
     const formatField = (existing: string | undefined, generated: unknown): string => {
       if (existing) return existing
       if (!generated) return ''

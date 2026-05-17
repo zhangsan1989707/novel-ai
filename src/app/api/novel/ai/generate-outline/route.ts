@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { createProviderFromDefaultConfig, buildOutlineGenerationPrompt } from '@/lib/ai'
-import { AIVendor } from '@/types'
+import { createProviderFromEnv, buildOutlineGenerationPrompt, getDefaultVendor } from '@/lib/ai'
 import { logger, logError } from '@/lib/logger'
 
 // ============================================
@@ -43,7 +42,7 @@ export async function POST(request: NextRequest) {
       protagonistGoal,
       antagonistSetting,
       endingPlan,
-      vendor,
+      vendor: requestedVendor,
       temperature,
     } = generateOutlineSchema.parse(body)
 
@@ -59,8 +58,9 @@ export async function POST(request: NextRequest) {
       endingPlan
     })
 
-    // 获取 AI Provider - 优先使用数据库默认配置
-    const provider = await createProviderFromDefaultConfig()
+    // 获取 AI Provider - 直接使用环境变量，不依赖数据库
+    const vendor = requestedVendor || getDefaultVendor()
+    const provider = createProviderFromEnv(vendor)
 
     // 生成
     const result = await provider.generate(prompt, { temperature })
