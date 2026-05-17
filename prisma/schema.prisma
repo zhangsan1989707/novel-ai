@@ -64,10 +64,14 @@ model User {
   id            Int             @id @default(autoincrement())
   email         String          @unique
   name          String?
-  password      String
+  password      String?
+  emailVerified DateTime?
+  image         String?
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
 
+  accounts      Account[]
+  sessions      Session[]
   projects      NovelProject[]
   virtualWriters VirtualWriter[]
   publicCharacters Character[]   @relation("CharacterCreator")
@@ -76,6 +80,45 @@ model User {
   notifications Notification[]
 
   @@map("users")
+}
+
+model Account {
+  id                Int      @id @default(autoincrement())
+  userId            Int
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?  @db.Text
+  access_token      String?  @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?  @db.Text
+  session_state     String?
+
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           Int      @id @default(autoincrement())
+  sessionToken String   @unique
+  userId       Int
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
 }
 
 model AIModelConfig {

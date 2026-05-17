@@ -3,9 +3,16 @@ import { logger } from '@/lib/logger'
 import { getTraceableAIProvider } from './factory'
 import type { AIProvider, AIConfig } from './types'
 import { AIVendor } from '@/types'
+import { auth } from '@/lib/auth'
 
-// 默认用户 ID（临时方案）
-const DEFAULT_USER_ID = 1
+// 获取当前用户
+async function getCurrentUserId() {
+  const session = await auth()
+  if (session?.user?.id) {
+    return parseInt(session.user.id)
+  }
+  throw new Error('未登录用户')
+}
 
 export interface GenerateOptions {
   userId?: number
@@ -28,7 +35,7 @@ export class AIService {
     } & GenerateOptions
   ): Promise<AIProvider> {
     const { projectId, configId, vendor: preferredVendor } = options || {}
-    const userId = options?.userId || DEFAULT_USER_ID
+    const userId = options?.userId || (await getCurrentUserId())
 
     let config: AIConfig | null = null
 

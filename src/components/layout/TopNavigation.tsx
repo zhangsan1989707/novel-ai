@@ -1,11 +1,13 @@
 'use client'
 
 import { useRouter, usePathname } from 'next/navigation'
+import { useSession, signOut } from 'next-auth/react'
 import { Button } from '@/components/ui'
-import { BookOpen, Settings, DollarSign, Search, TrendingUp } from 'lucide-react'
+import { BookOpen, Settings, DollarSign, Search, TrendingUp, User, LogOut } from 'lucide-react'
 import { ThemeToggle } from './ThemeToggle'
 import { NotificationDropdown } from './NotificationDropdown'
 import { HelpModal } from './HelpModal'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/DropdownMenu'
 
 interface TopNavigationProps {
   children: React.ReactNode
@@ -21,6 +23,7 @@ const navItems = [
 export function TopNavigation({ children }: TopNavigationProps) {
   const router = useRouter()
   const pathname = usePathname()
+  const { data: session } = useSession()
 
   const isActive = (href: string) => {
     if (href === '/projects') {
@@ -80,6 +83,35 @@ export function TopNavigation({ children }: TopNavigationProps) {
 
               {/* 主题切换 */}
               <ThemeToggle />
+
+              {/* 用户菜单 */}
+              {session?.user && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger>
+                    <Button variant="ghost" size="sm" className="gap-2">
+                      {session.user.image ? (
+                        <img
+                          src={session.user.image}
+                          alt={session.user.name || ''}
+                          className="h-6 w-6 rounded-full"
+                        />
+                      ) : (
+                        <User className="h-4 w-4" />
+                      )}
+                      <span className="hidden sm:inline">{session.user.name || session.user.email}</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent>
+                    <DropdownMenuItem
+                      onClick={() => signOut({ callbackUrl: '/' })}
+                      className="text-red-600"
+                    >
+                      <LogOut className="h-4 w-4 mr-2" />
+                      退出登录
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
             </div>
           </div>
         </div>

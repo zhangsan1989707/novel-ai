@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { Analytics } from '@vercel/analytics/next'
+import { SessionProvider } from 'next-auth/react'
 import './globals.css'
 import { ToastContainer } from '@/components/ui/Toast'
 import '@/lib/agents/adapters'
@@ -17,8 +18,10 @@ export default function RootLayout({
   return (
     <html lang="zh-CN">
       <body className="min-h-full antialiased">
-        {children}
-        <ToastContainer />
+        <SessionProvider>
+          {children}
+          <ToastContainer />
+        </SessionProvider>
         <Analytics />
       </body>
     </html>

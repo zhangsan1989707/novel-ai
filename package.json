@@ -18,6 +18,7 @@
     "docker:logs": "bash scripts/docker-logs.sh"
   },
   "dependencies": {
+    "@auth/prisma-adapter": "^2.11.2",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
@@ -34,6 +35,7 @@
     "lru-cache": "^11.3.6",
     "lucide-react": "^1.14.0",
     "next": "16.2.4",
+    "next-auth": "^5.0.0-beta.31",
     "pino": "^10.3.1",
     "prisma": "^6.19.3",
     "react": "19.2.4",
