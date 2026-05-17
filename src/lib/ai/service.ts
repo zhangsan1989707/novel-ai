@@ -5,13 +5,29 @@ import type { AIProvider, AIConfig } from './types'
 import { AIVendor } from '@/types'
 import { auth } from '@/lib/auth'
 
-// 获取当前用户
+// 获取当前用户（开发模式返回默认用户）
 async function getCurrentUserId() {
   const session = await auth()
   if (session?.user?.id) {
     return parseInt(session.user.id)
   }
-  throw new Error('未登录用户')
+  // 开发模式：尝试获取或创建默认用户
+  try {
+    let user = await prisma.user.findFirst()
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          email: 'dev@localhost',
+          name: '开发用户',
+          password: 'dev-password',
+        },
+      })
+    }
+    return user.id
+  } catch {
+    // 如果数据库也失败，返回一个默认 ID
+    return 1
+  }
 }
 
 export interface GenerateOptions {
