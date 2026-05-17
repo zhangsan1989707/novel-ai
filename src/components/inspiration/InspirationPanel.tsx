@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Card, CardContent, Badge, Button } from '@/components/ui'
 import { Sparkles, RefreshCw, ChevronRight, Flame } from 'lucide-react'
 import type { HotInspiration, InspirationCategory } from '@/lib/inspiration/data'
@@ -27,9 +27,9 @@ export function InspirationPanel({ onSelect, compact = false, limit = 6 }: Inspi
   const [inspirations, setInspirations] = useState<HotInspiration[]>([])
   const [loading, setLoading] = useState(true)
   const [activeCategory, setActiveCategory] = useState<InspirationCategory | 'all'>('all')
-  const [isRandom, setIsRandom] = useState(false)
+  const randomRef = useRef(false)
 
-  const fetchInspirations = useCallback(async () => {
+  const fetchInspirations = useCallback(async (random: boolean = false) => {
     setLoading(true)
     try {
       const params = new URLSearchParams()
@@ -38,8 +38,7 @@ export function InspirationPanel({ onSelect, compact = false, limit = 6 }: Inspi
       }
       params.set('limit', String(limit))
 
-      // 刷新时使用随机模式
-      if (isRandom) {
+      if (random) {
         params.set('random', 'true')
       }
 
@@ -52,16 +51,17 @@ export function InspirationPanel({ onSelect, compact = false, limit = 6 }: Inspi
       console.error('获取创作灵感失败:', error)
     } finally {
       setLoading(false)
-      setIsRandom(false)
     }
-  }, [activeCategory, isRandom, limit])
+  }, [activeCategory, limit])
 
   useEffect(() => {
-    void Promise.resolve().then(fetchInspirations)
+    fetchInspirations(randomRef.current)
+    randomRef.current = false
   }, [fetchInspirations])
 
   const handleRefresh = () => {
-    setIsRandom(true)
+    randomRef.current = true
+    fetchInspirations(true)
   }
 
   return (
