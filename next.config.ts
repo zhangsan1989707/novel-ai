@@ -11,18 +11,6 @@ const nextConfig: NextConfig = {
     'd3',
     'lru-cache',
   ],
-  experimental: {
-    optimizePackageImports: [
-      'lucide-react',
-      '@dnd-kit/core',
-      '@dnd-kit/sortable',
-      '@dnd-kit/utilities',
-      '@xyflow/react',
-    ],
-    serverActions: {
-      bodySizeLimit: '2mb',
-    },
-  },
   images: {
     remotePatterns: [
       {
