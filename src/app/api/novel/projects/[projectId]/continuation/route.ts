@@ -272,7 +272,9 @@ export async function POST(
           const contentMatch = fullContent.match(/^内容：$\s*([\s\S]*)$/m)
           
           if (titleMatch && contentMatch) {
-            extractedTitle = titleMatch[1].trim() || chapterTitle
+            let aiTitle = titleMatch[1].trim()
+            aiTitle = aiTitle.replace(/^第\d+章\s*/, '')
+            extractedTitle = aiTitle || chapterTitle
             extractedContent = contentMatch[1].trim()
           }
 

@@ -93,7 +93,7 @@ export function buildNovelGenerationPrompt(
   // 【输出格式】
   parts.push(`\n【输出格式】`)
   parts.push(`请按照以下格式输出：`)
-  parts.push(`标题：[章节标题]`)
+  parts.push(`标题：[章节标题，不要包含"第X章"前缀，只写标题本身]`)
   parts.push(`内容：`)
   parts.push(`[章节内容]`)
 

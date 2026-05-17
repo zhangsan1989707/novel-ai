@@ -145,19 +145,39 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     // 非流式生成
     const result = await provider.generate(prompt, { temperature })
-    const wordCount = countChineseWords(result.content)
+
+    // 解析标题和内容
+    let extractedTitle: string | undefined
+    let extractedContent = result.content
+    
+    const titleMatch = result.content.match(/^标题：(.+)$/m)
+    const contentMatch = result.content.match(/^内容：$\s*([\s\S]*)$/m)
+    
+    if (titleMatch && contentMatch) {
+      let aiTitle = titleMatch[1].trim()
+      aiTitle = aiTitle.replace(/^第\d+章\s*/, '')
+      extractedTitle = aiTitle
+      extractedContent = contentMatch[1].trim()
+    }
+
+    const wordCount = countChineseWords(extractedContent)
 
     // 保存生成内容
     const oldWordCount = chapter.content?.length || 0
     const wordCountDiff = wordCount - oldWordCount
 
+    const updateData: Record<string, unknown> = {
+      content: extractedContent,
+      wordCount,
+      status: 'COMPLETED',
+    }
+    if (extractedTitle) {
+      updateData.title = extractedTitle
+    }
+
     await prisma.novelChapter.update({
       where: { id: chapterId },
-      data: {
-        content: result.content,
-        wordCount,
-        status: 'COMPLETED',
-      },
+      data: updateData,
     })
 
     // 更新项目总字数
@@ -174,7 +194,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       success: true,
       data: {
         chapterId,
-        content: result.content,
+        content: extractedContent,
+        title: extractedTitle,
         wordCount,
         usage: result.usage,
       },
