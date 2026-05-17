@@ -1,8 +1,26 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: 'standalone',
-  serverExternalPackages: ['@prisma/client', 'pino'],
+  serverExternalPackages: [
+    '@prisma/client',
+    'pino',
+    '@auth/prisma-adapter',
+    'adm-zip',
+    'jszip',
+    'epubjs',
+    'd3',
+    'lru-cache',
+    'lucide-react',
+    '@dnd-kit/core',
+    '@dnd-kit/sortable',
+    '@dnd-kit/utilities',
+    '@xyflow/react',
+  ],
+  experimental: {
+    optimizePackageImports: [
+      'lucide-react',
+    ],
+  },
   images: {
     remotePatterns: [
       {
