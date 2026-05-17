@@ -148,72 +148,53 @@ export default function SettingsPage() {
     }
   }
 
-  const handleTestConfig = async (config: AIConfig) => {
-    setTesting(true)
-    setTestResult(null)
-
-    try {
-      const res = await fetch(`/api/novel/ai-configs/${config.id}/test`, {
-        method: 'POST',
-      })
-
-      const data = await res.json()
-
-      if (data.success) {
-        setTestResult({ success: true, message: data.data.response || '测试成功！' })
-      } else {
-        setTestResult({ success: false, message: data.error?.message || '测试失败' })
-      }
-    } catch (error) {
-      setTestResult({ success: false, message: '网络错误，请重试' })
-    } finally {
-      setTesting(false)
-    }
-  }
-
   const handleSubmit = async () => {
     if (!formData.name || !formData.modelId || !formData.apiKey) {
-      alert('请填写完整信息')
+      setTestResult({ success: false, message: '请填写必填字段' })
       return
     }
 
     setSubmitting(true)
+    setTestResult(null)
+
     try {
+      const method = editingConfig ? 'PUT' : 'POST'
       const url = editingConfig
         ? `/api/novel/ai-configs/${editingConfig.id}`
         : '/api/novel/ai-configs'
-      const method = editingConfig ? 'PUT' : 'POST'
+      const body = editingConfig
+        ? { ...formData, id: editingConfig.id }
+        : formData
 
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(body),
       })
 
-      const result = await res.json()
-      if (result.success) {
+      const data = await res.json()
+      if (data.success) {
         setShowModal(false)
         fetchConfigs()
       } else {
-        alert(result.error?.message || '保存失败')
+        setTestResult({ success: false, message: data.error?.message || '保存失败' })
       }
     } catch (error) {
-      console.error('保存失败:', error)
-      alert('保存失败')
+      setTestResult({ success: false, message: '网络错误，请重试' })
     } finally {
       setSubmitting(false)
     }
   }
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (configId: number) => {
     if (!confirm('确定要删除这个配置吗？')) return
 
     try {
-      const res = await fetch(`/api/novel/ai-configs/${id}`, {
+      const res = await fetch(`/api/novel/ai-configs/${configId}`, {
         method: 'DELETE',
       })
-      const result = await res.json()
-      if (result.success) {
+      const data = await res.json()
+      if (data.success) {
         fetchConfigs()
       }
     } catch (error) {
@@ -221,12 +202,10 @@ export default function SettingsPage() {
     }
   }
 
-  const handleSetDefault = async (id: number) => {
+  const handleSetDefault = async (configId: number) => {
     try {
-      const res = await fetch(`/api/novel/ai-configs/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isDefault: true }),
+      const res = await fetch(`/api/novel/ai-configs/${configId}/set-default`, {
+        method: 'POST',
       })
       const result = await res.json()
       if (result.success) {
@@ -237,9 +216,34 @@ export default function SettingsPage() {
     }
   }
 
+  const handleTestConfig = async (config: AIConfig) => {
+    setTesting(true)
+    try {
+      const res = await fetch('/api/novel/ai-configs/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vendor: config.vendor,
+          modelId: config.modelId,
+          apiKey: config.apiKey,
+          apiEndpoint: config.apiEndpoint || undefined,
+        }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        alert('测试成功！')
+      } else {
+        alert('测试失败: ' + (data.error?.message || '未知错误'))
+      }
+    } catch (error) {
+      alert('网络错误，请重试')
+    } finally {
+      setTesting(false)
+    }
+  }
+
   return (
     <>
-      {/* 页面标题 */}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">系统设置</h1>
@@ -271,7 +275,6 @@ export default function SettingsPage() {
                 添加配置
               </Button>
             </div>
-            {/* 提示信息 */}
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-start gap-3">
@@ -287,7 +290,6 @@ export default function SettingsPage() {
               </CardContent>
             </Card>
 
-            {/* 测试结果提示 */}
             {testResult && (
               <Card className={testResult.success ? 'border-green-200' : 'border-red-200'}>
                 <CardContent className="p-4">
@@ -305,83 +307,84 @@ export default function SettingsPage() {
               </Card>
             )}
 
-        {/* 配置列表 */}
-        {loading ? (
-          <div className="text-center py-12 text-gray-500">加载中...</div>
-        ) : configs.length === 0 ? (
-          <Card>
-            <CardContent className="p-8 text-center">
-              <Key className="h-12 w-12 mx-auto text-gray-300 mb-4" />
-              <h3 className="font-medium mb-2">暂无 AI 配置</h3>
-              <p className="text-sm text-gray-500 mb-4">添加您的第一个 AI API 配置</p>
-              <Button onClick={() => openModal()}>
-                <Plus className="h-4 w-4 mr-2" />
-                添加配置
-              </Button>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-3">
-            {configs.map((config) => (
-              <Card key={config.id}>
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="font-medium">{config.name}</span>
-                        <Badge variant="outline">{vendorLabels[config.vendor]}</Badge>
-                        {config.isDefault && (
-                          <Badge variant="success">默认</Badge>
-                        )}
-                      </div>
-                      <div className="text-sm text-gray-500 space-y-1">
-                        <p>模型: {config.modelId}</p>
-                        <p>API Key: {config.apiKey ? '已配置' : '未设置'}</p>
-                        {config.apiEndpoint && <p>端点: {config.apiEndpoint}</p>}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleTestConfig(config)}
-                        disabled={testing}
-                      >
-                        {testing ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Play className="h-4 w-4" />
-                        )}
-                        测试
-                      </Button>
-                      {!config.isDefault && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleSetDefault(config.id)}
-                        >
-                          <Check className="h-4 w-4" />
-                        </Button>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openModal(config)}
-                      >
-                        <Edit2 className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDelete(config.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
+            {loading ? (
+              <div className="text-center py-12 text-gray-500">加载中...</div>
+            ) : configs.length === 0 ? (
+              <Card>
+                <CardContent className="p-8 text-center">
+                  <Key className="h-12 w-12 mx-auto text-gray-300 mb-4" />
+                  <h3 className="font-medium mb-2">暂无 AI 配置</h3>
+                  <p className="text-sm text-gray-500 mb-4">添加您的第一个 AI API 配置</p>
+                  <Button onClick={() => openModal()}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    添加配置
+                  </Button>
                 </CardContent>
               </Card>
-            ))}
+            ) : (
+              <div className="space-y-3">
+                {configs.map((config) => (
+                  <Card key={config.id}>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-medium">{config.name}</span>
+                            <Badge variant="outline">{vendorLabels[config.vendor]}</Badge>
+                            {config.isDefault && (
+                              <Badge variant="success">默认</Badge>
+                            )}
+                          </div>
+                          <div className="text-sm text-gray-500 space-y-1">
+                            <p>模型: {config.modelId}</p>
+                            <p>API Key: {config.apiKey ? '已配置' : '未设置'}</p>
+                            {config.apiEndpoint && <p>端点: {config.apiEndpoint}</p>}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleTestConfig(config)}
+                            disabled={testing}
+                          >
+                            {testing ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Play className="h-4 w-4" />
+                            )}
+                            测试
+                          </Button>
+                          {!config.isDefault && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleSetDefault(config.id)}
+                            >
+                              <Check className="h-4 w-4" />
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openModal(config)}
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDelete(config.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
           </div>
         </TabsContent>
 
@@ -405,9 +408,7 @@ export default function SettingsPage() {
           </div>
         </TabsContent>
       </Tabs>
-      </div>
 
-      {/* 新增/编辑弹窗 */}
       <Modal
         open={showModal}
         onClose={() => setShowModal(false)}
@@ -428,7 +429,7 @@ export default function SettingsPage() {
             onChange={(e) => setFormData({
               ...formData,
               vendor: e.target.value as AIVendor,
-              modelId: defaultModelIds[e.target.value as AIVendor] || '',
+              modelId: defaultModelIds[e.target.value as AIVendor],
             })}
           />
 
@@ -442,14 +443,14 @@ export default function SettingsPage() {
           <Input
             label="API Key"
             type="password"
-            placeholder={editingConfig ? '不修改请留空' : '请输入 API Key'}
+            placeholder="请输入您的 API Key"
             value={formData.apiKey}
             onChange={(e) => setFormData({ ...formData, apiKey: e.target.value })}
           />
 
           <Input
-            label="自定义端点（可选）"
-            placeholder="如使用代理或特殊端点"
+            label="API 端点 (可选)"
+            placeholder="仅在需要时填写"
             value={formData.apiEndpoint}
             onChange={(e) => setFormData({ ...formData, apiEndpoint: e.target.value })}
           />
@@ -460,31 +461,20 @@ export default function SettingsPage() {
               id="isDefault"
               checked={formData.isDefault}
               onChange={(e) => setFormData({ ...formData, isDefault: e.target.checked })}
-              className="w-4 h-4 rounded accent-blue-600"
             />
-            <label htmlFor="isDefault" className="text-sm cursor-pointer">设为默认配置</label>
+            <label htmlFor="isDefault" className="text-sm text-gray-600">
+              设为默认配置
+            </label>
           </div>
 
-          {/* 测试结果 */}
           {testResult && (
-            <div className={`p-3 rounded-lg ${testResult.success ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400' : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400'}`}>
-              <div className="flex items-center gap-2">
-                {testResult.success ? (
-                  <CheckCircle className="h-4 w-4" />
-                ) : (
-                  <XCircle className="h-4 w-4" />
-                )}
-                <span className="text-sm">{testResult.message}</span>
-              </div>
+            <div className={`p-3 rounded ${testResult.success ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+              {testResult.message}
             </div>
           )}
 
-          <div className="flex justify-end gap-3 pt-4 border-t">
-            <Button
-              variant="outline"
-              onClick={handleTest}
-              disabled={testing || !formData.modelId || !formData.apiKey}
-            >
+          <div className="flex gap-3 justify-end">
+            <Button variant="outline" onClick={handleTest} disabled={testing || submitting}>
               {testing ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               ) : (
@@ -492,10 +482,10 @@ export default function SettingsPage() {
               )}
               测试连接
             </Button>
-            <Button variant="outline" onClick={() => setShowModal(false)}>
-              取消
-            </Button>
-            <Button onClick={handleSubmit} loading={submitting}>
+            <Button variant="primary" onClick={handleSubmit} disabled={submitting || testing}>
+              {submitting ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : null}
               保存
             </Button>
           </div>

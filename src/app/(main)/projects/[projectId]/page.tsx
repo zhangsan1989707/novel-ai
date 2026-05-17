@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { Button, Input, Textarea, Select, Card, CardContent, CardHeader, CardTitle, Badge, Progress, Modal, ChaptersEmptyState, toast, MoreActionsMenu, BatchChapterActionBar } from '@/components/ui'
 import { ProjectForm, ProjectFormData, genreOptions, writingStyleOptions, ChapterListGenerator, BatchGenerator } from '@/components/project'
 import { BatchProgress } from '@/components/ai/BatchProgress'
-import { PlotAnalyzer, BookAnalysisPanel, ContinuationPanel, ContinuationResults, ResearchPanel, ReviewPanel, DeslopPanel, CoverGenerator, AgentManager, WorkflowHooksPanel } from '@/components/ai'
+import { PlotAnalyzer, BookAnalysisPanel, ContinuationPanel, ContinuationResults, ResearchPanel, ReviewPanel, DeslopPanel, CoverGenerator, AgentManager, WorkflowHooksPanel, ShortStoryPanel } from '@/components/ai'
 import { OutlineGenerator } from '@/components/ai/OutlineGenerator'
 import { ArrowLeft, Pencil, Trash2, BookOpen, Clock, Target, Users, Layers, Plus, ListChecks, Sparkles, FileText, RefreshCw, Search, Shield, Wand2, Image, Bot, Workflow, BookMarked } from 'lucide-react'
 import type { ProjectStatus } from '@/types'
@@ -44,6 +44,7 @@ interface Project {
   aiModelId?: number | null
   aiModelConfig?: { id: number; name: string; vendor: string } | null
   projectMode: 'CREATE' | 'ANALYZE'
+  storyType?: string
   chapters: Chapter[]
   createdAt: string
   updatedAt: string

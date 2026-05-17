@@ -115,6 +115,8 @@ export interface NovelProject {
   status: ProjectStatus
   coverImage?: string
   totalVolumes: number
+  projectMode?: string
+  storyType?: string
   aiModelId?: number
   aiModelConfig?: AIModelConfig
   creatorId: number
