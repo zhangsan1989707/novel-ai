@@ -1,48 +1,54 @@
-import NextAuth from 'next-auth'
-import Credentials from 'next-auth/providers/credentials'
-import { prisma } from '@/lib/prisma'
+import { prisma } from './prisma'
 
-export const { handlers, signIn, signOut, auth } = NextAuth({
-  trustHost: true,
-  providers: [
-    Credentials({
-      credentials: {
-        email: { label: 'Email', type: 'email' },
-        password: { label: 'Password', type: 'password' },
+const DEFAULT_USER = {
+  id: '1',
+  name: '开发用户',
+  email: 'dev@localhost',
+  image: null,
+}
+
+export async function auth(): Promise<{ user: { id: string; name: string | null; email: string | null; image: string | null } } | null> {
+  try {
+    let user = await prisma.user.findFirst()
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          email: 'dev@localhost',
+          name: '开发用户',
+          password: 'dev-password',
+        },
+      })
+    }
+    return {
+      user: {
+        id: user.id.toString(),
+        name: user.name,
+        email: user.email,
+        image: (user as any).image || null,
       },
-      async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) return null
-        
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email as string }
-        })
-        
-        if (user) {
-          return { 
-            id: user.id.toString(), 
-            name: user.name, 
-            email: user.email,
-            image: (user as any).image 
-          }
-        }
-        
-        return null
-      }
-    })
-  ],
-  session: { strategy: 'jwt' },
-  callbacks: {
-    async jwt({ token, user }) {
-      if (user) {
-        token.id = user.id
-      }
-      return token
-    },
-    async session({ session, token }) {
-      if (session.user && typeof token.id === 'string') {
-        session.user.id = token.id
-      }
-      return session
+    }
+  } catch {
+    return {
+      user: DEFAULT_USER,
     }
   }
-})
+}
+
+export function getMockSession() {
+  return {
+    user: DEFAULT_USER,
+  }
+}
+
+export const signIn = async () => {
+  console.log('Sign in not implemented - using mock session')
+}
+
+export const signOut = async () => {
+  console.log('Sign out not implemented - using mock session')
+}
+
+export const handlers = {
+  GET: () => Response.json({}),
+  POST: () => Response.json({}),
+}

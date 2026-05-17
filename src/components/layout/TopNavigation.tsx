@@ -1,13 +1,10 @@
 'use client'
 
 import { useRouter, usePathname } from 'next/navigation'
-import { useSession, signOut } from 'next-auth/react'
 import { Button } from '@/components/ui'
-import { BookOpen, Settings, DollarSign, Search, TrendingUp, User, LogOut } from 'lucide-react'
+import { BookOpen, Settings, DollarSign, Search, TrendingUp } from 'lucide-react'
 import { ThemeToggle } from './ThemeToggle'
-import { NotificationDropdown } from './NotificationDropdown'
 import { HelpModal } from './HelpModal'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/DropdownMenu'
 
 interface TopNavigationProps {
   children: React.ReactNode
@@ -23,7 +20,6 @@ const navItems = [
 export function TopNavigation({ children }: TopNavigationProps) {
   const router = useRouter()
   const pathname = usePathname()
-  const { data: session } = useSession()
 
   const isActive = (href: string) => {
     if (href === '/projects') {
@@ -34,17 +30,14 @@ export function TopNavigation({ children }: TopNavigationProps) {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* 顶部导航栏 */}
       <header className="sticky top-0 z-50 bg-card border-b border-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            {/* Logo */}
             <div className="flex items-center gap-2 cursor-pointer" onClick={() => router.push('/projects')}>
               <BookOpen className="h-8 w-8 text-primary" />
               <span className="text-xl font-bold text-foreground">SoulKey</span>
             </div>
 
-            {/* 导航菜单 */}
             <nav className="hidden md:flex items-center gap-1">
               {navItems.map((item) => {
                 const Icon = item.icon
@@ -63,9 +56,7 @@ export function TopNavigation({ children }: TopNavigationProps) {
               })}
             </nav>
 
-            {/* 右侧操作 */}
             <div className="flex items-center gap-3">
-              {/* 搜索 */}
               <div className="hidden sm:flex items-center bg-muted rounded-lg px-3 py-1.5">
                 <Search className="h-4 w-4 text-muted-foreground" />
                 <input
@@ -75,49 +66,13 @@ export function TopNavigation({ children }: TopNavigationProps) {
                 />
               </div>
 
-              {/* 通知 */}
-              <NotificationDropdown />
-
-              {/* 帮助 */}
               <HelpModal />
-
-              {/* 主题切换 */}
               <ThemeToggle />
-
-              {/* 用户菜单 */}
-              {session?.user && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger>
-                    <Button variant="ghost" size="sm" className="gap-2">
-                      {session.user.image ? (
-                        <img
-                          src={session.user.image}
-                          alt={session.user.name || ''}
-                          className="h-6 w-6 rounded-full"
-                        />
-                      ) : (
-                        <User className="h-4 w-4" />
-                      )}
-                      <span className="hidden sm:inline">{session.user.name || session.user.email}</span>
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent>
-                    <DropdownMenuItem
-                      onClick={() => signOut({ callbackUrl: '/' })}
-                      className="text-red-600"
-                    >
-                      <LogOut className="h-4 w-4 mr-2" />
-                      退出登录
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
             </div>
           </div>
         </div>
       </header>
 
-      {/* 主内容区 */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {children}
       </main>
