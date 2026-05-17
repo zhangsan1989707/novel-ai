@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Button, Input, Select, Modal, Badge, Card, CardContent } from '@/components/ui'
-import { Plus, Trash2, Edit2, Check, Key, Shield, Play, Loader2, CheckCircle, XCircle } from 'lucide-react'
+import { Button, Input, Select, Modal, Badge, Card, CardContent, Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui'
+import { AgentManager, WorkflowHooksPanel } from '@/components/ai'
+import { Plus, Trash2, Edit2, Check, Key, Shield, Play, Loader2, CheckCircle, XCircle, Bot, Workflow } from 'lucide-react'
 import { AIVendor } from '@/types'
 
 interface AIConfig {
@@ -64,6 +65,8 @@ export default function SettingsPage() {
     apiEndpoint: '',
     isDefault: false,
   })
+
+  const [activeTab, setActiveTab] = useState<'ai-configs' | 'agents' | 'hooks'>('ai-configs')
 
   const fetchConfigs = useCallback(async () => {
     setLoading(true)
@@ -239,49 +242,68 @@ export default function SettingsPage() {
       {/* 页面标题 */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">AI 配置</h1>
-          <p className="text-sm text-gray-500">配置 AI 模型和 API</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">系统设置</h1>
+          <p className="text-sm text-gray-500">管理 AI 配置、Agent 和工作流</p>
         </div>
-        <Button onClick={() => openModal()}>
-          <Plus className="h-4 w-4 mr-2" />
-          添加配置
-        </Button>
       </div>
 
-      <div className="max-w-4xl mx-auto space-y-6">
-        {/* 提示信息 */}
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-start gap-3">
-              <Shield className="h-5 w-5 text-blue-500 mt-0.5" />
-              <div>
-                <h3 className="font-medium text-sm">API Key 安全说明</h3>
-                <p className="text-xs text-gray-500 mt-1">
-                  您的 API Key 会加密存储，仅用于调用对应 AI 服务商接口。
-                  我们不会将您的 API Key 用于任何其他用途。
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
+        <TabsList>
+          <TabsTrigger value="ai-configs">
+            <Key className="h-4 w-4 mr-2" />
+            AI 配置
+          </TabsTrigger>
+          <TabsTrigger value="agents">
+            <Bot className="h-4 w-4 mr-2" />
+            Agent 管理
+          </TabsTrigger>
+          <TabsTrigger value="hooks">
+            <Workflow className="h-4 w-4 mr-2" />
+            工作流 Hooks
+          </TabsTrigger>
+        </TabsList>
 
-        {/* 测试结果提示 */}
-        {testResult && (
-          <Card className={testResult.success ? 'border-green-500' : 'border-red-500'}>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                {testResult.success ? (
-                  <CheckCircle className="h-5 w-5 text-green-500" />
-                ) : (
-                  <XCircle className="h-5 w-5 text-red-500" />
-                )}
-                <span className={testResult.success ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}>
-                  {testResult.message}
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+        <TabsContent value="ai-configs">
+          <div className="max-w-4xl mx-auto space-y-6">
+            <div className="flex justify-end">
+              <Button onClick={() => openModal()}>
+                <Plus className="h-4 w-4 mr-2" />
+                添加配置
+              </Button>
+            </div>
+            {/* 提示信息 */}
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-start gap-3">
+                  <Shield className="h-5 w-5 text-blue-500 mt-0.5" />
+                  <div>
+                    <h3 className="font-medium text-sm">API Key 安全说明</h3>
+                    <p className="text-xs text-gray-500 mt-1">
+                      您的 API Key 会加密存储，仅用于调用对应 AI 服务商接口。
+                      我们不会将您的 API Key 用于任何其他用途。
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 测试结果提示 */}
+            {testResult && (
+              <Card className={testResult.success ? 'border-green-200' : 'border-red-200'}>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2">
+                    {testResult.success ? (
+                      <CheckCircle className="h-5 w-5 text-green-500" />
+                    ) : (
+                      <XCircle className="h-5 w-5 text-red-500" />
+                    )}
+                    <span className={testResult.success ? 'text-green-700' : 'text-red-700'}>
+                      {testResult.message}
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
         {/* 配置列表 */}
         {loading ? (
@@ -361,7 +383,28 @@ export default function SettingsPage() {
               </Card>
             ))}
           </div>
-        )}
+        </TabsContent>
+
+        <TabsContent value="agents">
+          <div className="max-w-4xl mx-auto">
+            <Card>
+              <CardContent className="p-6">
+                <AgentManager />
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="hooks">
+          <div className="max-w-4xl mx-auto">
+            <Card>
+              <CardContent className="p-6">
+                <WorkflowHooksPanel />
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+      </Tabs>
       </div>
 
       {/* 新增/编辑弹窗 */}

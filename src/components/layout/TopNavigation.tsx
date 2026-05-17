@@ -2,7 +2,7 @@
 
 import { useRouter, usePathname } from 'next/navigation'
 import { Button } from '@/components/ui'
-import { BookOpen, Settings, DollarSign, Search } from 'lucide-react'
+import { BookOpen, Settings, DollarSign, Search, TrendingUp } from 'lucide-react'
 import { ThemeToggle } from './ThemeToggle'
 import { NotificationDropdown } from './NotificationDropdown'
 import { HelpModal } from './HelpModal'
@@ -13,6 +13,7 @@ interface TopNavigationProps {
 
 const navItems = [
   { label: '我的小说', href: '/projects', icon: BookOpen },
+  { label: '扫榜选材', href: '/market', icon: TrendingUp },
   { label: 'AI 配置', href: '/settings', icon: Settings },
   { label: '成本管理', href: '/cost', icon: DollarSign },
 ]

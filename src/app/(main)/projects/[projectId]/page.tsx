@@ -5,9 +5,9 @@ import { useParams, useRouter } from 'next/navigation'
 import { Button, Input, Textarea, Select, Card, CardContent, CardHeader, CardTitle, Badge, Progress, Modal, ChaptersEmptyState, toast, MoreActionsMenu, BatchChapterActionBar } from '@/components/ui'
 import { ProjectForm, ProjectFormData, genreOptions, writingStyleOptions, ChapterListGenerator, BatchGenerator } from '@/components/project'
 import { BatchProgress } from '@/components/ai/BatchProgress'
-import { PlotAnalyzer, BookAnalysisPanel, ContinuationPanel, ContinuationResults } from '@/components/ai'
+import { PlotAnalyzer, BookAnalysisPanel, ContinuationPanel, ContinuationResults, ResearchPanel, ReviewPanel, DeslopPanel, CoverGenerator, AgentManager, WorkflowHooksPanel } from '@/components/ai'
 import { OutlineGenerator } from '@/components/ai/OutlineGenerator'
-import { ArrowLeft, Pencil, Trash2, BookOpen, Clock, Target, Users, Layers, Plus, ListChecks, Sparkles, FileText, RefreshCw } from 'lucide-react'
+import { ArrowLeft, Pencil, Trash2, BookOpen, Clock, Target, Users, Layers, Plus, ListChecks, Sparkles, FileText, RefreshCw, Search, Shield, Wand2, Image, Bot, Workflow, BookMarked } from 'lucide-react'
 import type { ProjectStatus } from '@/types'
 
 interface Chapter {
@@ -93,6 +93,11 @@ export default function ProjectDetailPage() {
   const [activeTab, setActiveTab] = useState<'chapters' | 'outline' | 'settings'>('chapters')
   const [showGenerator, setShowGenerator] = useState(false)
   const [showOutlineGenerator, setShowOutlineGenerator] = useState(false)
+  const [showResearchModal, setShowResearchModal] = useState(false)
+  const [showReviewModal, setShowReviewModal] = useState(false)
+  const [showDeslopModal, setShowDeslopModal] = useState(false)
+  const [showCoverModal, setShowCoverModal] = useState(false)
+  const [showShortStoryModal, setShowShortStoryModal] = useState(false)
 
   const fetchProject = useCallback(async () => {
     try {
@@ -383,6 +388,53 @@ export default function ProjectDetailPage() {
                 <RefreshCw className="h-4 w-4" />
                 继续生成
               </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowResearchModal(true)}
+                className="gap-1.5"
+              >
+                <Search className="h-4 w-4" />
+                资料研究
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowReviewModal(true)}
+                className="gap-1.5"
+              >
+                <Shield className="h-4 w-4" />
+                对抗审稿
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowDeslopModal(true)}
+                className="gap-1.5"
+              >
+                <Wand2 className="h-4 w-4" />
+                去AI味
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowCoverModal(true)}
+                className="gap-1.5"
+              >
+                <Image className="h-4 w-4" />
+                封面生成
+              </Button>
+              {project.genre?.includes('短篇') || project.storyType === 'SHORT' ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowShortStoryModal(true)}
+                  className="gap-1.5"
+                >
+                  <BookMarked className="h-4 w-4" />
+                  短篇创作
+                </Button>
+              ) : null}
               <Button
                 variant="primary"
                 size="sm"
@@ -811,6 +863,56 @@ export default function ProjectDetailPage() {
         className="max-w-2xl"
       >
         <ContinuationPanel projectId={projectId} />
+      </Modal>
+
+      {/* 资料研究 Modal */}
+      <Modal
+        open={showResearchModal}
+        onClose={() => setShowResearchModal(false)}
+        title="资料研究"
+        className="max-w-3xl"
+      >
+        <ResearchPanel projectId={projectId} />
+      </Modal>
+
+      {/* 对抗审稿 Modal */}
+      <Modal
+        open={showReviewModal}
+        onClose={() => setShowReviewModal(false)}
+        title="对抗式审稿"
+        className="max-w-4xl"
+      >
+        <ReviewPanel projectId={projectId} />
+      </Modal>
+
+      {/* 去AI味 Modal */}
+      <Modal
+        open={showDeslopModal}
+        onClose={() => setShowDeslopModal(false)}
+        title="去AI味"
+        className="max-w-4xl"
+      >
+        <DeslopPanel projectId={projectId} />
+      </Modal>
+
+      {/* 封面生成 Modal */}
+      <Modal
+        open={showCoverModal}
+        onClose={() => setShowCoverModal(false)}
+        title="封面生成"
+        className="max-w-4xl"
+      >
+        <CoverGenerator projectId={projectId} />
+      </Modal>
+
+      {/* 短篇创作 Modal */}
+      <Modal
+        open={showShortStoryModal}
+        onClose={() => setShowShortStoryModal(false)}
+        title="短篇创作"
+        className="max-w-4xl"
+      >
+        <ShortStoryPanel projectId={projectId} />
       </Modal>
 
       {/* 分析模式特殊 Modal */}
