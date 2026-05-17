@@ -1,7 +1,7 @@
 import { BaseAIProvider, estimateTokens } from '@/lib/ai/base'
 import { recordUsage, canProceedWithGeneration } from '@/lib/cost-tracker'
 import { logger } from '@/lib/logger'
-import type { AIProvider, AIConfig, GenerationParams, GenerationResult } from '@/lib/ai/types'
+import type { AIProvider, AIConfig, GenerationParams, GenerationResult, ImageGenerationParams, ImageGenerationResult } from '@/lib/ai/types'
 
 // 临时用户 ID（在完整用户系统之前）
 const DEFAULT_USER_ID = 1
@@ -138,6 +138,54 @@ export class TraceableAIProvider implements AIProvider {
     }
   }
 
+  /**
+   * 图片生成并记录成本
+   */
+  async generateImage(
+    prompt: string,
+    params?: ImageGenerationParams
+  ): Promise<ImageGenerationResult> {
+    // 1. 先检查配额
+    const quotaCheck = await canProceedWithGeneration(this.userId)
+    if (!quotaCheck.allowed) {
+      throw new Error(quotaCheck.reason || 'Quota exceeded')
+    }
+
+    const startTime = Date.now()
+    try {
+      // 检查 provider 是否支持图片生成
+      if (!('generateImage' in this.provider) || typeof this.provider.generateImage !== 'function') {
+        throw new Error(`Provider ${this.provider.name} does not support image generation`)
+      }
+
+      const result = await (this.provider as any).generateImage(prompt, params)
+
+      // 记录图片生成的使用量（估算）
+      await this.recordImageUsage(prompt, params)
+
+      logger.info(
+        {
+          vendor: this.vendor,
+          modelId: this.config.modelId,
+          duration: Date.now() - startTime,
+        },
+        'AI image generation completed with cost tracking'
+      )
+
+      return result
+    } catch (error) {
+      logger.error(
+        {
+          vendor: this.vendor,
+          modelId: this.config.modelId,
+          error,
+        },
+        'AI image generation failed'
+      )
+      throw error
+    }
+  }
+
   private async recordUsage(
     prompt: string,
     result: GenerationResult
@@ -178,6 +226,31 @@ export class TraceableAIProvider implements AIProvider {
       logger.warn(
         { error },
         'Failed to record AI usage from content'
+      )
+    }
+  }
+
+  private async recordImageUsage(
+    prompt: string,
+    params?: ImageGenerationParams
+  ): Promise<void> {
+    try {
+      // 估算图片生成的 token 消耗（DALL-E 3 图片约为 200 tokens）
+      const estimatedTokens = 200 * (params?.numImages || 1)
+
+      await recordUsage({
+        userId: this.userId,
+        projectId: this.projectId,
+        vendor: this.config.vendor,
+        modelId: 'dall-e-3',
+        usageType: 'IMAGE_GENERATION',
+        promptTokens: estimateTokens(prompt),
+        completionTokens: estimatedTokens,
+      })
+    } catch (error) {
+      logger.warn(
+        { error },
+        'Failed to record AI image usage'
       )
     }
   }

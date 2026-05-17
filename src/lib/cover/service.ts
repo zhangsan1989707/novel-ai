@@ -1,11 +1,13 @@
 import { AIService } from '@/lib/ai/service'
 import { buildCoverImagePrompt, buildCoverAnalysisPrompt } from '@/lib/prompts/cover'
 import { logger } from '@/lib/logger'
+import { prisma } from '@/lib/prisma'
+import { AIVendor } from '@/types'
 
 interface CoverGenerationInput {
   projectId: number
   title: string
-  genre: string
+  genre?: string
   synopsis?: string
   targetAudience?: string
   style?: string
@@ -23,8 +25,6 @@ interface CoverGenerationResult {
   prompt: string
   analysis: CoverAnalysis
 }
-
-const IMAGE_GEN_BASE_URL = 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image'
 
 function parseAnalysisResult(content: string): CoverAnalysis {
   const defaultAnalysis: CoverAnalysis = {
@@ -55,12 +55,13 @@ function parseAnalysisResult(content: string): CoverAnalysis {
 export async function generateCover(input: CoverGenerationInput): Promise<CoverGenerationResult> {
   const provider = await AIService.createProvider({
     projectId: input.projectId,
-    usageType: 'COVER_ANALYSIS',
+    usageType: 'COVER_GENERATION',
   })
 
+  // 1. 分析封面需求
   const analysisPrompt = buildCoverAnalysisPrompt({
     title: input.title,
-    genre: input.genre,
+    genre: input.genre || '',
     synopsis: input.synopsis,
     targetAudience: input.targetAudience,
     style: input.style,
@@ -73,15 +74,65 @@ export async function generateCover(input: CoverGenerationInput): Promise<CoverG
 
   const analysis = parseAnalysisResult(analysisResult.content)
 
+  // 2. 构建图片生成提示词
   const imagePrompt = buildCoverImagePrompt({
     title: input.title,
-    genre: input.genre,
+    genre: input.genre || '',
     synopsis: input.synopsis,
     targetAudience: input.targetAudience,
     style: input.style,
   })
 
-  const imageUrl = `${IMAGE_GEN_BASE_URL}?prompt=${encodeURIComponent(imagePrompt)}&image_size=portrait_4_3`
+  // 3. 检查是否支持图片生成
+  if (!('generateImage' in provider) || typeof provider.generateImage !== 'function') {
+    // 如果不支持，检查是否有 OpenAI 配置可用
+    try {
+      const openAIProvider = await AIService.createProvider({
+        vendor: AIVendor.OPENAI,
+        projectId: input.projectId,
+        usageType: 'COVER_GENERATION',
+      })
+      
+      if ('generateImage' in openAIProvider && typeof openAIProvider.generateImage === 'function') {
+        const imageResult = await (openAIProvider as any).generateImage(imagePrompt, {
+          size: '1024x1792',
+          quality: 'standard',
+          style: 'vivid',
+        })
+
+        const imageUrl = imageResult.imageUrls?.[0] || ''
+
+        // 保存封面到项目
+        await saveCoverToProject(input.projectId, imageUrl, imagePrompt)
+
+        logger.info(
+          { projectId: input.projectId, genre: input.genre },
+          'Cover generated successfully with OpenAI DALL-E'
+        )
+
+        return {
+          imageUrl,
+          prompt: imagePrompt,
+          analysis,
+        }
+      }
+    } catch {
+      // OpenAI 也不可用
+    }
+    throw new Error('Image generation is not available. Please configure OpenAI API key.')
+  }
+
+  // 4. 使用当前 provider 生成图片
+  const imageResult = await (provider as any).generateImage(imagePrompt, {
+    size: '1024x1792',
+    quality: 'standard',
+    style: 'vivid',
+  })
+
+  const imageUrl = imageResult.imageUrls?.[0] || ''
+
+  // 5. 保存封面到项目
+  await saveCoverToProject(input.projectId, imageUrl, imagePrompt)
 
   logger.info(
     { projectId: input.projectId, genre: input.genre },
@@ -92,6 +143,33 @@ export async function generateCover(input: CoverGenerationInput): Promise<CoverG
     imageUrl,
     prompt: imagePrompt,
     analysis,
+  }
+}
+
+async function saveCoverToProject(projectId: number, imageUrl: string, prompt: string): Promise<void> {
+  try {
+    // 保存封面 URL 到项目
+    await prisma.novelProject.update({
+      where: { id: projectId },
+      data: {
+        coverImage: imageUrl,
+      },
+    })
+
+    // 保存封面设计记录
+    await prisma.coverDesign.create({
+      data: {
+        projectId,
+        imageUrl,
+        prompt,
+      },
+    })
+  } catch (error) {
+    logger.warn(
+      { projectId, error },
+      'Failed to save cover to project'
+    )
+    // 继续返回图片 URL，即使保存失败
   }
 }
 

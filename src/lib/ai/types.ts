@@ -65,6 +65,29 @@ export interface AIProvider {
    * 验证配置是否有效
    */
   validateConfig(config: AIConfig): boolean
+
+  /**
+   * 图片生成（可选）
+   */
+  generateImage?(prompt: string, params?: ImageGenerationParams): Promise<ImageGenerationResult>
+}
+
+// ============================================
+// 图片生成
+// ============================================
+
+export interface ImageGenerationParams {
+  size?: '1024x1024' | '1792x1024' | '1024x1792' | string
+  quality?: 'standard' | 'hd'
+  style?: 'vivid' | 'natural'
+  numImages?: number
+}
+
+export interface ImageGenerationResult {
+  imageUrls: string[]
+  promptTokens?: number
+  cost?: number
+  revisedPrompt?: string
 }
 
 // ============================================
