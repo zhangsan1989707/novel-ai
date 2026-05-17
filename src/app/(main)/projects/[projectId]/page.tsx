@@ -225,31 +225,57 @@ export default function ProjectDetailPage() {
     try {
       const existCheck = await fetch(`/api/novel/projects/${projectId}/chapters`)
       const existData = await existCheck.json()
-      const existingNumbers = new Set(
-        existData.success ? existData.data.map((c: { chapterNumber: number }) => c.chapterNumber) : []
-      )
-
-      for (const ch of chapters) {
-        if (existingNumbers.has(ch.chapterNumber)) continue
-
-        const res = await fetch(`/api/novel/projects/${projectId}/chapters`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chapterNumber: ch.chapterNumber,
-            title: ch.title,
-            summary: ch.summary,
-            status: 'DRAFT',
-          }),
-        })
-        const result = await res.json()
-        if (!result.success) {
-          console.error('创建章节失败:', result.error.message)
+      const existingMap = new Map<number, number>()
+      if (existData.success) {
+        for (const c of existData.data as { id: number; chapterNumber: number }[]) {
+          existingMap.set(c.chapterNumber, c.id)
         }
       }
+
+      const chapterNumbers = new Set(chapters.map((ch) => ch.chapterNumber))
+
+      for (const ch of chapters) {
+        const existingId = existingMap.get(ch.chapterNumber)
+        if (existingId) {
+          await fetch(`/api/novel/projects/${projectId}/chapters/${existingId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              title: ch.title,
+              summary: ch.summary,
+            }),
+          })
+        } else {
+          await fetch(`/api/novel/projects/${projectId}/chapters`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chapterNumber: ch.chapterNumber,
+              title: ch.title,
+              summary: ch.summary,
+              status: 'DRAFT',
+            }),
+          })
+        }
+      }
+
+      const deletePromises: Promise<Response>[] = []
+      for (const [chapterNumber, existingId] of existingMap) {
+        if (!chapterNumbers.has(chapterNumber)) {
+          deletePromises.push(
+            fetch(`/api/novel/projects/${projectId}/chapters/${existingId}`, {
+              method: 'DELETE',
+            })
+          )
+        }
+      }
+      await Promise.all(deletePromises)
+
+      toast.success(`已应用 ${chapters.length} 个章节`)
       fetchProject()
     } catch (err) {
       console.error('创建章节失败:', err)
+      toast.error('应用章节失败')
     }
   }
 
