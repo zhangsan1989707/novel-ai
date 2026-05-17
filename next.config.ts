@@ -19,6 +19,9 @@ const nextConfig: NextConfig = {
       '@dnd-kit/utilities',
       '@xyflow/react',
     ],
+    serverActions: {
+      bodySizeLimit: '2mb',
+    },
   },
   images: {
     remotePatterns: [
