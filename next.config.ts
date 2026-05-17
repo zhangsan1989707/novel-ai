@@ -10,15 +10,14 @@ const nextConfig: NextConfig = {
     'epubjs',
     'd3',
     'lru-cache',
-    'lucide-react',
-    '@dnd-kit/core',
-    '@dnd-kit/sortable',
-    '@dnd-kit/utilities',
-    '@xyflow/react',
   ],
   experimental: {
     optimizePackageImports: [
       'lucide-react',
+      '@dnd-kit/core',
+      '@dnd-kit/sortable',
+      '@dnd-kit/utilities',
+      '@xyflow/react',
     ],
   },
   images: {
