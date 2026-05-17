@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { tryCatch } from '@/lib/api-response'
+import { ValidationError } from '@/lib/errors'
 import { analyzeMarketTrend } from '@/lib/market/service'
 
 export async function POST(request: NextRequest) {
@@ -8,7 +9,7 @@ export async function POST(request: NextRequest) {
     const { projectId, genre, platform, targetAudience } = body
 
     if (!genre || !platform) {
-      throw new Error('题材和平台不能为空')
+      throw new ValidationError('题材和平台不能为空')
     }
 
     const result = await analyzeMarketTrend({

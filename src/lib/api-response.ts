@@ -155,6 +155,10 @@ export async function tryCatch<T>(
 ): Promise<Response> {
   try {
     const data = await fn()
+    if (data && typeof data === 'object' && 'success' in data && data.success === false) {
+      const errResp = data as unknown as ErrorResponse
+      return Response.json(errResp, { status: 400 })
+    }
     return Response.json(success(data))
   } catch (err) {
     options?.onError?.(err)

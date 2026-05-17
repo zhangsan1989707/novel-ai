@@ -103,6 +103,7 @@ export function WorkflowHooksPanel({ className }: WorkflowHooksPanelProps) {
   const [showHistory, setShowHistory] = useState(false)
 
   const fetchHooks = useCallback(async () => {
+    setLoading(true)
     try {
       const res = await fetch('/api/hooks')
       const data = await res.json()
@@ -110,32 +111,16 @@ export function WorkflowHooksPanel({ className }: WorkflowHooksPanelProps) {
         setHooks(data.data?.hooks || [])
         setHistory(data.data?.history || [])
       }
-    } catch (error) {
-      console.error('获取 Hooks 数据失败:', error)
+    } catch (err) {
+      console.error('获取 Hooks 数据失败:', err)
     } finally {
       setLoading(false)
     }
   }, [])
 
   useEffect(() => {
-    let cancelled = false
-    const load = async () => {
-      try {
-        const res = await fetch('/api/hooks')
-        const data = await res.json()
-        if (!cancelled && data.success) {
-          setHooks(data.data?.hooks || [])
-          setHistory(data.data?.history || [])
-        }
-      } catch (error) {
-        console.error('获取 Hooks 数据失败:', error)
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-    load()
-    return () => { cancelled = true }
-  }, [])
+    fetchHooks()
+  }, [fetchHooks])
 
   const handleToggle = async (hookId: string, enabled: boolean) => {
     try {

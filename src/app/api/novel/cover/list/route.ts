@@ -11,8 +11,13 @@ export async function GET(request: NextRequest) {
       return error('VALIDATION_ERROR', '缺少 projectId 参数')
     }
 
+    const parsedId = parseInt(projectId, 10)
+    if (isNaN(parsedId)) {
+      return error('VALIDATION_ERROR', 'projectId 格式无效')
+    }
+
     const designs = await prisma.coverDesign.findMany({
-      where: { projectId: parseInt(projectId, 10) },
+      where: { projectId: parsedId },
       orderBy: { createdAt: 'desc' },
     })
 

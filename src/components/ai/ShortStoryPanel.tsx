@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { Button, Input, Select, Card, CardHeader, CardTitle, CardContent, Badge, Progress } from '@/components/ui'
 import {
   Sparkles,
@@ -13,6 +13,7 @@ import {
   ChevronDown,
   ChevronUp,
 } from 'lucide-react'
+import { toast } from '@/components/ui/Toast'
 
 interface Section {
   id: string
@@ -134,6 +135,7 @@ export function ShortStoryPanel({ projectId }: ShortStoryPanelProps) {
   const [loading, setLoading] = useState<string | null>(null)
   const [expandedSection, setExpandedSection] = useState<number | null>(null)
   const [writingContent, setWritingContent] = useState<Record<number, string>>({})
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   const fetchStory = useCallback(async () => {
     try {
@@ -147,9 +149,19 @@ export function ShortStoryPanel({ projectId }: ShortStoryPanelProps) {
         }
       }
     } catch {
-      // ignore
+      toast.error('加载短篇数据失败')
     }
   }, [projectId])
+
+  useEffect(() => {
+    fetchStory()
+  }, [fetchStory])
+
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort()
+    }
+  }, [])
 
   const handleGenerateOutline = async () => {
     setLoading('outline')
@@ -162,9 +174,11 @@ export function ShortStoryPanel({ projectId }: ShortStoryPanelProps) {
       const data = await res.json()
       if (data.success) {
         setStory(data.data)
+      } else {
+        toast.error(data.error?.message || '生成大纲失败')
       }
     } catch {
-      // ignore
+      toast.error('生成大纲请求失败')
     } finally {
       setLoading(null)
     }
@@ -181,9 +195,11 @@ export function ShortStoryPanel({ projectId }: ShortStoryPanelProps) {
       const data = await res.json()
       if (data.success) {
         await fetchStory()
+      } else {
+        toast.error(data.error?.message || '设计情绪失败')
       }
     } catch {
-      // ignore
+      toast.error('设计情绪请求失败')
     } finally {
       setLoading(null)
     }
@@ -200,9 +216,11 @@ export function ShortStoryPanel({ projectId }: ShortStoryPanelProps) {
       const data = await res.json()
       if (data.success) {
         await fetchStory()
+      } else {
+        toast.error(data.error?.message || '设计反转失败')
       }
     } catch {
-      // ignore
+      toast.error('设计反转请求失败')
     } finally {
       setLoading(null)
     }
@@ -219,9 +237,11 @@ export function ShortStoryPanel({ projectId }: ShortStoryPanelProps) {
       const data = await res.json()
       if (data.success) {
         await fetchStory()
+      } else {
+        toast.error(data.error?.message || '设计钩子失败')
       }
     } catch {
-      // ignore
+      toast.error('设计钩子请求失败')
     } finally {
       setLoading(null)
     }
@@ -231,14 +251,20 @@ export function ShortStoryPanel({ projectId }: ShortStoryPanelProps) {
     setLoading(`write-${sectionNumber}`)
     setWritingContent((prev) => ({ ...prev, [sectionNumber]: '' }))
 
+    abortControllerRef.current?.abort()
+    const controller = new AbortController()
+    abortControllerRef.current = controller
+
     try {
       const res = await fetch('/api/short-story/write', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ projectId, sectionNumber, stream: true }),
+        signal: controller.signal,
       })
 
       if (!res.ok || !res.body) {
+        toast.error('写作请求失败')
         setLoading(null)
         return
       }
@@ -256,41 +282,45 @@ export function ShortStoryPanel({ projectId }: ShortStoryPanelProps) {
         buffer = lines.pop() || ''
 
         for (const line of lines) {
-          if (line.startsWith('event: token')) {
-            continue
-          }
-          if (line.startsWith('data: ')) {
+          const trimmed = line.trim()
+          if (!trimmed || trimmed.startsWith('event:')) continue
+          if (trimmed.startsWith('data: ')) {
             try {
-              const event = JSON.parse(line.slice(6))
-              if (event.type === 'chunk' || (event.data && event.data.content)) {
-                const content = event.data?.content || event.content || ''
+              const payload = JSON.parse(trimmed.slice(6))
+              const content = payload?.data?.content || payload?.content || ''
+              if (content) {
                 setWritingContent((prev) => ({
                   ...prev,
                   [sectionNumber]: (prev[sectionNumber] || '') + content,
                 }))
               }
             } catch {
-              // ignore parse errors
+              // skip malformed SSE data lines
             }
           }
         }
       }
 
+      setWritingContent((prev) => {
+        const next = { ...prev }
+        delete next[sectionNumber]
+        return next
+      })
+
       await fetchStory()
-    } catch {
-      // ignore
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return
+      toast.error('写作请求失败')
     } finally {
       setLoading(null)
     }
   }
 
-  const handleWriteAll = async () => {
+  const handleWriteNext = async () => {
     if (!story) return
-    for (const section of story.sections) {
-      if (!section.content) {
-        await handleWriteSection(section.sectionNumber)
-        break
-      }
+    const next = story.sections.find((s) => !s.content)
+    if (next) {
+      await handleWriteSection(next.sectionNumber)
     }
   }
 
@@ -488,7 +518,7 @@ export function ShortStoryPanel({ projectId }: ShortStoryPanelProps) {
                 <Button
                   size="sm"
                   variant="primary"
-                  onClick={handleWriteAll}
+                  onClick={handleWriteNext}
                   loading={loading?.startsWith('write') || false}
                   disabled={loading !== null}
                 >

@@ -97,7 +97,7 @@ export function AgentManager({ projectId }: AgentManagerProps) {
       const res = await fetch(`/api/agents/${selectedAgent.type}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ input: parsedInput, stream: selectedAgent.supportsStreaming }),
+        body: JSON.stringify({ input: parsedInput, stream: false }),
       })
       const data = await res.json()
       if (data.success) {

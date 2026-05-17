@@ -120,6 +120,21 @@ export function DeslopPanel({ projectId }: DeslopPanelProps) {
       const data = await res.json()
       if (data.success) {
         setRewriteResult(data.data)
+        if (!detectResult) {
+          try {
+            const detectRes = await fetch('/api/novel/deslop/detect', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ content: content.trim() }),
+            })
+            const detectData = await detectRes.json()
+            if (detectData.success) {
+              setDetectResult(detectData.data)
+            }
+          } catch {
+            // detection is best-effort
+          }
+        }
         toast.success('改写完成')
       } else {
         toast.error(data.error?.message || '改写失败')
@@ -129,7 +144,7 @@ export function DeslopPanel({ projectId }: DeslopPanelProps) {
     } finally {
       setRewriting(false)
     }
-  }, [content, projectId, strictness])
+  }, [content, projectId, strictness, detectResult])
 
   const toggleChange = useCallback((index: number) => {
     setExpandedChanges(prev => {

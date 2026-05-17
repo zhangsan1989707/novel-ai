@@ -7,7 +7,8 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const platform = searchParams.get('platform') || undefined
     const genre = searchParams.get('genre') || undefined
-    const limit = parseInt(searchParams.get('limit') || '20')
+    const rawLimit = parseInt(searchParams.get('limit') || '20')
+    const limit = Math.min(Math.max(isNaN(rawLimit) ? 20 : rawLimit, 1), 100)
 
     const result = await getMarketTrends({
       platform,

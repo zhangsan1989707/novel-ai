@@ -146,30 +146,19 @@ export async function generateCover(input: CoverGenerationInput): Promise<CoverG
   }
 }
 
-async function saveCoverToProject(projectId: number, imageUrl: string, prompt: string): Promise<void> {
+async function saveCoverToProject(projectId: number, imageUrl: string, _prompt: string): Promise<void> {
   try {
-    // 保存封面 URL 到项目
     await prisma.novelProject.update({
       where: { id: projectId },
       data: {
         coverImage: imageUrl,
       },
     })
-
-    // 保存封面设计记录
-    await prisma.coverDesign.create({
-      data: {
-        projectId,
-        imageUrl,
-        prompt,
-      },
-    })
-  } catch (error) {
+  } catch (err) {
     logger.warn(
-      { projectId, error },
+      { projectId, error: err },
       'Failed to save cover to project'
     )
-    // 继续返回图片 URL，即使保存失败
   }
 }
 

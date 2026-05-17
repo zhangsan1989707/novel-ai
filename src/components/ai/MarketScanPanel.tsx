@@ -123,7 +123,13 @@ export function MarketScanPanel() {
       })
       const data = await res.json()
       if (data.success) {
-        setAnalysisResult(data.data)
+        const raw = data.data
+        setAnalysisResult({
+          ...raw,
+          hotTags: Array.isArray(raw?.hotTags) ? raw.hotTags : [],
+          readerPreferences: Array.isArray(raw?.readerPreferences) ? raw.readerPreferences : [],
+          recommendations: Array.isArray(raw?.recommendations) ? raw.recommendations : [],
+        })
       } else {
         toast.error(data.error?.message || '分析失败')
       }
@@ -159,7 +165,7 @@ export function MarketScanPanel() {
       })
       const data = await res.json()
       if (data.success) {
-        setRecommendations(data.data)
+        setRecommendations(Array.isArray(data.data) ? data.data : [])
       } else {
         toast.error(data.error?.message || '推荐失败')
       }
