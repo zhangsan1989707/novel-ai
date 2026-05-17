@@ -59,8 +59,8 @@ export function AgentManager({ projectId }: AgentManagerProps) {
       const res = await fetch('/api/agents')
       const data = await res.json()
       if (data.success) {
-        setAgents(data.data.agents)
-        setModels(data.data.models)
+        setAgents(data.data?.agents || [])
+        setModels(data.data?.models || {})
       }
     } catch {
       toast.error('加载 Agent 列表失败')

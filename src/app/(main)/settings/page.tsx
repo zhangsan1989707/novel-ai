@@ -67,6 +67,12 @@ export default function SettingsPage() {
   })
 
   const [activeTab, setActiveTab] = useState<'ai-configs' | 'agents' | 'hooks'>('ai-configs')
+  const [loadedTabs, setLoadedTabs] = useState<Set<string>>(new Set(['ai-configs']))
+
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab as typeof activeTab)
+    setLoadedTabs(prev => new Set([...prev, tab]))
+  }
 
   const fetchConfigs = useCallback(async () => {
     setLoading(true)
@@ -251,7 +257,7 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList>
           <TabsTrigger value="ai-configs">
             <Key className="h-4 w-4 mr-2" />
@@ -392,7 +398,14 @@ export default function SettingsPage() {
           <div className="max-w-4xl mx-auto">
             <Card>
               <CardContent className="p-6">
-                <AgentManager />
+                {loadedTabs.has('agents') ? (
+                  <AgentManager />
+                ) : (
+                  <div className="text-center py-12 text-gray-500">
+                    <Loader2 className="h-8 w-8 mx-auto mb-4 animate-spin" />
+                    加载中...
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -402,7 +415,14 @@ export default function SettingsPage() {
           <div className="max-w-4xl mx-auto">
             <Card>
               <CardContent className="p-6">
-                <WorkflowHooksPanel />
+                {loadedTabs.has('hooks') ? (
+                  <WorkflowHooksPanel />
+                ) : (
+                  <div className="text-center py-12 text-gray-500">
+                    <Loader2 className="h-8 w-8 mx-auto mb-4 animate-spin" />
+                    加载中...
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

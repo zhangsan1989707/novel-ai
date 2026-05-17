@@ -342,8 +342,8 @@ export default function ProjectDetailPage() {
       {/* 创作工具栏 */}
       {project.projectMode === 'CREATE' && (
         <Card className="mb-6">
-          <CardContent className="p-4">
-            <div className="flex flex-wrap items-center gap-3">
+          <CardContent className="p-3">
+            <div className="flex items-center gap-2 overflow-x-auto pb-1" style={{scrollbarWidth: 'thin'}}>
               <span className="text-sm text-gray-500">创作工具：</span>
               <Button
                 variant="outline"

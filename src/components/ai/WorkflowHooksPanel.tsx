@@ -107,8 +107,8 @@ export function WorkflowHooksPanel({ className }: WorkflowHooksPanelProps) {
       const res = await fetch('/api/hooks')
       const data = await res.json()
       if (data.success) {
-        setHooks(data.data.hooks)
-        setHistory(data.data.history)
+        setHooks(data.data?.hooks || [])
+        setHistory(data.data?.history || [])
       }
     } catch (error) {
       console.error('获取 Hooks 数据失败:', error)
@@ -124,8 +124,8 @@ export function WorkflowHooksPanel({ className }: WorkflowHooksPanelProps) {
         const res = await fetch('/api/hooks')
         const data = await res.json()
         if (!cancelled && data.success) {
-          setHooks(data.data.hooks)
-          setHistory(data.data.history)
+          setHooks(data.data?.hooks || [])
+          setHistory(data.data?.history || [])
         }
       } catch (error) {
         console.error('获取 Hooks 数据失败:', error)
