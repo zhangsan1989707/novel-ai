@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { tryCatch, success, error } from '@/lib/api-response'
+import { tryCatch, error } from '@/lib/api-response'
 import { researcherAgent } from '@/lib/agents/researcher'
 
 const researchSchema = z.object({
@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    return success(researchRef)
+    return researchRef
   })
 }
 
@@ -75,6 +75,6 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' },
     })
 
-    return success(refs)
+    return refs
   })
 }

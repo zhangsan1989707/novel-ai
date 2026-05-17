@@ -7,6 +7,8 @@ import type { HotInspiration, InspirationCategory } from '@/lib/inspiration/data
 
 interface InspirationPanelProps {
   onSelect: (inspiration: HotInspiration) => void
+  compact?: boolean
+  limit?: number
 }
 
 const categoryLabels: Record<InspirationCategory, string> = {
@@ -21,7 +23,7 @@ const categoryColors: Record<InspirationCategory, 'primary' | 'secondary' | 'suc
   unisex: 'success',
 }
 
-export function InspirationPanel({ onSelect }: InspirationPanelProps) {
+export function InspirationPanel({ onSelect, compact = false, limit = 6 }: InspirationPanelProps) {
   const [inspirations, setInspirations] = useState<HotInspiration[]>([])
   const [loading, setLoading] = useState(true)
   const [activeCategory, setActiveCategory] = useState<InspirationCategory | 'all'>('all')
@@ -34,7 +36,7 @@ export function InspirationPanel({ onSelect }: InspirationPanelProps) {
       if (activeCategory !== 'all') {
         params.set('category', activeCategory)
       }
-      params.set('limit', '6')
+      params.set('limit', String(limit))
 
       // 刷新时使用随机模式
       if (isRandom) {
@@ -52,10 +54,10 @@ export function InspirationPanel({ onSelect }: InspirationPanelProps) {
       setLoading(false)
       setIsRandom(false)
     }
-  }, [activeCategory, isRandom])
+  }, [activeCategory, isRandom, limit])
 
   useEffect(() => {
-    fetchInspirations()
+    void Promise.resolve().then(fetchInspirations)
   }, [fetchInspirations])
 
   const handleRefresh = () => {
@@ -63,12 +65,12 @@ export function InspirationPanel({ onSelect }: InspirationPanelProps) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className={compact ? 'space-y-3' : 'space-y-4'}>
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-5 w-5 text-amber-500" />
-          <h3 className="font-medium text-lg">创作灵感</h3>
-          <span className="text-xs text-gray-500">基于近期热门趋势推荐</span>
+        <div className="flex min-w-0 items-center gap-2">
+          <Sparkles className={compact ? 'h-4 w-4 text-amber-500' : 'h-5 w-5 text-amber-500'} />
+          <h3 className={compact ? 'text-sm font-semibold text-gray-900 dark:text-white' : 'font-medium text-lg'}>创作灵感</h3>
+          {!compact && <span className="text-xs text-gray-500">基于近期热门趋势推荐</span>}
         </div>
         <Button
           variant="ghost"
@@ -81,7 +83,7 @@ export function InspirationPanel({ onSelect }: InspirationPanelProps) {
         </Button>
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <button
           onClick={() => setActiveCategory('all')}
           className={`px-3 py-1.5 text-sm rounded-full transition-colors ${
@@ -125,8 +127,8 @@ export function InspirationPanel({ onSelect }: InspirationPanelProps) {
       </div>
 
       {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[...Array(6)].map((_, i) => (
+        <div className={compact ? 'grid grid-cols-1 gap-3' : 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'}>
+          {[...Array(limit)].map((_, i) => (
             <Card key={i} className="animate-pulse">
               <CardContent className="p-4">
                 <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4 mb-2" />
@@ -137,12 +139,13 @@ export function InspirationPanel({ onSelect }: InspirationPanelProps) {
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className={compact ? 'grid grid-cols-1 gap-3' : 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'}>
           {inspirations.map((inspiration) => (
             <InspirationCard
               key={inspiration.id}
               inspiration={inspiration}
               onSelect={onSelect}
+              compact={compact}
             />
           ))}
         </div>
@@ -154,14 +157,15 @@ export function InspirationPanel({ onSelect }: InspirationPanelProps) {
 interface InspirationCardProps {
   inspiration: HotInspiration
   onSelect: (inspiration: HotInspiration) => void
+  compact?: boolean
 }
 
-function InspirationCard({ inspiration, onSelect }: InspirationCardProps) {
+function InspirationCard({ inspiration, onSelect, compact = false }: InspirationCardProps) {
   const [expanded, setExpanded] = useState(false)
 
   return (
     <Card hover className="group overflow-hidden">
-      <CardContent className="p-4">
+      <CardContent className={compact ? 'p-3' : 'p-4'}>
         <div className="flex items-start justify-between mb-2">
           <div className="flex items-center gap-2">
             <Badge variant={categoryColors[inspiration.category]} className="text-xs">
@@ -174,15 +178,15 @@ function InspirationCard({ inspiration, onSelect }: InspirationCardProps) {
           </div>
         </div>
 
-        <h4 className="font-medium text-sm mb-1 group-hover:text-blue-600 transition-colors">
+        <h4 className="mb-1 text-sm font-medium transition-colors group-hover:text-blue-600">
           {inspiration.title}
         </h4>
 
-        <p className="text-xs text-gray-500 mb-3 line-clamp-2">
+        <p className={compact ? 'mb-2 line-clamp-2 text-xs text-gray-500' : 'text-xs text-gray-500 mb-3 line-clamp-2'}>
           {inspiration.description}
         </p>
 
-        <div className="flex flex-wrap gap-1 mb-3">
+        <div className={compact ? 'mb-2 flex flex-wrap gap-1' : 'flex flex-wrap gap-1 mb-3'}>
           {inspiration.coreElements.slice(0, 3).map((element) => (
             <span
               key={element}

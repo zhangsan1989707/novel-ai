@@ -13,6 +13,7 @@ interface OutlineGeneratorProps {
   protagonistGoal?: string
   antagonistSetting?: string
   endingPlan?: string
+  showIntro?: boolean
   onApply?: (outline: string) => void
   onClose?: () => void
 }
@@ -26,6 +27,7 @@ export function OutlineGenerator({
   protagonistGoal,
   antagonistSetting,
   endingPlan,
+  showIntro = true,
   onApply,
   onClose,
 }: OutlineGeneratorProps) {
@@ -69,7 +71,7 @@ export function OutlineGenerator({
       } else {
         setError(data.error?.message || '生成失败')
       }
-    } catch (err) {
+    } catch {
       setError('网络错误，请检查网络连接')
     } finally {
       setLoading(false)
@@ -90,26 +92,39 @@ export function OutlineGenerator({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-5 w-5 text-amber-500" />
-          <span className="font-semibold text-lg">AI 生成小说大纲</span>
-        </div>
-        <div className="flex items-center gap-2">
-          {onClose && (
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-            >
-              <X className="h-4 w-4 text-gray-500" />
-            </button>
-          )}
-        </div>
-      </div>
+      {showIntro && (
+        <>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-amber-500" />
+              <span className="font-semibold text-lg">AI 生成小说大纲</span>
+            </div>
+            <div className="flex items-center gap-2">
+              {onClose && (
+                <button
+                  onClick={onClose}
+                  className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                >
+                  <X className="h-4 w-4 text-gray-500" />
+                </button>
+              )}
+            </div>
+          </div>
 
-      <p className="text-sm text-gray-500 dark:text-gray-400">
-        基于项目设定，AI 将为你生成一个完整的故事大纲，包括主线剧情、起承转合、核心冲突等。
-      </p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            基于项目设定，AI 将为你生成一个完整的故事大纲，包括主线剧情、起承转合、核心冲突等。
+          </p>
+        </>
+      )}
+
+      {!showIntro && (
+        <div className="flex items-start gap-3 rounded-lg bg-blue-50 p-3 text-sm text-blue-700 dark:bg-blue-900/20 dark:text-blue-300">
+          <Sparkles className="mt-0.5 h-4 w-4 shrink-0" />
+          <div>
+            将根据当前项目的题材、风格、世界观、主角目标等信息生成故事大纲。
+          </div>
+        </div>
+      )}
 
       <Button
         variant="primary"
@@ -151,7 +166,7 @@ export function OutlineGenerator({
         </div>
       )}
 
-      {!outline && !loading && !error && (
+      {showIntro && !outline && !loading && !error && (
         <div className="text-center py-8 text-gray-400">
           <Sparkles className="h-12 w-12 mx-auto mb-3 opacity-50" />
           <p>点击上方按钮开始生成大纲</p>

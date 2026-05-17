@@ -2,12 +2,12 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { Button, Input, Textarea, Select, Card, CardContent, CardHeader, CardTitle, Badge, Progress, Modal, ChaptersEmptyState, toast, MoreActionsMenu, BatchChapterActionBar } from '@/components/ui'
-import { ProjectForm, ProjectFormData, genreOptions, writingStyleOptions, ChapterListGenerator, BatchGenerator } from '@/components/project'
+import { Button, Card, CardContent, CardHeader, CardTitle, Badge, Progress, Modal, ChaptersEmptyState, toast, MoreActionsMenu } from '@/components/ui'
+import { ProjectForm, ProjectFormData, ChapterListGenerator, BatchGenerator } from '@/components/project'
 import { BatchProgress } from '@/components/ai/BatchProgress'
-import { PlotAnalyzer, BookAnalysisPanel, ContinuationPanel, ContinuationResults, ResearchPanel, ReviewPanel, DeslopPanel, CoverGenerator, AgentManager, WorkflowHooksPanel, ShortStoryPanel } from '@/components/ai'
+import { PlotAnalyzer, ContinuationPanel, ResearchPanel, ReviewPanel, DeslopPanel, CoverGenerator, ShortStoryPanel } from '@/components/ai'
 import { OutlineGenerator } from '@/components/ai/OutlineGenerator'
-import { ArrowLeft, Pencil, Trash2, BookOpen, Clock, Target, Users, Layers, Plus, ListChecks, Sparkles, FileText, RefreshCw, Search, Shield, Wand2, Image, Bot, Workflow, BookMarked } from 'lucide-react'
+import { BookOpen, Clock, Target, Users, Layers, Plus, ListChecks, FileText, Search, CheckCircle2, Circle, AlertCircle, ArrowRight, ClipboardList, PenLine, FileCheck2, Rocket } from 'lucide-react'
 import type { ProjectStatus } from '@/types'
 
 interface Chapter {
@@ -64,6 +64,104 @@ const projectStatusMap: Record<ProjectStatus, { label: string; variant: 'default
   PAUSED: { label: '已暂停', variant: 'warning' },
 }
 
+type WorkflowStatus = 'complete' | 'active' | 'pending'
+type WorkflowAction = 'settings' | 'outline' | 'chapters' | 'write' | 'review' | 'cover'
+
+interface WorkflowStep {
+  id: WorkflowAction
+  title: string
+  description: string
+  status: WorkflowStatus
+  actionLabel: string
+}
+
+function hasOutline(project: Project) {
+  return Boolean(
+    project.outline?.trim() ||
+    (project.outlineStages && Object.keys(project.outlineStages).length > 0)
+  )
+}
+
+function getCompletedChapterCount(project: Project) {
+  return project.chapters.filter((chapter) => chapter.status === 'COMPLETED').length
+}
+
+function getWorkflow(project: Project): WorkflowStep[] {
+  const setupDone = Boolean(
+    project.title &&
+    project.description &&
+    project.genre &&
+    project.writingStyle &&
+    project.worldSetting?.trim() &&
+    project.protagonistProfile?.trim()
+  )
+  const outlineDone = hasOutline(project)
+  const chaptersDone = project.chapters.length > 0
+  const writingDone = getCompletedChapterCount(project) > 0 || project.currentWordCount > 0
+  const reviewReady = writingDone
+  const coverDone = Boolean(project.coverImage)
+
+  const steps: Array<Omit<WorkflowStep, 'status'>> = [
+    {
+      id: 'settings',
+      title: '完善设定',
+      description: '题材、风格、受众、世界观和模型配置',
+      actionLabel: '编辑设定',
+    },
+    {
+      id: 'outline',
+      title: '生成大纲',
+      description: '确定主线、卷纲、阶段目标和结局方向',
+      actionLabel: '生成大纲',
+    },
+    {
+      id: 'chapters',
+      title: '生成目录',
+      description: '把大纲拆成可执行的章节任务',
+      actionLabel: '生成目录',
+    },
+    {
+      id: 'write',
+      title: '写作正文',
+      description: '单章写作、继续生成或批量生成',
+      actionLabel: chaptersDone ? '开始写作' : '新建章节',
+    },
+    {
+      id: 'review',
+      title: '审稿润色',
+      description: '对抗审稿、去 AI 味和剧情检查',
+      actionLabel: '开始审稿',
+    },
+    {
+      id: 'cover',
+      title: '封面导出',
+      description: '生成封面并准备作品导出',
+      actionLabel: '生成封面',
+    },
+  ]
+
+  const completion = [setupDone, outlineDone, chaptersDone, writingDone, reviewReady, coverDone]
+  const firstIncomplete = completion.findIndex((done) => !done)
+
+  return steps.map((step, index) => ({
+    ...step,
+    status: completion[index] ? 'complete' : firstIncomplete === index ? 'active' : 'pending',
+  }))
+}
+
+function getMissingItems(project: Project) {
+  const items: string[] = []
+  if (!project.aiModelConfig && !project.aiModelId) items.push('未绑定 AI 模型')
+  if (!project.description?.trim()) items.push('缺少小说简介')
+  if (!project.genre) items.push('缺少小说类型')
+  if (!project.writingStyle) items.push('缺少写作风格')
+  if (!project.worldSetting?.trim()) items.push('缺少世界设定')
+  if (!project.protagonistProfile?.trim()) items.push('缺少主角设定')
+  if (!hasOutline(project)) items.push('缺少大纲')
+  if (project.chapters.length === 0) items.push('缺少章节目录')
+  return items
+}
+
 export default function ProjectDetailPage() {
   const params = useParams()
   const router = useRouter()
@@ -75,14 +173,11 @@ export default function ProjectDetailPage() {
 
   const [showEditModal, setShowEditModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
-  const [showBatchModal, setShowBatchModal] = useState(false)
   const [showPlotAnalysisModal, setShowPlotAnalysisModal] = useState(false)
   const [showContinuationModal, setShowContinuationModal] = useState(false)
   const [batchProgressOpen, setBatchProgressOpen] = useState(false)
-  const [deleteChapterId, setDeleteChapterId] = useState<number | null>(null)
   const [selectedChapterIds, setSelectedChapterIds] = useState<number[]>([])
   const [isSelectMode, setIsSelectMode] = useState(false)
-  const [plotAnalysisTab, setPlotAnalysisTab] = useState<'analyze' | 'results'>('analyze')
   const [batchOptions, setBatchOptions] = useState<{
     chapterIds?: number[]
     useContext: boolean
@@ -109,7 +204,7 @@ export default function ProjectDetailPage() {
       } else {
         setError(data.error.message)
       }
-    } catch (err) {
+    } catch {
       setError('获取项目详情失败')
     } finally {
       setLoading(false)
@@ -117,7 +212,10 @@ export default function ProjectDetailPage() {
   }, [projectId])
 
   useEffect(() => {
-    fetchProject()
+    const timer = window.setTimeout(() => {
+      void fetchProject()
+    }, 0)
+    return () => window.clearTimeout(timer)
   }, [fetchProject])
 
   const handleUpdate = async (formData: ProjectFormData) => {
@@ -155,51 +253,6 @@ export default function ProjectDetailPage() {
       }
     } catch (err) {
       console.error('删除项目失败:', err)
-      toast.error('删除失败，请重试')
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  const handleDeleteChapter = async () => {
-    if (!deleteChapterId) return
-    setSubmitting(true)
-    try {
-      const res = await fetch(`/api/novel/projects/${projectId}/chapters/${deleteChapterId}`, {
-        method: 'DELETE',
-      })
-      const result = await res.json()
-      if (result.success) {
-        setDeleteChapterId(null)
-        fetchProject()
-        toast.success('章节已删除')
-      } else {
-        toast.error(result.error?.message || '删除失败')
-      }
-    } catch (err) {
-      console.error('删除章节失败:', err)
-      toast.error('删除失败，请重试')
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  const handleBatchDeleteChapters = async () => {
-    if (selectedChapterIds.length === 0) return
-    setSubmitting(true)
-    try {
-      for (const chapterId of selectedChapterIds) {
-        await fetch(`/api/novel/projects/${projectId}/chapters/${chapterId}`, {
-          method: 'DELETE',
-        })
-      }
-      const count = selectedChapterIds.length
-      setSelectedChapterIds([])
-      setIsSelectMode(false)
-      fetchProject()
-      toast.success(`已删除 ${count} 个章节`)
-    } catch (err) {
-      console.error('批量删除章节失败:', err)
       toast.error('删除失败，请重试')
     } finally {
       setSubmitting(false)
@@ -303,6 +356,39 @@ export default function ProjectDetailPage() {
   const progress = project.targetWordCount
     ? Math.round((project.currentWordCount / project.targetWordCount) * 100)
     : null
+  const workflow = getWorkflow(project)
+  const currentStep = workflow.find((step) => step.status === 'active') ?? workflow[workflow.length - 1]
+  const completedWorkflowCount = workflow.filter((step) => step.status === 'complete').length
+  const workflowProgress = Math.round((completedWorkflowCount / workflow.length) * 100)
+  const missingItems = getMissingItems(project)
+
+  const handleWorkflowAction = (action: WorkflowAction) => {
+    switch (action) {
+      case 'settings':
+        setShowEditModal(true)
+        break
+      case 'outline':
+        setShowOutlineGenerator(true)
+        break
+      case 'chapters':
+        setShowGenerator(true)
+        break
+      case 'write':
+        if (project.chapters.length > 0) {
+          const nextChapter = project.chapters.find((chapter) => chapter.status !== 'COMPLETED') ?? project.chapters[0]
+          router.push(`/projects/${projectId}/chapters/${nextChapter.id}/generate`)
+        } else {
+          router.push(`/projects/${projectId}/chapters/new`)
+        }
+        break
+      case 'review':
+        setShowReviewModal(true)
+        break
+      case 'cover':
+        setShowCoverModal(true)
+        break
+    }
+  }
 
   return (
     <>
@@ -365,121 +451,143 @@ export default function ProjectDetailPage() {
         </div>
       </div>
 
-      {/* 创作工具栏 */}
+      {/* 创作流程引导 */}
       {project.projectMode === 'CREATE' && (
-        <Card className="mb-6">
-          <CardContent className="p-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowOutlineGenerator(true)}
-                className="gap-1.5"
-              >
-                <FileText className="h-3.5 w-3.5" />
-                生成大纲
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowGenerator(true)}
-                className="gap-1.5"
-              >
-                <ListChecks className="h-3.5 w-3.5" />
-                生成目录
-              </Button>
-              <BatchGenerator
-                projectId={projectId}
-                chapters={project.chapters}
-                onGenerate={(options) => {
-                  setBatchOptions(options)
-                  setBatchProgressOpen(true)
-                }}
-              />
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowPlotAnalysisModal(true)}
-                className="gap-1.5"
-              >
-                <Sparkles className="h-3.5 w-3.5" />
-                分析剧情
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowContinuationModal(true)}
-                className="gap-1.5"
-              >
-                <RefreshCw className="h-3.5 w-3.5" />
-                继续生成
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowResearchModal(true)}
-                className="gap-1.5"
-              >
-                <Search className="h-3.5 w-3.5" />
-                资料研究
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowReviewModal(true)}
-                className="gap-1.5"
-              >
-                <Shield className="h-3.5 w-3.5" />
-                对抗审稿
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowDeslopModal(true)}
-                className="gap-1.5"
-              >
-                <Wand2 className="h-3.5 w-3.5" />
-                去AI味
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowCoverModal(true)}
-                className="gap-1.5"
-              >
-                <Image className="h-3.5 w-3.5" />
-                封面生成
-              </Button>
-              {project.genre?.includes('短篇') || project.storyType === 'SHORT' ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowShortStoryModal(true)}
-                  className="gap-1.5"
-                >
-                  <BookMarked className="h-3.5 w-3.5" />
-                  短篇创作
-                </Button>
-              ) : null}
-              <div className="ml-auto">
+        <div className="mb-6 space-y-4">
+          <Card>
+            <CardContent className="p-4 sm:p-5">
+              <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <ClipboardList className="h-4 w-4 text-blue-600" />
+                    <h2 className="text-base font-semibold text-gray-900 dark:text-white">创作流程</h2>
+                    <Badge variant="primary">{completedWorkflowCount}/{workflow.length}</Badge>
+                  </div>
+                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                    当前建议：{currentStep.description}
+                  </p>
+                </div>
                 <Button
                   variant="primary"
                   size="sm"
-                  onClick={() => router.push(`/projects/${projectId}/chapters/new`)}
-                  className="gap-1.5"
+                  onClick={() => handleWorkflowAction(currentStep.id)}
+                  className="shrink-0"
                 >
-                  <Plus className="h-3.5 w-3.5" />
-                  新建章节
+                  {currentStep.actionLabel}
+                  <ArrowRight className="h-4 w-4" />
                 </Button>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+
+              <div className="mt-5 grid grid-cols-1 gap-2 md:grid-cols-3 xl:grid-cols-6">
+                {workflow.map((step, index) => {
+                  const isComplete = step.status === 'complete'
+                  const isActive = step.status === 'active'
+                  const StepIcon = isComplete ? CheckCircle2 : isActive ? AlertCircle : Circle
+                  return (
+                    <button
+                      key={step.id}
+                      type="button"
+                      onClick={() => handleWorkflowAction(step.id)}
+                      className={`group flex min-h-[92px] flex-col items-start rounded-lg border px-3 py-3 text-left transition-colors ${
+                        isActive
+                          ? 'border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-900/20'
+                          : isComplete
+                            ? 'border-green-200 bg-green-50/70 dark:border-green-900/60 dark:bg-green-900/10'
+                            : 'border-gray-200 bg-white hover:border-blue-300 hover:bg-blue-50/40 dark:border-gray-700 dark:bg-gray-800 dark:hover:border-blue-500/70'
+                      }`}
+                    >
+                      <div className="flex w-full items-center justify-between gap-2">
+                        <span className="text-xs text-gray-400">0{index + 1}</span>
+                        <StepIcon
+                          className={`h-4 w-4 ${
+                            isComplete ? 'text-green-600' : isActive ? 'text-blue-600' : 'text-gray-400'
+                          }`}
+                        />
+                      </div>
+                      <span className="mt-2 text-sm font-medium text-gray-900 dark:text-white">{step.title}</span>
+                      <span className="mt-1 line-clamp-2 text-xs text-gray-500 dark:text-gray-400">{step.description}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-4">
+              <div className="grid gap-4 xl:grid-cols-[1fr_1fr_1fr_1fr_1fr]">
+                <div>
+                  <div className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-white">
+                    <FileText className="h-4 w-4 text-blue-600" />
+                    规划
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="outline" size="sm" onClick={() => setShowOutlineGenerator(true)}>生成大纲</Button>
+                    <Button variant="outline" size="sm" onClick={() => setShowGenerator(true)}>生成目录</Button>
+                    <Button variant="outline" size="sm" onClick={() => setShowPlotAnalysisModal(true)}>分析剧情</Button>
+                  </div>
+                </div>
+                <div>
+                  <div className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-white">
+                    <PenLine className="h-4 w-4 text-blue-600" />
+                    写作
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <BatchGenerator
+                      projectId={projectId}
+                      chapters={project.chapters}
+                      onGenerate={(options) => {
+                        setBatchOptions(options)
+                        setBatchProgressOpen(true)
+                      }}
+                    />
+                    <Button variant="outline" size="sm" onClick={() => setShowContinuationModal(true)}>继续生成</Button>
+                    <Button variant="primary" size="sm" onClick={() => router.push(`/projects/${projectId}/chapters/new`)}>
+                      <Plus className="h-3.5 w-3.5" />
+                      新建章节
+                    </Button>
+                  </div>
+                </div>
+                <div>
+                  <div className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-white">
+                    <Search className="h-4 w-4 text-blue-600" />
+                    增强
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="outline" size="sm" onClick={() => setShowResearchModal(true)}>资料研究</Button>
+                    {project.genre?.includes('短篇') || project.storyType === 'SHORT' ? (
+                      <Button variant="outline" size="sm" onClick={() => setShowShortStoryModal(true)}>短篇创作</Button>
+                    ) : null}
+                  </div>
+                </div>
+                <div>
+                  <div className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-white">
+                    <FileCheck2 className="h-4 w-4 text-blue-600" />
+                    质量
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="outline" size="sm" onClick={() => setShowReviewModal(true)}>对抗审稿</Button>
+                    <Button variant="outline" size="sm" onClick={() => setShowDeslopModal(true)}>去 AI 味</Button>
+                  </div>
+                </div>
+                <div>
+                  <div className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-white">
+                    <Rocket className="h-4 w-4 text-blue-600" />
+                    发布
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="outline" size="sm" onClick={() => setShowCoverModal(true)}>封面生成</Button>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
         {/* 左侧：主要内容 */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="space-y-6">
           {/* 进度卡片 */}
           <Card>
             <CardContent className="p-6">
@@ -687,29 +795,6 @@ export default function ProjectDetailPage() {
             </Card>
           )}
 
-          {/* 大纲生成器 */}
-      {showOutlineGenerator && project.projectMode === 'CREATE' && (
-        <Card className="mb-6">
-          <CardContent className="p-6">
-            <OutlineGenerator
-              projectTitle={project.title}
-              genre={project.genre || undefined}
-              writingStyle={project.writingStyle || undefined}
-              worldSetting={project.worldSetting || undefined}
-              protagonistProfile={project.protagonistProfile || undefined}
-              protagonistGoal={project.protagonistGoal || undefined}
-              antagonistSetting={project.antagonistSetting || undefined}
-              endingPlan={project.endingPlan || undefined}
-              onApply={(outline) => {
-                console.log('生成的大纲:', outline)
-                setShowOutlineGenerator(false)
-              }}
-              onClose={() => setShowOutlineGenerator(false)}
-            />
-          </CardContent>
-        </Card>
-      )}
-
       {/* 目录生成器 */}
       {showGenerator && project.projectMode === 'CREATE' && (
         <ChapterListGenerator
@@ -739,10 +824,71 @@ export default function ProjectDetailPage() {
 
         {/* 右侧：信息面板 */}
         <div className="space-y-6">
+          {/* 下一步建议 */}
+          {project.projectMode === 'CREATE' && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <ArrowRight className="h-4 w-4 text-blue-600" />
+                  下一步
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <div className="text-sm font-medium text-gray-900 dark:text-white">{currentStep.title}</div>
+                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{currentStep.description}</p>
+                </div>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => handleWorkflowAction(currentStep.id)}
+                  className="w-full"
+                >
+                  {currentStep.actionLabel}
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* 项目完整度 */}
+          {project.projectMode === 'CREATE' && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Target className="h-4 w-4 text-blue-600" />
+                  项目完整度
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <div className="mb-2 flex items-center justify-between text-sm">
+                    <span className="text-gray-500 dark:text-gray-400">流程完成</span>
+                    <span className="font-medium text-gray-900 dark:text-white">{workflowProgress}%</span>
+                  </div>
+                  <Progress value={workflowProgress} max={100} size="sm" />
+                </div>
+                {missingItems.length > 0 ? (
+                  <div className="space-y-2">
+                    <div className="text-xs font-medium text-gray-500 dark:text-gray-400">待补充</div>
+                    <div className="flex flex-wrap gap-2">
+                      {missingItems.slice(0, 6).map((item) => (
+                        <Badge key={item} variant="warning">{item}</Badge>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700 dark:bg-green-900/20 dark:text-green-300">
+                    基础信息已完整，可以持续生成和审稿。
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {/* 项目信息 */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 text-base">
                 <Layers className="h-5 w-5" />
                 项目信息
               </CardTitle>
@@ -867,6 +1013,30 @@ export default function ProjectDetailPage() {
             删除
           </Button>
         </div>
+      </Modal>
+
+      {/* 大纲生成 Modal */}
+      <Modal
+        open={showOutlineGenerator}
+        onClose={() => setShowOutlineGenerator(false)}
+        title="生成大纲"
+        className="max-w-4xl"
+      >
+        <OutlineGenerator
+          projectTitle={project.title}
+          genre={project.genre || undefined}
+          writingStyle={project.writingStyle || undefined}
+          worldSetting={project.worldSetting || undefined}
+          protagonistProfile={project.protagonistProfile || undefined}
+          protagonistGoal={project.protagonistGoal || undefined}
+          antagonistSetting={project.antagonistSetting || undefined}
+          endingPlan={project.endingPlan || undefined}
+          showIntro={false}
+          onApply={(outline) => {
+            console.log('生成的大纲:', outline)
+            setShowOutlineGenerator(false)
+          }}
+        />
       </Modal>
 
       {/* 分析剧情 Modal */}
