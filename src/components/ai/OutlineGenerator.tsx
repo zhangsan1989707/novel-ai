@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Button, Textarea } from '@/components/ui'
 import { Sparkles, Copy, Check, X } from 'lucide-react'
+import type { OutlineStages } from '@/types'
 
 interface OutlineGeneratorProps {
   projectTitle: string
@@ -14,7 +15,7 @@ interface OutlineGeneratorProps {
   antagonistSetting?: string
   endingPlan?: string
   showIntro?: boolean
-  onApply?: (outline: string) => void
+  onApply?: (outline: string, outlineStages?: OutlineStages) => void
   onClose?: () => void
 }
 
@@ -33,6 +34,7 @@ export function OutlineGenerator({
 }: OutlineGeneratorProps) {
   const [loading, setLoading] = useState(false)
   const [outline, setOutline] = useState('')
+  const [outlineStages, setOutlineStages] = useState<OutlineStages | undefined>()
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
 
@@ -65,6 +67,7 @@ export function OutlineGenerator({
 
       if (data.success) {
         setOutline(data.data.outline || '')
+        setOutlineStages(data.data.outlineStages || undefined)
         if (!data.data.outline) {
           setError('生成的大纲为空，请重试')
         }
@@ -86,7 +89,7 @@ export function OutlineGenerator({
 
   const handleApply = () => {
     if (outline && onApply) {
-      onApply(outline)
+      onApply(outline, outlineStages)
     }
   }
 

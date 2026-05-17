@@ -39,7 +39,7 @@ interface ReviewReport {
 
 interface ReviewPanelProps {
   projectId: number
-  chapters?: Array<{ chapterNumber: number; title: string; content?: string | null }>
+  chapters?: Array<{ id?: number; chapterNumber: number; title: string; content?: string | null }>
 }
 
 const REVIEWER_CONFIG: Record<string, { icon: typeof Swords; color: string; bgColor: string }> = {
@@ -101,15 +101,28 @@ export function ReviewPanel({ projectId, chapters = [] }: ReviewPanelProps) {
     }
   }, [loadReports])
 
-  const handleChapterSelect = useCallback((chapterNumber: number) => {
+  const handleChapterSelect = useCallback(async (chapterNumber: number) => {
     const chapter = chapters.find(c => c.chapterNumber === chapterNumber)
     if (chapter?.content) {
       setContent(chapter.content)
       setChapterNo(chapterNumber)
+    } else if (chapter) {
+      try {
+        const res = await fetch(`/api/novel/projects/${projectId}/chapters/${chapter.id || chapterNumber}`)
+        const data = await res.json()
+        if (data.success && data.data?.content) {
+          setContent(data.data.content)
+          setChapterNo(chapterNumber)
+        } else {
+          toast.error('该章节暂无内容')
+        }
+      } catch {
+        toast.error('获取章节内容失败')
+      }
     } else {
       toast.error('该章节暂无内容')
     }
-  }, [chapters])
+  }, [chapters, projectId])
 
   const handleReview = useCallback(async () => {
     if (!content.trim()) {

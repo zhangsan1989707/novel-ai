@@ -21,6 +21,7 @@ interface CoverDesign {
 
 interface CoverGeneratorProps {
   projectId: number
+  onCoverApplied?: () => void
 }
 
 const genreOptions = [
@@ -33,7 +34,7 @@ const genreOptions = [
   { value: '悬疑', label: '悬疑', emoji: '🔍' },
 ]
 
-export function CoverGenerator({ projectId }: CoverGeneratorProps) {
+export function CoverGenerator({ projectId, onCoverApplied }: CoverGeneratorProps) {
   const [selectedStyle, setSelectedStyle] = useState<string>('')
   const [generating, setGenerating] = useState(false)
   const [coverDesigns, setCoverDesigns] = useState<CoverDesign[]>([])
@@ -106,6 +107,7 @@ export function CoverGenerator({ projectId }: CoverGeneratorProps) {
             isApplied: d.id === designId,
           }))
         )
+        onCoverApplied?.()
       } else {
         toast.error(data.error?.message || '应用封面失败')
       }
@@ -114,7 +116,7 @@ export function CoverGenerator({ projectId }: CoverGeneratorProps) {
     } finally {
       setApplyingId(null)
     }
-  }, [])
+  }, [onCoverApplied])
 
   const handleDelete = useCallback(async (designId: string) => {
     try {

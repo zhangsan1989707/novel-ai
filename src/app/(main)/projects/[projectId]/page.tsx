@@ -87,14 +87,17 @@ function getCompletedChapterCount(project: Project) {
 }
 
 function getWorkflow(project: Project): WorkflowStep[] {
-  const setupDone = Boolean(
+  const basicSetupDone = Boolean(
     project.title &&
     project.description &&
     project.genre &&
-    project.writingStyle &&
+    project.writingStyle
+  )
+  const advancedSetupDone = Boolean(
     project.worldSetting?.trim() &&
     project.protagonistProfile?.trim()
   )
+  const setupDone = basicSetupDone
   const outlineDone = hasOutline(project)
   const chaptersDone = project.chapters.length > 0
   const writingDone = getCompletedChapterCount(project) > 0 || project.currentWordCount > 0
@@ -105,8 +108,10 @@ function getWorkflow(project: Project): WorkflowStep[] {
     {
       id: 'settings',
       title: '完善设定',
-      description: '题材、风格、受众、世界观和模型配置',
-      actionLabel: '编辑设定',
+      description: advancedSetupDone
+        ? '题材、风格、受众、世界观和模型配置'
+        : '题材、风格、受众已配置（补充世界观和主角设定可提升生成质量）',
+      actionLabel: advancedSetupDone ? '编辑设定' : '补充设定',
     },
     {
       id: 'outline',
@@ -1032,9 +1037,24 @@ export default function ProjectDetailPage() {
           antagonistSetting={project.antagonistSetting || undefined}
           endingPlan={project.endingPlan || undefined}
           showIntro={false}
-          onApply={(outline) => {
-            console.log('生成的大纲:', outline)
-            setShowOutlineGenerator(false)
+          onApply={async (outline, outlineStages) => {
+            try {
+              const res = await fetch(`/api/novel/projects/${projectId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ outline, outlineStages: outlineStages || undefined }),
+              })
+              const result = await res.json()
+              if (result.success) {
+                toast.success('大纲已应用到项目')
+                setShowOutlineGenerator(false)
+                fetchProject()
+              } else {
+                toast.error(result.error?.message || '应用大纲失败')
+              }
+            } catch {
+              toast.error('应用大纲失败，请重试')
+            }
           }}
         />
       </Modal>
@@ -1080,7 +1100,14 @@ export default function ProjectDetailPage() {
         title="对抗式审稿"
         className="max-w-4xl"
       >
-        <ReviewPanel projectId={projectId} />
+        <ReviewPanel
+          projectId={projectId}
+          chapters={project.chapters.map(ch => ({
+            id: ch.id,
+            chapterNumber: ch.chapterNumber,
+            title: ch.title,
+          }))}
+        />
       </Modal>
 
       {/* 去AI味 Modal */}
@@ -1100,7 +1127,7 @@ export default function ProjectDetailPage() {
         title="封面生成"
         className="max-w-4xl"
       >
-        <CoverGenerator projectId={projectId} />
+        <CoverGenerator projectId={projectId} onCoverApplied={fetchProject} />
       </Modal>
 
       {/* 短篇创作 Modal */}
