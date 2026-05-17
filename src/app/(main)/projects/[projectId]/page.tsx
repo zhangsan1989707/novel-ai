@@ -342,16 +342,15 @@ export default function ProjectDetailPage() {
       {/* 创作工具栏 */}
       {project.projectMode === 'CREATE' && (
         <Card className="mb-6">
-          <CardContent className="p-3">
-            <div className="flex items-center gap-2 overflow-x-auto pb-1" style={{scrollbarWidth: 'thin'}}>
-              <span className="text-sm text-gray-500">创作工具：</span>
+          <CardContent className="p-4">
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setShowOutlineGenerator(true)}
                 className="gap-1.5"
               >
-                <FileText className="h-4 w-4" />
+                <FileText className="h-3.5 w-3.5" />
                 生成大纲
               </Button>
               <Button
@@ -360,7 +359,7 @@ export default function ProjectDetailPage() {
                 onClick={() => setShowGenerator(true)}
                 className="gap-1.5"
               >
-                <ListChecks className="h-4 w-4" />
+                <ListChecks className="h-3.5 w-3.5" />
                 生成目录
               </Button>
               <BatchGenerator
@@ -377,7 +376,7 @@ export default function ProjectDetailPage() {
                 onClick={() => setShowPlotAnalysisModal(true)}
                 className="gap-1.5"
               >
-                <Sparkles className="h-4 w-4" />
+                <Sparkles className="h-3.5 w-3.5" />
                 分析剧情
               </Button>
               <Button
@@ -386,7 +385,7 @@ export default function ProjectDetailPage() {
                 onClick={() => setShowContinuationModal(true)}
                 className="gap-1.5"
               >
-                <RefreshCw className="h-4 w-4" />
+                <RefreshCw className="h-3.5 w-3.5" />
                 继续生成
               </Button>
               <Button
@@ -395,7 +394,7 @@ export default function ProjectDetailPage() {
                 onClick={() => setShowResearchModal(true)}
                 className="gap-1.5"
               >
-                <Search className="h-4 w-4" />
+                <Search className="h-3.5 w-3.5" />
                 资料研究
               </Button>
               <Button
@@ -404,7 +403,7 @@ export default function ProjectDetailPage() {
                 onClick={() => setShowReviewModal(true)}
                 className="gap-1.5"
               >
-                <Shield className="h-4 w-4" />
+                <Shield className="h-3.5 w-3.5" />
                 对抗审稿
               </Button>
               <Button
@@ -413,7 +412,7 @@ export default function ProjectDetailPage() {
                 onClick={() => setShowDeslopModal(true)}
                 className="gap-1.5"
               >
-                <Wand2 className="h-4 w-4" />
+                <Wand2 className="h-3.5 w-3.5" />
                 去AI味
               </Button>
               <Button
@@ -422,7 +421,7 @@ export default function ProjectDetailPage() {
                 onClick={() => setShowCoverModal(true)}
                 className="gap-1.5"
               >
-                <Image className="h-4 w-4" />
+                <Image className="h-3.5 w-3.5" />
                 封面生成
               </Button>
               {project.genre?.includes('短篇') || project.storyType === 'SHORT' ? (
@@ -432,19 +431,21 @@ export default function ProjectDetailPage() {
                   onClick={() => setShowShortStoryModal(true)}
                   className="gap-1.5"
                 >
-                  <BookMarked className="h-4 w-4" />
+                  <BookMarked className="h-3.5 w-3.5" />
                   短篇创作
                 </Button>
               ) : null}
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={() => router.push(`/projects/${projectId}/chapters/new`)}
-                className="gap-1.5 ml-auto"
-              >
-                <Plus className="h-4 w-4" />
-                新建章节
-              </Button>
+              <div className="ml-auto">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => router.push(`/projects/${projectId}/chapters/new`)}
+                  className="gap-1.5"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  新建章节
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -457,11 +458,11 @@ export default function ProjectDetailPage() {
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold flex items-center gap-2">
-                  <Target className="h-5 w-5" />
+                <h2 className="text-base font-semibold flex items-center gap-2">
+                  <Target className="h-4 w-4" />
                   写作进度
                 </h2>
-                <span className="text-2xl font-bold text-blue-600">{progress !== null ? `${progress}%` : '-'}</span>
+                <span className="text-xl font-bold text-blue-600">{progress !== null ? `${progress}%` : '-'}</span>
               </div>
               {project.targetWordCount ? (
                 <Progress value={project.currentWordCount} max={project.targetWordCount} showLabel size="lg" />
@@ -472,16 +473,16 @@ export default function ProjectDetailPage() {
               )}
               <div className="mt-4 grid grid-cols-3 gap-4 text-center">
                 <div>
-                  <p className="text-2xl font-bold">{project.currentWordCount.toLocaleString()}</p>
-                  <p className="text-sm text-gray-500">当前字数</p>
+                  <p className="text-xl font-bold">{project.currentWordCount.toLocaleString()}</p>
+                  <p className="text-xs text-gray-500">当前字数</p>
                 </div>
                 <div>
-                  <p className="text-2xl font-bold">{project.targetWordCount?.toLocaleString() || '-'}</p>
-                  <p className="text-sm text-gray-500">目标字数</p>
+                  <p className="text-xl font-bold">{project.targetWordCount?.toLocaleString() || '-'}</p>
+                  <p className="text-xs text-gray-500">目标字数</p>
                 </div>
                 <div>
-                  <p className="text-2xl font-bold">{project.chapters.length}</p>
-                  <p className="text-sm text-gray-500">章节数</p>
+                  <p className="text-xl font-bold">{project.chapters.length}</p>
+                  <p className="text-xs text-gray-500">章节数</p>
                 </div>
               </div>
             </CardContent>
