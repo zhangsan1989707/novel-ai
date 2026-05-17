@@ -10,14 +10,18 @@ export class VolcEngineProvider extends BaseAIProvider {
   readonly name = 'VolcEngine (火山引擎)'
   readonly vendor = AIVendor.VOLCENGINE
 
-  private readonly baseURL = 'https://ark.cn-beijing.volces.com/api/v3'
+  private readonly defaultBaseURL = 'https://ark.cn-beijing.volces.com/api/coding/v3'
+
+  private getBaseURL(): string {
+    return (this.config?.apiEndpoint || this.defaultBaseURL).replace(/\/+$/, '')
+  }
 
   async generate(prompt: string, params?: GenerationParams): Promise<GenerationResult> {
     if (!this.config) {
       throw new Error('Provider not configured')
     }
 
-    const response = await fetch(`${this.baseURL}/chat/completions`, {
+    const response = await fetch(`${this.getBaseURL()}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -53,7 +57,7 @@ export class VolcEngineProvider extends BaseAIProvider {
       throw new Error('Provider not configured')
     }
 
-    const response = await fetch(`${this.baseURL}/chat/completions`, {
+    const response = await fetch(`${this.getBaseURL()}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

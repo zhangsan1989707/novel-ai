@@ -34,7 +34,12 @@ const providerCache: Map<string, AIProvider> = new Map()
  * 获取普通 AI Provider 实例（无成本追踪）
  */
 export function getAIProvider(vendor: AIVendor, config?: AIConfig): AIProvider {
-  const cacheKey = `${vendor}-${config?.apiKey || 'default'}`
+  const cacheKey = [
+    vendor,
+    config?.modelId || 'default-model',
+    config?.apiKey || 'default-key',
+    config?.apiEndpoint || 'default-endpoint',
+  ].join('-')
 
   if (!providerCache.has(cacheKey)) {
     const provider = AIProviderFactory.create(vendor) as BaseAIProvider
@@ -162,8 +167,9 @@ function createConfigFromEnv(vendor: AIVendor): AIConfig {
     case AIVendor.VOLCENGINE:
       return {
         vendor: AIVendor.VOLCENGINE,
-        modelId: process.env.VOLCENGINE_MODEL_ID || 'doubao-pro-32k',
+        modelId: process.env.VOLCENGINE_MODEL_ID || 'ark-code-latest',
         apiKey: process.env.VOLCENGINE_API_KEY || '',
+        apiEndpoint: process.env.VOLCENGINE_API_ENDPOINT || 'https://ark.cn-beijing.volces.com/api/coding/v3',
       }
     default:
       throw new Error(`Unsupported vendor: ${vendor}`)
@@ -189,7 +195,7 @@ export function getDefaultVendor(): AIVendor {
  * - DEFAULT_AI_API_KEY: API Key（可选，不提供则使用 vendor 对应的默认 key）
  * - DEFAULT_AI_VENDOR: AI供应商（可选，不提供则根据已配置的 key 自动推断）
  */
-export function getDefaultAIConfig(): { vendor: AIVendor; modelId: string; apiKey: string } {
+export function getDefaultAIConfig(): AIConfig {
   const modelId = process.env.DEFAULT_AI_MODEL_ID
   const apiKey = process.env.DEFAULT_AI_API_KEY
 
@@ -200,12 +206,13 @@ export function getDefaultAIConfig(): { vendor: AIVendor; modelId: string; apiKe
 
     // 如果提供了独立的 API key，直接返回
     if (apiKey) {
-      return { vendor, modelId, apiKey }
+      const config = createConfigFromEnv(vendor)
+      return { vendor, modelId, apiKey, apiEndpoint: config.apiEndpoint }
     }
 
     // 否则使用对应 vendor 的默认 API key
     const config = createConfigFromEnv(vendor)
-    return { vendor, modelId, apiKey: config.apiKey }
+    return { ...config, modelId }
   }
 
   // 没有指定模型ID，使用 vendor 默认配置

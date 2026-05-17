@@ -44,7 +44,11 @@ const defaultModelIds: Record<AIVendor, string> = {
   [AIVendor.ALIBABA]: 'qwen-max',
   [AIVendor.DEEPSEEK]: 'deepseek-chat',
   [AIVendor.MINIMAX]: 'MiniMax-Text-01',
-  [AIVendor.VOLCENGINE]: 'doubao-pro-32k',
+  [AIVendor.VOLCENGINE]: 'ark-code-latest',
+}
+
+const defaultApiEndpoints: Partial<Record<AIVendor, string>> = {
+  [AIVendor.VOLCENGINE]: 'https://ark.cn-beijing.volces.com/api/coding/v3',
 }
 
 export default function SettingsPage() {
@@ -112,7 +116,7 @@ export default function SettingsPage() {
         vendor: AIVendor.DEEPSEEK,
         modelId: defaultModelIds[AIVendor.DEEPSEEK],
         apiKey: '',
-        apiEndpoint: '',
+        apiEndpoint: defaultApiEndpoints[AIVendor.DEEPSEEK] || '',
         isDefault: false,
       })
     }
@@ -225,15 +229,8 @@ export default function SettingsPage() {
   const handleTestConfig = async (config: AIConfig) => {
     setTesting(true)
     try {
-      const res = await fetch('/api/novel/ai-configs/test', {
+      const res = await fetch(`/api/novel/ai-configs/${config.id}/test`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          vendor: config.vendor,
-          modelId: config.modelId,
-          apiKey: config.apiKey,
-          apiEndpoint: config.apiEndpoint || undefined,
-        }),
       })
       const data = await res.json()
       if (data.success) {
@@ -450,6 +447,7 @@ export default function SettingsPage() {
               ...formData,
               vendor: e.target.value as AIVendor,
               modelId: defaultModelIds[e.target.value as AIVendor],
+              apiEndpoint: defaultApiEndpoints[e.target.value as AIVendor] || '',
             })}
           />
 
@@ -470,7 +468,7 @@ export default function SettingsPage() {
 
           <Input
             label="API 端点 (可选)"
-            placeholder="仅在需要时填写"
+            placeholder="如：https://ark.cn-beijing.volces.com/api/coding/v3"
             value={formData.apiEndpoint}
             onChange={(e) => setFormData({ ...formData, apiEndpoint: e.target.value })}
           />
