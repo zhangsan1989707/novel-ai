@@ -24,10 +24,10 @@ echo "📝 生成版本信息..."
 cd "$PROJECT_DIR"
 node scripts/generate-version.js
 
-# 2. 本地构建 Docker 镜像
-echo "🏗️ 本地构建 Docker 镜像..."
+# 2. 本地构建 Docker 镜像（AMD64 平台，兼容服务器）
+echo "🏗️ 本地构建 Docker 镜像 (AMD64)..."
 cd "$PROJECT_DIR"
-docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+docker build --platform linux/amd64 -t ${IMAGE_NAME}:${IMAGE_TAG} .
 
 # 3. 保存镜像为 tar 文件
 echo "📦 压缩镜像..."

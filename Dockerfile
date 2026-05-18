@@ -18,11 +18,12 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# 生成 Prisma Client
+# 生成 Prisma Client（构建时需要 DATABASE_URL）
+ENV DATABASE_URL="postgresql://user:password@localhost:5432/db"
 RUN npx prisma generate
 
 # 构建应用
-ENV NEXT_TELEMETRY_DISABLED 1
+ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
 # 生产阶段
