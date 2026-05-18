@@ -44,10 +44,10 @@ const defaultModelIds: Record<AIVendor, string> = {
   [AIVendor.OPENAI]: 'gpt-4o',
   [AIVendor.ANTHROPIC]: 'claude-3-5-sonnet-20241022',
   [AIVendor.ALIBABA]: 'qwen-max',
-  [AIVendor.DEEPSEEK]: 'deepseek-chat',
+  [AIVendor.DEEPSEEK]: 'deepseek-v4-flash',
   [AIVendor.MINIMAX]: 'MiniMax-Text-01',
   [AIVendor.VOLCENGINE]: 'ark-code-latest',
-  [AIVendor.ZHIPU]: 'glm-4-0520',
+  [AIVendor.ZHIPU]: 'GLM-4.5-Air',
 }
 
 const defaultApiEndpoints: Partial<Record<AIVendor, string>> = {
