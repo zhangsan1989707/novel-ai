@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Analytics } from '@vercel/analytics/next'
 import './globals.css'
 import { ToastContainer } from '@/components/ui/Toast'
+import { VersionInfo } from '@/components/common/VersionInfo'
 import '@/lib/agents/adapters'
 
 export const metadata: Metadata = {
@@ -20,6 +21,7 @@ export default function RootLayout({
         {children}
         <ToastContainer />
         <Analytics />
+        <VersionInfo />
       </body>
     </html>
   )
