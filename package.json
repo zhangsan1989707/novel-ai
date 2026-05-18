@@ -21,7 +21,8 @@
     "docker:logs": "bash scripts/docker-logs.sh",
     "deploy": "bash scripts/deploy-simple.sh",
     "deploy:fast": "bash scripts/deploy-fast.sh",
-    "deploy:quick": "bash scripts/deploy-quick.sh"
+    "deploy:quick": "bash scripts/deploy-quick.sh",
+    "deploy:server": "bash scripts/deploy-server-build.sh"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.2",
