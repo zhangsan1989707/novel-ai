@@ -39,6 +39,12 @@ vi.mock('@/lib/ai/providers', () => ({
     setConfig: vi.fn(),
     validateConfig: vi.fn().mockReturnValue(true),
   })),
+  ZhipuProvider: vi.fn().mockImplementation(() => ({
+    name: 'Zhipu AI',
+    vendor: AIVendor.ZHIPU,
+    setConfig: vi.fn(),
+    validateConfig: vi.fn().mockReturnValue(true),
+  })),
 }))
 
 describe('AI Provider Factory', () => {
@@ -78,6 +84,7 @@ describe('AI Provider Factory', () => {
       expect(vendors).toContain(AIVendor.ALIBABA)
       expect(vendors).toContain(AIVendor.MINIMAX)
       expect(vendors).toContain(AIVendor.VOLCENGINE)
+      expect(vendors).toContain(AIVendor.ZHIPU)
     })
   })
 
@@ -111,7 +118,7 @@ describe('AI Provider Factory', () => {
     it('should return list of supported providers', async () => {
       const { getSupportedAIProviders } = await import('@/lib/ai/factory')
       const providers = getSupportedAIProviders()
-      expect(providers.length).toBe(6)
+      expect(providers.length).toBe(7)
       expect(providers.find(p => p.vendor === AIVendor.DEEPSEEK)?.name).toBe('DeepSeek')
     })
   })

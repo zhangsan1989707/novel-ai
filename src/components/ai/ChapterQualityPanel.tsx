@@ -471,7 +471,7 @@ export function ChapterQualityPanel({
         <Card>
           <CardContent className="py-8 text-center text-gray-500">
             <Sparkles className="h-8 w-8 mx-auto mb-2 opacity-50" />
-            <p>点击"重新分析"开始检测章节AI质量</p>
+            <p>点击&quot;重新分析&quot;开始检测章节AI质量</p>
           </CardContent>
         </Card>
       )}

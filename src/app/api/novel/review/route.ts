@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { tryCatch, success, error } from '@/lib/api-response'
+import { tryCatch, error } from '@/lib/api-response'
 import { reviewerAgent } from '@/lib/agents/reviewer'
 
 const reviewSchema = z.object({
@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    return success(report)
+    return report
   })
 }
 
@@ -68,6 +68,6 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' },
     })
 
-    return success(reports)
+    return reports
   })
 }

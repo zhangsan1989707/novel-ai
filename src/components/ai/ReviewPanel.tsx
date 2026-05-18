@@ -42,6 +42,11 @@ interface ReviewPanelProps {
   chapters?: Array<{ id?: number; chapterNumber: number; title: string; content?: string | null }>
 }
 
+interface LegacyNestedResponse<T> {
+  success?: boolean
+  data?: T
+}
+
 const REVIEWER_CONFIG: Record<string, { icon: typeof Swords; color: string; bgColor: string }> = {
   '男频审稿人': { icon: Swords, color: 'text-blue-600 dark:text-blue-400', bgColor: 'bg-blue-50 dark:bg-blue-900/20' },
   '女频审稿人': { icon: Eye, color: 'text-pink-600 dark:text-pink-400', bgColor: 'bg-pink-50 dark:bg-pink-900/20' },
@@ -70,6 +75,74 @@ function getOverallLabel(score: number): string {
   return '较差'
 }
 
+function asStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === 'string')
+  }
+  if (typeof value === 'string' && value.trim()) {
+    return [value]
+  }
+  return []
+}
+
+function asReviewScores(value: unknown): ReviewScore[] {
+  if (!Array.isArray(value)) return []
+  return value.map((score) => {
+    const item = score && typeof score === 'object' ? score as Partial<ReviewScore> : {}
+    return {
+      dimension: typeof item.dimension === 'string' ? item.dimension : '',
+      score: typeof item.score === 'number' ? Math.min(100, Math.max(0, item.score)) : 0,
+      comment: typeof item.comment === 'string' ? item.comment : '',
+    }
+  })
+}
+
+function asReviews(value: unknown): ReviewResult[] {
+  if (!Array.isArray(value)) return []
+  return value.map((review) => {
+    const item = review && typeof review === 'object' ? review as Partial<ReviewResult> : {}
+    return {
+      reviewer: typeof item.reviewer === 'string' ? item.reviewer : '审稿人',
+      scores: asReviewScores(item.scores),
+      overallScore: typeof item.overallScore === 'number' ? Math.min(100, Math.max(0, item.overallScore)) : 0,
+      strengths: asStringArray(item.strengths),
+      weaknesses: asStringArray(item.weaknesses),
+      suggestions: asStringArray(item.suggestions),
+    }
+  })
+}
+
+function normalizeReport(value: unknown): ReviewReport | null {
+  if (!value || typeof value !== 'object') return null
+  const item = value as Partial<ReviewReport>
+  if (typeof item.id !== 'string' || typeof item.projectId !== 'number') return null
+
+  return {
+    id: item.id,
+    projectId: item.projectId,
+    chapterNo: typeof item.chapterNo === 'number' ? item.chapterNo : null,
+    content: typeof item.content === 'string' ? item.content : '',
+    reviews: asReviews(item.reviews),
+    overallScore: typeof item.overallScore === 'number' ? Math.min(100, Math.max(0, item.overallScore)) : 0,
+    consensus: typeof item.consensus === 'string' ? item.consensus : null,
+    criticalIssues: asStringArray(item.criticalIssues),
+    improvementPriority: asStringArray(item.improvementPriority),
+    createdAt: typeof item.createdAt === 'string' ? item.createdAt : new Date().toISOString(),
+  }
+}
+
+function unwrapResponseData<T>(value: unknown): T | null {
+  const first = value && typeof value === 'object' ? value as LegacyNestedResponse<unknown> : null
+  const payload = first && 'data' in first ? first.data : value
+  const second = payload && typeof payload === 'object' ? payload as LegacyNestedResponse<T> : null
+
+  if (second?.success === true && 'data' in second) {
+    return second.data ?? null
+  }
+
+  return payload as T
+}
+
 export function ReviewPanel({ projectId, chapters = [] }: ReviewPanelProps) {
   const [content, setContent] = useState('')
   const [chapterNo, setChapterNo] = useState<number | undefined>(undefined)
@@ -85,7 +158,11 @@ export function ReviewPanel({ projectId, chapters = [] }: ReviewPanelProps) {
       const res = await fetch(`/api/novel/review?projectId=${projectId}`)
       const data = await res.json()
       if (data.success) {
-        setReports(data.data)
+        const payload = unwrapResponseData<unknown>(data)
+        const nextReports = Array.isArray(payload)
+          ? payload.map(normalizeReport).filter((report): report is ReviewReport => report !== null)
+          : []
+        setReports(nextReports)
       }
     } catch {
       toast.error('加载审稿报告失败')
@@ -145,7 +222,13 @@ export function ReviewPanel({ projectId, chapters = [] }: ReviewPanelProps) {
       const data = await res.json()
       if (data.success) {
         toast.success('审稿完成')
-        loadReports()
+        const payload = unwrapResponseData<unknown>(data)
+        const report = normalizeReport(payload)
+        if (report) {
+          setReports(prev => [report, ...prev.filter(item => item.id !== report.id)])
+        } else {
+          loadReports()
+        }
       } else {
         toast.error(data.error?.message || '审稿失败')
       }
@@ -328,7 +411,7 @@ export function ReviewPanel({ projectId, chapters = [] }: ReviewPanelProps) {
                 <div className="space-y-2">
                   <div className="text-xs font-medium text-gray-500">审稿人评分对比</div>
                   <div className="space-y-2">
-                    {(report.reviews as ReviewResult[]).map((review, idx) => {
+                    {report.reviews.map((review, idx) => {
                       const config = REVIEWER_CONFIG[review.reviewer]
                       const Icon = config?.icon || BarChart3
                       return (
@@ -354,7 +437,7 @@ export function ReviewPanel({ projectId, chapters = [] }: ReviewPanelProps) {
                   </div>
                 </div>
 
-                {(report.reviews as ReviewResult[]).map((review, idx) => {
+                {report.reviews.map((review, idx) => {
                   const config = REVIEWER_CONFIG[review.reviewer]
                   const Icon = config?.icon || BarChart3
                   return (
