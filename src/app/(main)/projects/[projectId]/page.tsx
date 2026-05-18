@@ -156,16 +156,16 @@ function getWorkflow(project: Project): WorkflowStep[] {
   })
 }
 
-function getMissingItems(project: Project) {
-  const items: string[] = []
-  if (!project.description?.trim()) items.push('缺少小说简介')
-  if (!project.genre) items.push('未选择小说类型（可选）')
-  if (!project.writingStyle) items.push('未选择写作风格（可选）')
-  if (!project.aiModelConfig) items.push('未绑定 AI 模型（可选）')
-  if (!project.worldSetting?.trim()) items.push('未补充世界设定（可选）')
-  if (!project.protagonistProfile?.trim()) items.push('未补充主角设定（可选）')
-  if (!hasOutline(project)) items.push('缺少大纲')
-  if (project.chapters.length === 0) items.push('缺少章节目录')
+function getMissingItems(project: Project): Array<{ label: string; action: WorkflowAction | null }> {
+  const items: Array<{ label: string; action: WorkflowAction | null }> = []
+  if (!project.description?.trim()) items.push({ label: '缺少小说简介', action: 'settings' })
+  if (!project.genre) items.push({ label: '未选择小说类型（可选）', action: 'settings' })
+  if (!project.writingStyle) items.push({ label: '未选择写作风格（可选）', action: 'settings' })
+  if (!project.aiModelConfig) items.push({ label: '未绑定 AI 模型（可选）', action: 'settings' })
+  if (!project.worldSetting?.trim()) items.push({ label: '未补充世界设定（可选）', action: 'settings' })
+  if (!project.protagonistProfile?.trim()) items.push({ label: '未补充主角设定（可选）', action: 'settings' })
+  if (!hasOutline(project)) items.push({ label: '缺少大纲', action: 'outline' })
+  if (project.chapters.length === 0) items.push({ label: '缺少章节目录', action: 'chapters' })
   return items
 }
 
@@ -1294,7 +1294,14 @@ export default function ProjectDetailPage() {
                 {missingItems.length > 0 && (
                   <div className="flex flex-wrap gap-1.5">
                     {missingItems.slice(0, 4).map((item) => (
-                      <Badge key={item} variant="warning" className="text-xs">{item}</Badge>
+                      <Badge
+                        key={item.label}
+                        variant="warning"
+                        className={`text-xs ${item.action ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`}
+                        onClick={item.action ? () => handleWorkflowAction(item.action!) : undefined}
+                      >
+                        {item.label}
+                      </Badge>
                     ))}
                     {missingItems.length > 4 && (
                       <Badge variant="outline" className="text-xs">+{missingItems.length - 4}</Badge>
