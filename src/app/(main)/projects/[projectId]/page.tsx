@@ -2,12 +2,12 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { Button, Card, CardContent, CardHeader, CardTitle, Badge, Progress, Modal, ChaptersEmptyState, toast, MoreActionsMenu } from '@/components/ui'
+import { Button, Card, CardContent, CardHeader, CardTitle, Badge, Progress, Modal, ChaptersEmptyState, toast, MoreActionsMenu, DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui'
 import { ProjectForm, ProjectFormData, ChapterListGenerator, BatchGenerator } from '@/components/project'
 import { BatchProgress } from '@/components/ai/BatchProgress'
 import { PlotAnalyzer, ContinuationPanel, ResearchPanel, ReviewPanel, DeslopPanel, CoverGenerator, ShortStoryPanel } from '@/components/ai'
 import { OutlineGenerator } from '@/components/ai/OutlineGenerator'
-import { BookOpen, Clock, Target, Users, Layers, Plus, ListChecks, FileText, Search, CheckCircle2, Circle, AlertCircle, ArrowRight, ClipboardList, PenLine, FileCheck2, Rocket } from 'lucide-react'
+import { BookOpen, Clock, Target, Users, Layers, Plus, ListChecks, FileText, Search, CheckCircle2, Circle, AlertCircle, ArrowRight, ClipboardList, PenLine, FileCheck2, Rocket, ChevronRight, ChevronDown, Wrench, Sparkles, Shield } from 'lucide-react'
 import type { ProjectStatus } from '@/types'
 
 interface Chapter {
@@ -64,8 +64,8 @@ const projectStatusMap: Record<ProjectStatus, { label: string; variant: 'default
   PAUSED: { label: '已暂停', variant: 'warning' },
 }
 
-type WorkflowStatus = 'complete' | 'active' | 'pending'
-type WorkflowAction = 'settings' | 'outline' | 'chapters' | 'write' | 'review' | 'cover'
+type WorkflowStatus = 'complete' | 'active' | 'pending' | 'blocked'
+type WorkflowAction = 'settings' | 'outline' | 'chapters' | 'write' | 'review'
 
 interface WorkflowStep {
   id: WorkflowAction
@@ -73,6 +73,10 @@ interface WorkflowStep {
   description: string
   status: WorkflowStatus
   actionLabel: string
+}
+
+interface SetupGuard {
+  label: string
 }
 
 function hasOutline(project: Project) {
@@ -89,29 +93,21 @@ function getCompletedChapterCount(project: Project) {
 function getWorkflow(project: Project): WorkflowStep[] {
   const basicSetupDone = Boolean(
     project.title &&
-    project.description &&
-    project.genre &&
-    project.writingStyle
+    project.description
   )
-  const advancedSetupDone = Boolean(
-    project.worldSetting?.trim() &&
-    project.protagonistProfile?.trim()
-  )
-  const setupDone = basicSetupDone
   const outlineDone = hasOutline(project)
   const chaptersDone = project.chapters.length > 0
   const writingDone = getCompletedChapterCount(project) > 0 || project.currentWordCount > 0
   const reviewReady = writingDone
-  const coverDone = Boolean(project.coverImage)
 
   const steps: Array<Omit<WorkflowStep, 'status'>> = [
     {
       id: 'settings',
       title: '完善设定',
-      description: advancedSetupDone
-        ? '题材、风格、受众、世界观和模型配置'
-        : '题材、风格、受众已配置（补充世界观和主角设定可提升生成质量）',
-      actionLabel: advancedSetupDone ? '编辑设定' : '补充设定',
+      description: basicSetupDone
+        ? '标题和简介已就绪，可随时补充类型、风格等增强设定'
+        : '请填写标题和简介，即可开始创作',
+      actionLabel: basicSetupDone ? '编辑设定' : '补齐设定',
     },
     {
       id: 'outline',
@@ -129,7 +125,7 @@ function getWorkflow(project: Project): WorkflowStep[] {
       id: 'write',
       title: '写作正文',
       description: '单章写作、继续生成或批量生成',
-      actionLabel: chaptersDone ? '开始写作' : '新建章节',
+      actionLabel: chaptersDone ? '继续写作' : '开始写作',
     },
     {
       id: 'review',
@@ -137,34 +133,47 @@ function getWorkflow(project: Project): WorkflowStep[] {
       description: '对抗审稿、去 AI 味和剧情检查',
       actionLabel: '开始审稿',
     },
-    {
-      id: 'cover',
-      title: '封面导出',
-      description: '生成封面并准备作品导出',
-      actionLabel: '生成封面',
-    },
   ]
 
-  const completion = [setupDone, outlineDone, chaptersDone, writingDone, reviewReady, coverDone]
+  const completion = [basicSetupDone, outlineDone, chaptersDone, writingDone, reviewReady]
   const firstIncomplete = completion.findIndex((done) => !done)
 
-  return steps.map((step, index) => ({
-    ...step,
-    status: completion[index] ? 'complete' : firstIncomplete === index ? 'active' : 'pending',
-  }))
+  return steps.map((step, index) => {
+    const isBlockedBySetup = !basicSetupDone && step.id !== 'settings'
+
+    return {
+      ...step,
+      status: completion[index] ? 'complete' : isBlockedBySetup ? 'blocked' : firstIncomplete === index ? 'active' : 'pending',
+    }
+  })
 }
 
 function getMissingItems(project: Project) {
   const items: string[] = []
-  if (!project.aiModelConfig && !project.aiModelId) items.push('未绑定 AI 模型')
   if (!project.description?.trim()) items.push('缺少小说简介')
-  if (!project.genre) items.push('缺少小说类型')
-  if (!project.writingStyle) items.push('缺少写作风格')
-  if (!project.worldSetting?.trim()) items.push('缺少世界设定')
-  if (!project.protagonistProfile?.trim()) items.push('缺少主角设定')
+  if (!project.genre) items.push('未选择小说类型（可选）')
+  if (!project.writingStyle) items.push('未选择写作风格（可选）')
+  if (!project.aiModelConfig) items.push('未绑定 AI 模型（可选）')
+  if (!project.worldSetting?.trim()) items.push('未补充世界设定（可选）')
+  if (!project.protagonistProfile?.trim()) items.push('未补充主角设定（可选）')
   if (!hasOutline(project)) items.push('缺少大纲')
   if (project.chapters.length === 0) items.push('缺少章节目录')
   return items
+}
+
+function getSetupGuards(project: Project): SetupGuard[] {
+  const guards: SetupGuard[] = []
+  if (!project.description?.trim()) guards.push({ label: '填写小说简介' })
+  return guards
+}
+
+type WorkbenchTab = 'outline' | 'chapters' | 'write' | 'review'
+
+function getNextTab(project: Project): WorkbenchTab {
+  if (!hasOutline(project)) return 'outline'
+  if (project.chapters.length === 0) return 'chapters'
+  if (getCompletedChapterCount(project) === 0) return 'write'
+  return 'review'
 }
 
 export default function ProjectDetailPage() {
@@ -191,7 +200,7 @@ export default function ProjectDetailPage() {
     targetWordCount: number
   } | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const [activeTab, setActiveTab] = useState<'chapters' | 'outline' | 'settings'>('chapters')
+  const [activeTab, setActiveTab] = useState<WorkbenchTab | 'chapters' | 'outline' | 'settings'>('outline')
   const [showGenerator, setShowGenerator] = useState(false)
   const [showOutlineGenerator, setShowOutlineGenerator] = useState(false)
   const [showResearchModal, setShowResearchModal] = useState(false)
@@ -199,6 +208,8 @@ export default function ProjectDetailPage() {
   const [showDeslopModal, setShowDeslopModal] = useState(false)
   const [showCoverModal, setShowCoverModal] = useState(false)
   const [showShortStoryModal, setShowShortStoryModal] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [reviewSubTab, setReviewSubTab] = useState<'review' | 'deslop'>('review')
 
   const fetchProject = useCallback(async () => {
     try {
@@ -366,6 +377,27 @@ export default function ProjectDetailPage() {
   const completedWorkflowCount = workflow.filter((step) => step.status === 'complete').length
   const workflowProgress = Math.round((completedWorkflowCount / workflow.length) * 100)
   const missingItems = getMissingItems(project)
+  const setupGuards = getSetupGuards(project)
+  const setupBlocked = setupGuards.length > 0
+  const setupGuardLabels = setupGuards.map((guard) => guard.label)
+
+  const openSettingsGuard = () => {
+    toast.error(`请先完成：${setupGuardLabels.join('、')}`)
+    setShowEditModal(true)
+  }
+
+  const openOutlineGenerator = () => {
+    setShowOutlineGenerator(true)
+  }
+
+  const openChapterListGenerator = () => {
+    if (!hasOutline(project)) {
+      toast.error('请先生成或填写大纲，再拆分章节目录')
+      setShowOutlineGenerator(true)
+      return
+    }
+    setShowGenerator(true)
+  }
 
   const handleWorkflowAction = (action: WorkflowAction) => {
     switch (action) {
@@ -373,32 +405,69 @@ export default function ProjectDetailPage() {
         setShowEditModal(true)
         break
       case 'outline':
-        setShowOutlineGenerator(true)
+        openOutlineGenerator()
         break
       case 'chapters':
-        setShowGenerator(true)
+        openChapterListGenerator()
         break
       case 'write':
         if (project.chapters.length > 0) {
           const nextChapter = project.chapters.find((chapter) => chapter.status !== 'COMPLETED') ?? project.chapters[0]
           router.push(`/projects/${projectId}/chapters/${nextChapter.id}/generate`)
         } else {
-          router.push(`/projects/${projectId}/chapters/new`)
+          openChapterListGenerator()
         }
         break
       case 'review':
-        setShowReviewModal(true)
-        break
-      case 'cover':
-        setShowCoverModal(true)
+        setActiveTab('review')
         break
     }
   }
 
+  const handleContinueNext = () => {
+    if (setupBlocked) {
+      openSettingsGuard()
+      return
+    }
+    const nextTab = getNextTab(project)
+    switch (nextTab) {
+      case 'outline':
+        setActiveTab('outline')
+        openOutlineGenerator()
+        break
+      case 'chapters':
+        setActiveTab('chapters')
+        openChapterListGenerator()
+        break
+      case 'write':
+        setActiveTab('write')
+        if (project.chapters.length > 0) {
+          const nextChapter = project.chapters.find((chapter) => chapter.status !== 'COMPLETED') ?? project.chapters[0]
+          router.push(`/projects/${projectId}/chapters/${nextChapter.id}/generate`)
+        }
+        break
+      case 'review':
+        setActiveTab('review')
+        break
+    }
+  }
+
+  const getNextActionLabel = () => {
+    if (setupBlocked) return `补齐设定`
+    const nextTab = getNextTab(project)
+    switch (nextTab) {
+      case 'outline': return '生成大纲'
+      case 'chapters': return '生成目录'
+      case 'write': return getCompletedChapterCount(project) > 0 ? '继续写作' : '开始写作'
+      case 'review': return '审稿润色'
+    }
+  }
+
+  const nextUncompletedChapter = project.chapters.find((ch) => ch.status !== 'COMPLETED')
+
   return (
     <>
-      {/* 面包屑导航 */}
-      <div className="flex items-center gap-2 mb-6 text-sm text-gray-500">
+      <div className="flex items-center gap-2 mb-4 text-sm text-gray-500">
         <button
           onClick={() => router.push('/projects')}
           className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
@@ -409,19 +478,111 @@ export default function ProjectDetailPage() {
         <span className="text-gray-900 dark:text-white font-medium">{project.title}</span>
       </div>
 
-      {/* 项目标题和状态 */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{project.title}</h1>
-          <div className="flex items-center gap-2 mt-1">
-            {project.genre && <Badge variant="outline">{project.genre}</Badge>}
-            {project.writingStyle && <Badge variant="outline">{project.writingStyle}</Badge>}
-            <Badge variant={projectStatusMap[project.status].variant}>
-              {projectStatusMap[project.status].label}
-            </Badge>
+      {project.projectMode === 'CREATE' && (
+        <div className="mb-4 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-1.5 overflow-x-auto">
+            {workflow.map((step, index) => {
+              const isComplete = step.status === 'complete'
+              const isActive = step.status === 'active'
+              const isBlocked = step.status === 'blocked'
+              return (
+                <div key={step.id} className="flex items-center shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => handleWorkflowAction(step.id)}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                      isActive
+                        ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+                        : isComplete
+                          ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
+                          : isBlocked
+                            ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+                            : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
+                    }`}
+                  >
+                    {isComplete ? (
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                    ) : isActive ? (
+                      <Circle className="h-3.5 w-3.5 fill-current" />
+                    ) : (
+                      <Circle className="h-3.5 w-3.5" />
+                    )}
+                    <span>{step.title}</span>
+                  </button>
+                  {index < workflow.length - 1 && (
+                    <ChevronRight className="h-3.5 w-3.5 text-gray-300 dark:text-gray-600 mx-0.5" />
+                  )}
+                </div>
+              )
+            })}
           </div>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={handleContinueNext}
+            className="shrink-0 gap-1.5"
+          >
+            <Sparkles className="h-4 w-4" />
+            {getNextActionLabel()}
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
+
+      {project.projectMode === 'CREATE' && setupBlocked && (
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-900/20 dark:text-amber-300 flex items-center gap-2">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          <span>请先完成：{setupGuardLabels.join('、')}</span>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <h1 className="text-xl font-bold text-gray-900 dark:text-white">{project.title}</h1>
+          <Badge variant={projectStatusMap[project.status].variant}>
+            {projectStatusMap[project.status].label}
+          </Badge>
+          {project.genre && <Badge variant="outline">{project.genre}</Badge>}
         </div>
         <div className="flex items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger>
+              <Button variant="ghost" size="sm" className="gap-1.5 text-gray-500">
+                <Wrench className="h-4 w-4" />
+                高级工具
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              <DropdownMenuItem onClick={() => setShowResearchModal(true)}>
+                <Search className="h-4 w-4 mr-2 text-gray-400" />
+                资料研究
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setShowCoverModal(true)}>
+                <Rocket className="h-4 w-4 mr-2 text-gray-400" />
+                封面生成
+              </DropdownMenuItem>
+              {project.genre?.includes('短篇') || project.storyType === 'SHORT' ? (
+                <DropdownMenuItem onClick={() => setShowShortStoryModal(true)}>
+                  <FileText className="h-4 w-4 mr-2 text-gray-400" />
+                  短篇创作
+                </DropdownMenuItem>
+              ) : null}
+              <DropdownMenuItem onClick={() => setShowPlotAnalysisModal(true)}>
+                <ClipboardList className="h-4 w-4 mr-2 text-gray-400" />
+                分析剧情
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setShowContinuationModal(true)}>
+                <PenLine className="h-4 w-4 mr-2 text-gray-400" />
+                继续生成
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => {
+                setBatchProgressOpen(true)
+              }}>
+                <ListChecks className="h-4 w-4 mr-2 text-gray-400" />
+                批量生成
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <MoreActionsMenu
             onEdit={() => setShowEditModal(true)}
             onDelete={() => setShowDeleteModal(true)}
@@ -456,415 +617,635 @@ export default function ProjectDetailPage() {
         </div>
       </div>
 
-      {/* 创作流程引导 */}
-      {project.projectMode === 'CREATE' && (
-        <div className="mb-6 space-y-4">
-          <Card>
-            <CardContent className="p-4 sm:p-5">
-              <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <ClipboardList className="h-4 w-4 text-blue-600" />
-                    <h2 className="text-base font-semibold text-gray-900 dark:text-white">创作流程</h2>
-                    <Badge variant="primary">{completedWorkflowCount}/{workflow.length}</Badge>
-                  </div>
-                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                    当前建议：{currentStep.description}
-                  </p>
-                </div>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => handleWorkflowAction(currentStep.id)}
-                  className="shrink-0"
-                >
-                  {currentStep.actionLabel}
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
-              </div>
-
-              <div className="mt-5 grid grid-cols-1 gap-2 md:grid-cols-3 xl:grid-cols-6">
-                {workflow.map((step, index) => {
-                  const isComplete = step.status === 'complete'
-                  const isActive = step.status === 'active'
-                  const StepIcon = isComplete ? CheckCircle2 : isActive ? AlertCircle : Circle
-                  return (
-                    <button
-                      key={step.id}
-                      type="button"
-                      onClick={() => handleWorkflowAction(step.id)}
-                      className={`group flex min-h-[92px] flex-col items-start rounded-lg border px-3 py-3 text-left transition-colors ${
-                        isActive
-                          ? 'border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-900/20'
-                          : isComplete
-                            ? 'border-green-200 bg-green-50/70 dark:border-green-900/60 dark:bg-green-900/10'
-                            : 'border-gray-200 bg-white hover:border-blue-300 hover:bg-blue-50/40 dark:border-gray-700 dark:bg-gray-800 dark:hover:border-blue-500/70'
-                      }`}
-                    >
-                      <div className="flex w-full items-center justify-between gap-2">
-                        <span className="text-xs text-gray-400">0{index + 1}</span>
-                        <StepIcon
-                          className={`h-4 w-4 ${
-                            isComplete ? 'text-green-600' : isActive ? 'text-blue-600' : 'text-gray-400'
-                          }`}
-                        />
-                      </div>
-                      <span className="mt-2 text-sm font-medium text-gray-900 dark:text-white">{step.title}</span>
-                      <span className="mt-1 line-clamp-2 text-xs text-gray-500 dark:text-gray-400">{step.description}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4">
-              <div className="grid gap-4 xl:grid-cols-[1fr_1fr_1fr_1fr_1fr]">
-                <div>
-                  <div className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-white">
-                    <FileText className="h-4 w-4 text-blue-600" />
-                    规划
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button variant="outline" size="sm" onClick={() => setShowOutlineGenerator(true)}>生成大纲</Button>
-                    <Button variant="outline" size="sm" onClick={() => setShowGenerator(true)}>生成目录</Button>
-                    <Button variant="outline" size="sm" onClick={() => setShowPlotAnalysisModal(true)}>分析剧情</Button>
-                  </div>
-                </div>
-                <div>
-                  <div className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-white">
-                    <PenLine className="h-4 w-4 text-blue-600" />
-                    写作
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <BatchGenerator
-                      projectId={projectId}
-                      chapters={project.chapters}
-                      onGenerate={(options) => {
-                        setBatchOptions(options)
-                        setBatchProgressOpen(true)
-                      }}
-                    />
-                    <Button variant="outline" size="sm" onClick={() => setShowContinuationModal(true)}>继续生成</Button>
-                    <Button variant="primary" size="sm" onClick={() => router.push(`/projects/${projectId}/chapters/new`)}>
-                      <Plus className="h-3.5 w-3.5" />
-                      新建章节
-                    </Button>
-                  </div>
-                </div>
-                <div>
-                  <div className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-white">
-                    <Search className="h-4 w-4 text-blue-600" />
-                    增强
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button variant="outline" size="sm" onClick={() => setShowResearchModal(true)}>资料研究</Button>
-                    {project.genre?.includes('短篇') || project.storyType === 'SHORT' ? (
-                      <Button variant="outline" size="sm" onClick={() => setShowShortStoryModal(true)}>短篇创作</Button>
-                    ) : null}
-                  </div>
-                </div>
-                <div>
-                  <div className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-white">
-                    <FileCheck2 className="h-4 w-4 text-blue-600" />
-                    质量
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button variant="outline" size="sm" onClick={() => setShowReviewModal(true)}>对抗审稿</Button>
-                    <Button variant="outline" size="sm" onClick={() => setShowDeslopModal(true)}>去 AI 味</Button>
-                  </div>
-                </div>
-                <div>
-                  <div className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-white">
-                    <Rocket className="h-4 w-4 text-blue-600" />
-                    发布
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button variant="outline" size="sm" onClick={() => setShowCoverModal(true)}>封面生成</Button>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+      {project.projectMode === 'ANALYZE' && (
+        <div className="flex border-b mb-6">
+          <button
+            onClick={() => setActiveTab('chapters')}
+            className={`px-4 py-3 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              activeTab === 'chapters'
+                ? 'border-purple-500 text-purple-600 dark:text-purple-400'
+                : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+            }`}
+          >
+            原著章节
+          </button>
+          <button
+            onClick={() => setActiveTab('outline')}
+            className={`px-4 py-3 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              activeTab === 'outline'
+                ? 'border-purple-500 text-purple-600 dark:text-purple-400'
+                : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+            }`}
+          >
+            分析结果
+          </button>
+          <button
+            onClick={() => setActiveTab('settings')}
+            className={`px-4 py-3 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              activeTab === 'settings'
+                ? 'border-purple-500 text-purple-600 dark:text-purple-400'
+                : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+            }`}
+          >
+            续写章节
+          </button>
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
-        {/* 左侧：主要内容 */}
-        <div className="space-y-6">
-          {/* 进度卡片 */}
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-base font-semibold flex items-center gap-2">
-                  <Target className="h-4 w-4" />
-                  写作进度
-                </h2>
-                <span className="text-xl font-bold text-blue-600">{progress !== null ? `${progress}%` : '-'}</span>
+      {project.projectMode === 'ANALYZE' && activeTab === 'chapters' && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BookOpen className="h-5 w-5" />
+              原著章节
+              <Badge variant="secondary" className="ml-2">
+                {project.chapters.filter(c => c.status === 'REVIEWING').length} 章
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {project.chapters.filter(c => c.status === 'REVIEWING').length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <p>还没有导入原著章节</p>
+                <p className="text-sm mt-1">上传小说文件后会自动导入章节</p>
               </div>
-              {project.targetWordCount ? (
-                <Progress value={project.currentWordCount} max={project.targetWordCount} showLabel size="lg" />
-              ) : (
-                <div className="w-full h-3 bg-muted rounded-full">
-                  <div className="h-full w-0 bg-primary rounded-full" />
-                </div>
-              )}
-              <div className="mt-4 grid grid-cols-3 gap-4 text-center">
-                <div>
-                  <p className="text-xl font-bold">{project.currentWordCount.toLocaleString()}</p>
-                  <p className="text-xs text-gray-500">当前字数</p>
-                </div>
-                <div>
-                  <p className="text-xl font-bold">{project.targetWordCount?.toLocaleString() || '-'}</p>
-                  <p className="text-xs text-gray-500">目标字数</p>
-                </div>
-                <div>
-                  <p className="text-xl font-bold">{project.chapters.length}</p>
-                  <p className="text-xs text-gray-500">章节数</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Tab 切换 - 分析模式 */}
-          {project.projectMode === 'ANALYZE' && (
-            <Card>
-              <CardContent className="p-0">
-                <div className="flex border-b">
-                  <button
-                    onClick={() => setActiveTab('chapters')}
-                    className={`px-4 py-3 text-sm font-medium border-b-2 -mb-px transition-colors ${
-                      activeTab === 'chapters'
-                        ? 'border-purple-500 text-purple-600 dark:text-purple-400'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-                    }`}
+            ) : (
+              <div className="space-y-2">
+                {project.chapters.filter(c => c.status === 'REVIEWING').map((chapter) => (
+                  <div
+                    key={chapter.id}
+                    className="flex items-center justify-between p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer transition-all"
+                    onClick={() => router.push(`/projects/${projectId}/chapters/${chapter.id}`)}
                   >
-                    原著章节
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('outline')}
-                    className={`px-4 py-3 text-sm font-medium border-b-2 -mb-px transition-colors ${
-                      activeTab === 'outline'
-                        ? 'border-purple-500 text-purple-600 dark:text-purple-400'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-                    }`}
-                  >
-                    分析结果
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('settings')}
-                    className={`px-4 py-3 text-sm font-medium border-b-2 -mb-px transition-colors ${
-                      activeTab === 'settings'
-                        ? 'border-purple-500 text-purple-600 dark:text-purple-400'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-                    }`}
-                  >
-                    续写章节
-                  </button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* 章节列表 - ANALYZE 模式 */}
-          {project.projectMode === 'ANALYZE' && activeTab === 'chapters' && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <BookOpen className="h-5 w-5" />
-                  原著章节
-                  <Badge variant="secondary" className="ml-2">
-                    {project.chapters.filter(c => c.status === 'REVIEWING').length} 章
-                  </Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {project.chapters.filter(c => c.status === 'REVIEWING').length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">
-                    <p>还没有导入原著章节</p>
-                    <p className="text-sm mt-1">上传小说文件后会自动导入章节</p>
+                    <div className="flex items-center gap-3 flex-1">
+                      <span className="text-gray-400">第{chapter.chapterNumber}章</span>
+                      <span className="font-medium">{chapter.title || '无标题'}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm text-gray-500">{(chapter.wordCount || 0).toLocaleString()} 字</span>
+                      <Badge variant="warning" className="text-xs">原著</Badge>
+                    </div>
                   </div>
-                ) : (
-                  <div className="space-y-2">
-                    {project.chapters.filter(c => c.status === 'REVIEWING').map((chapter) => (
-                      <div
-                        key={chapter.id}
-                        className="flex items-center justify-between p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer transition-all"
-                        onClick={() => router.push(`/projects/${projectId}/chapters/${chapter.id}`)}
-                      >
-                        <div className="flex items-center gap-3 flex-1">
-                          <span className="text-gray-400">第{chapter.chapterNumber}章</span>
-                          <span className="font-medium">{chapter.title || '无标题'}</span>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <span className="text-sm text-gray-500">{(chapter.wordCount || 0).toLocaleString()} 字</span>
-                          <Badge variant="warning" className="text-xs">原著</Badge>
-                        </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {project.projectMode === 'CREATE' && (
+        <div className={`grid gap-6 transition-all duration-300 ${sidebarCollapsed ? 'grid-cols-1' : 'grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px]'}`}>
+          <div className="space-y-0">
+            <div className="border-b border-gray-200 dark:border-gray-700 mb-6">
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setActiveTab('outline')}
+                  className={`px-4 py-3 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                    activeTab === 'outline'
+                      ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                  }`}
+                >
+                  <FileText className="h-4 w-4 inline mr-1.5" />
+                  大纲
+                </button>
+                <button
+                  onClick={() => setActiveTab('chapters')}
+                  className={`px-4 py-3 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                    activeTab === 'chapters'
+                      ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                  }`}
+                >
+                  <BookOpen className="h-4 w-4 inline mr-1.5" />
+                  目录
+                </button>
+                <button
+                  onClick={() => setActiveTab('write')}
+                  className={`px-4 py-3 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                    activeTab === 'write'
+                      ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                  }`}
+                >
+                  <PenLine className="h-4 w-4 inline mr-1.5" />
+                  正文
+                </button>
+                <button
+                  onClick={() => setActiveTab('review')}
+                  className={`px-4 py-3 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                    activeTab === 'review'
+                      ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                  }`}
+                >
+                  <Shield className="h-4 w-4 inline mr-1.5" />
+                  审稿润色
+                </button>
+              </div>
+            </div>
+
+            {activeTab === 'outline' && (
+              <div className="space-y-4">
+                {hasOutline(project) ? (
+                  <Card>
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="flex items-center gap-2 text-base">
+                          <FileText className="h-5 w-5 text-blue-600" />
+                          大纲内容
+                        </CardTitle>
+                        <Button variant="outline" size="sm" onClick={openOutlineGenerator}>
+                          重新生成
+                        </Button>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* 章节列表 - CREATE 模式 */}
-          {project.projectMode === 'CREATE' && (
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    {isSelectMode && (
-                      <>
-                        <input
-                          type="checkbox"
-                          checked={selectedChapterIds.length === project.chapters.length && project.chapters.length > 0}
-                          onChange={toggleSelectAll}
-                          className="w-4 h-4"
-                        />
-                        <span className="text-sm text-gray-500">已选 {selectedChapterIds.length} 章</span>
-                        <button
-                          onClick={() => {
-                            setIsSelectMode(false)
-                            setSelectedChapterIds([])
-                          }}
-                          className="text-sm text-muted-foreground hover:text-foreground"
-                        >
-                          取消
-                        </button>
-                      </>
-                    )}
-                    {!isSelectMode && (
-                      <CardTitle className="flex items-center gap-2">
-                        <BookOpen className="h-5 w-5" />
-                        章节列表
-                      </CardTitle>
-                    )}
-                  </div>
-                  {!isSelectMode && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setIsSelectMode(true)}
-                      className="gap-1.5"
-                    >
-                      <ListChecks className="h-4 w-4" />
-                      多选
-                    </Button>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent>
-                {project.chapters.length === 0 ? (
-                  <ChaptersEmptyState
-                    onCreate={() => router.push(`/projects/${projectId}/chapters/new`)}
-                    onGenerate={() => setShowGenerator(true)}
-                  />
-                ) : (
-                  <div className="space-y-2">
-                    {project.chapters.map((chapter) => (
-                      <div
-                        key={chapter.id}
-                        className={`flex items-center justify-between p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-all ${
-                          isSelectMode ? 'cursor-pointer' : ''
-                        }`}
-                        onClick={() => !isSelectMode && router.push(`/projects/${projectId}/chapters/${chapter.id}`)}
-                      >
-                        {isSelectMode && (
-                          <input
-                            type="checkbox"
-                            checked={selectedChapterIds.includes(chapter.id)}
-                            onChange={() => toggleChapterSelection(chapter.id)}
-                            className="w-4 h-4 mr-3 accent-blue-600"
-                          />
-                        )}
-                        <div className="flex items-center gap-3 flex-1">
-                          <span className="text-gray-400">第{chapter.chapterNumber}章</span>
-                          <span className="font-medium">{chapter.title || '无标题'}</span>
-                          {chapter.status === 'GENERATING' && (
-                            <Badge variant="primary" className="text-xs">生成中</Badge>
+                    </CardHeader>
+                    <CardContent>
+                      {project.outlineStages && Object.keys(project.outlineStages).length > 0 ? (
+                        <div className="space-y-4">
+                          {Object.entries(project.outlineStages).map(([stageName, stages]) => (
+                            <div key={stageName}>
+                              <h4 className="font-medium text-gray-900 dark:text-white mb-2">{stageName}</h4>
+                              <div className="space-y-2">
+                                {stages.map((stage, idx) => (
+                                  <div key={idx} className="pl-4 border-l-2 border-blue-200 dark:border-blue-800">
+                                    <div className="text-sm font-medium text-gray-800 dark:text-gray-200">{stage.title}</div>
+                                    {stage.summary && (
+                                      <div className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{stage.summary}</div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                          {project.outline?.trim() && (
+                            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                              <h4 className="font-medium text-gray-900 dark:text-white mb-2">完整大纲</h4>
+                              <div className="text-sm text-gray-600 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">
+                                {project.outline}
+                              </div>
+                            </div>
                           )}
                         </div>
-                        <div className="flex items-center gap-3">
-                          <span className="text-sm text-gray-500">{(chapter.wordCount || 0).toLocaleString()} 字</span>
-                          <Badge variant={chapterStatusMap[chapter.status].variant} className="text-xs">
-                            {chapterStatusMap[chapter.status].label}
-                          </Badge>
+                      ) : (
+                        <div className="text-sm text-gray-600 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">
+                          {project.outline}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Card>
+                    <CardContent className="py-16">
+                      <div className="text-center">
+                        <FileText className="h-12 w-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
+                        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">还没有大纲</h3>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+                          生成大纲来确定故事的主线、阶段目标和结局方向
+                        </p>
+                        <Button
+                          variant="primary"
+                          onClick={openOutlineGenerator}
+                          disabled={setupBlocked}
+                        >
+                          <Sparkles className="h-4 w-4 mr-1.5" />
+                          生成大纲
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'chapters' && (
+              <div className="space-y-4">
+                {project.chapters.length > 0 ? (
+                  <Card>
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="flex items-center gap-2 text-base">
+                          <BookOpen className="h-5 w-5 text-blue-600" />
+                          章节目录
+                          <Badge variant="secondary">{project.chapters.length} 章</Badge>
+                        </CardTitle>
+                        <Button variant="outline" size="sm" onClick={openChapterListGenerator}>
+                          重新生成
+                        </Button>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        {project.chapters.map((chapter) => (
+                          <div
+                            key={chapter.id}
+                            className="flex items-center justify-between p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer transition-all"
+                            onClick={() => router.push(`/projects/${projectId}/chapters/${chapter.id}`)}
+                          >
+                            <div className="flex items-center gap-3 flex-1">
+                              <span className="text-gray-400 text-sm">第{chapter.chapterNumber}章</span>
+                              <span className="font-medium">{chapter.title || '无标题'}</span>
+                              {chapter.summary && (
+                                <span className="text-sm text-gray-400 hidden sm:inline truncate max-w-xs">{chapter.summary}</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className="text-sm text-gray-500">{(chapter.wordCount || 0).toLocaleString()} 字</span>
+                              <Badge variant={chapterStatusMap[chapter.status].variant} className="text-xs">
+                                {chapterStatusMap[chapter.status].label}
+                              </Badge>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Card>
+                    <CardContent className="py-16">
+                      <div className="text-center">
+                        <BookOpen className="h-12 w-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
+                        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">还没有章节目录</h3>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+                          {hasOutline(project)
+                            ? '基于大纲自动拆分章节目录'
+                            : '请先生成大纲，再拆分章节目录'}
+                        </p>
+                        <Button
+                          variant="primary"
+                          onClick={openChapterListGenerator}
+                          disabled={setupBlocked || !hasOutline(project)}
+                        >
+                          <Sparkles className="h-4 w-4 mr-1.5" />
+                          生成目录
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'write' && (
+              <div className="space-y-4">
+                {project.chapters.length > 0 ? (
+                  <Card>
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          {isSelectMode && (
+                            <>
+                              <input
+                                type="checkbox"
+                                checked={selectedChapterIds.length === project.chapters.length && project.chapters.length > 0}
+                                onChange={toggleSelectAll}
+                                className="w-4 h-4"
+                              />
+                              <span className="text-sm text-gray-500">已选 {selectedChapterIds.length} 章</span>
+                              <button
+                                onClick={() => {
+                                  setIsSelectMode(false)
+                                  setSelectedChapterIds([])
+                                }}
+                                className="text-sm text-muted-foreground hover:text-foreground"
+                              >
+                                取消
+                              </button>
+                            </>
+                          )}
+                          {!isSelectMode && (
+                            <CardTitle className="flex items-center gap-2 text-base">
+                              <PenLine className="h-5 w-5 text-blue-600" />
+                              正文写作
+                              <Badge variant="secondary">
+                                {getCompletedChapterCount(project)}/{project.chapters.length} 已完成
+                              </Badge>
+                            </CardTitle>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {!isSelectMode && (
+                            <>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setIsSelectMode(true)}
+                                className="gap-1.5"
+                              >
+                                <ListChecks className="h-4 w-4" />
+                                多选
+                              </Button>
+                              <Button variant="outline" size="sm" onClick={() => router.push(`/projects/${projectId}/chapters/new`)}>
+                                <Plus className="h-3.5 w-3.5" />
+                                新建
+                              </Button>
+                            </>
+                          )}
+                          {isSelectMode && selectedChapterIds.length > 0 && (
+                            <BatchGenerator
+                              projectId={projectId}
+                              chapters={project.chapters.filter(ch => selectedChapterIds.includes(ch.id))}
+                              onGenerate={(options) => {
+                                setBatchOptions(options)
+                                setBatchProgressOpen(true)
+                              }}
+                            />
+                          )}
                         </div>
                       </div>
-                    ))}
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        {project.chapters.map((chapter) => (
+                          <div
+                            key={chapter.id}
+                            className={`flex items-center justify-between p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-all ${
+                              isSelectMode ? 'cursor-pointer' : 'cursor-pointer'
+                            }`}
+                            onClick={() => {
+                              if (isSelectMode) {
+                                toggleChapterSelection(chapter.id)
+                              } else {
+                                router.push(`/projects/${projectId}/chapters/${chapter.id}`)
+                              }
+                            }}
+                          >
+                            {isSelectMode && (
+                              <input
+                                type="checkbox"
+                                checked={selectedChapterIds.includes(chapter.id)}
+                                onChange={() => toggleChapterSelection(chapter.id)}
+                                className="w-4 h-4 mr-3 accent-blue-600"
+                              />
+                            )}
+                            <div className="flex items-center gap-3 flex-1">
+                              <span className="text-gray-400">第{chapter.chapterNumber}章</span>
+                              <span className="font-medium">{chapter.title || '无标题'}</span>
+                              {chapter.status === 'GENERATING' && (
+                                <Badge variant="primary" className="text-xs">生成中</Badge>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className="text-sm text-gray-500">{(chapter.wordCount || 0).toLocaleString()} 字</span>
+                              <Badge variant={chapterStatusMap[chapter.status].variant} className="text-xs">
+                                {chapterStatusMap[chapter.status].label}
+                              </Badge>
+                              {chapter.status === 'DRAFT' && (
+                                <Button
+                                  variant="primary"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    router.push(`/projects/${projectId}/chapters/${chapter.id}/generate`)
+                                  }}
+                                >
+                                  开始写作
+                                </Button>
+                              )}
+                              {chapter.id === nextUncompletedChapter?.id && chapter.status !== 'DRAFT' && chapter.status !== 'COMPLETED' && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    router.push(`/projects/${projectId}/chapters/${chapter.id}/generate`)
+                                  }}
+                                >
+                                  继续写作
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Card>
+                    <CardContent className="py-16">
+                      <div className="text-center">
+                        <PenLine className="h-12 w-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
+                        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">还没有章节</h3>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+                          先生成章节目录，然后逐章写作
+                        </p>
+                        <Button
+                          variant="primary"
+                          onClick={openChapterListGenerator}
+                          disabled={setupBlocked || !hasOutline(project)}
+                        >
+                          <Sparkles className="h-4 w-4 mr-1.5" />
+                          生成目录
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'review' && (
+              <div className="space-y-4">
+                {getCompletedChapterCount(project) > 0 ? (
+                  <>
+                    <div className="flex items-center gap-1 border-b border-gray-200 dark:border-gray-700 pb-3">
+                      <button
+                        onClick={() => setReviewSubTab('review')}
+                        className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                          reviewSubTab === 'review'
+                            ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+                            : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                        }`}
+                      >
+                        <Shield className="h-4 w-4 inline mr-1" />
+                        对抗审稿
+                      </button>
+                      <button
+                        onClick={() => setReviewSubTab('deslop')}
+                        className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                          reviewSubTab === 'deslop'
+                            ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+                            : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                        }`}
+                      >
+                        <Sparkles className="h-4 w-4 inline mr-1" />
+                        去 AI 味
+                      </button>
+                    </div>
+
+                    {reviewSubTab === 'review' && (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="flex items-center gap-2 text-base">
+                            <Shield className="h-5 w-5 text-blue-600" />
+                            对抗式审稿
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <ReviewPanel
+                            projectId={projectId}
+                            chapters={project.chapters.filter(ch => ch.status === 'COMPLETED').map(ch => ({
+                              id: ch.id,
+                              chapterNumber: ch.chapterNumber,
+                              title: ch.title,
+                            }))}
+                          />
+                        </CardContent>
+                      </Card>
+                    )}
+
+                    {reviewSubTab === 'deslop' && (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="flex items-center gap-2 text-base">
+                            <Sparkles className="h-5 w-5 text-blue-600" />
+                            去 AI 味
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <DeslopPanel projectId={projectId} />
+                        </CardContent>
+                      </Card>
+                    )}
+
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-base">
+                          <FileCheck2 className="h-5 w-5 text-blue-600" />
+                          已完成章节
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-2">
+                          {project.chapters.filter(ch => ch.status === 'COMPLETED').map((chapter) => (
+                            <div
+                              key={chapter.id}
+                              className="flex items-center justify-between p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-all"
+                            >
+                              <div className="flex items-center gap-3">
+                                <span className="text-gray-400">第{chapter.chapterNumber}章</span>
+                                <span className="font-medium">{chapter.title || '无标题'}</span>
+                                <span className="text-sm text-gray-500">{(chapter.wordCount || 0).toLocaleString()} 字</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    setReviewSubTab('review')
+                                    setShowReviewModal(true)
+                                  }}
+                                >
+                                  审稿优化
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => router.push(`/projects/${projectId}/chapters/${chapter.id}`)}
+                                >
+                                  查看
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </>
+                ) : (
+                  <Card>
+                    <CardContent className="py-16">
+                      <div className="text-center">
+                        <Shield className="h-12 w-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
+                        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">还没有已完成的章节</h3>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+                          完成章节写作后，可以在此进行审稿和润色
+                        </p>
+                        <Button
+                          variant="primary"
+                          onClick={() => setActiveTab('write')}
+                        >
+                          去写作
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            )}
+
+            {showGenerator && project.projectMode === 'CREATE' && (
+              <ChapterListGenerator
+                projectId={projectId}
+                projectTitle={project.title}
+                genre={project.genre || undefined}
+                writingStyle={project.writingStyle || undefined}
+                worldSetting={project.worldSetting || undefined}
+                protagonistProfile={project.protagonistProfile || undefined}
+                protagonistGoal={project.protagonistGoal || undefined}
+                antagonistSetting={project.antagonistSetting || undefined}
+                endingPlan={project.endingPlan || undefined}
+                outline={project.outline || undefined}
+                outlineStages={project.outlineStages || undefined}
+                aiModelId={project.aiModelId || undefined}
+                chapters={project.chapters.map(ch => ({
+                  chapterNumber: ch.chapterNumber,
+                  title: ch.title,
+                  summary: ch.summary || ''
+                }))}
+                onApply={handleApplyChapters}
+                isExpanded={showGenerator}
+                onToggle={setShowGenerator}
+              />
+            )}
+          </div>
+
+          <div className={`space-y-4 transition-all duration-300 ${sidebarCollapsed ? 'hidden' : ''}`}>
+            <div className="flex items-center justify-end">
+              <button
+                onClick={() => setSidebarCollapsed(true)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors p-1"
+                title="收起侧栏"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-1.5">
+                    <Target className="h-4 w-4 text-blue-600" />
+                    写作进度
+                  </h3>
+                  <span className="text-lg font-bold text-blue-600">{progress !== null ? `${progress}%` : '-'}</span>
+                </div>
+                {project.targetWordCount ? (
+                  <Progress value={project.currentWordCount} max={project.targetWordCount} showLabel size="sm" />
+                ) : (
+                  <div className="w-full h-2 bg-muted rounded-full">
+                    <div className="h-full w-0 bg-primary rounded-full" />
                   </div>
                 )}
-              </CardContent>
-            </Card>
-          )}
-
-      {/* 目录生成器 */}
-      {showGenerator && project.projectMode === 'CREATE' && (
-        <ChapterListGenerator
-          projectId={projectId}
-          projectTitle={project.title}
-          genre={project.genre || undefined}
-          writingStyle={project.writingStyle || undefined}
-          worldSetting={project.worldSetting || undefined}
-          protagonistProfile={project.protagonistProfile || undefined}
-          protagonistGoal={project.protagonistGoal || undefined}
-          antagonistSetting={project.antagonistSetting || undefined}
-          endingPlan={project.endingPlan || undefined}
-          outline={project.outline || undefined}
-          outlineStages={project.outlineStages || undefined}
-          aiModelId={project.aiModelId || undefined}
-          chapters={project.chapters.map(ch => ({
-            chapterNumber: ch.chapterNumber,
-            title: ch.title,
-            summary: ch.summary || ''
-          }))}
-          onApply={handleApplyChapters}
-          isExpanded={showGenerator}
-          onToggle={setShowGenerator}
-        />
-      )}
-        </div>
-
-        {/* 右侧：信息面板 */}
-        <div className="space-y-6">
-          {/* 下一步建议 */}
-          {project.projectMode === 'CREATE' && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <ArrowRight className="h-4 w-4 text-blue-600" />
-                  下一步
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <div className="text-sm font-medium text-gray-900 dark:text-white">{currentStep.title}</div>
-                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{currentStep.description}</p>
+                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                  <div>
+                    <p className="text-sm font-bold">{project.currentWordCount.toLocaleString()}</p>
+                    <p className="text-xs text-gray-500">当前</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold">{project.targetWordCount?.toLocaleString() || '-'}</p>
+                    <p className="text-xs text-gray-500">目标</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold">{project.chapters.length}</p>
+                    <p className="text-xs text-gray-500">章节</p>
+                  </div>
                 </div>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => handleWorkflowAction(currentStep.id)}
-                  className="w-full"
-                >
-                  {currentStep.actionLabel}
-                </Button>
               </CardContent>
             </Card>
-          )}
 
-          {/* 项目完整度 */}
-          {project.projectMode === 'CREATE' && (
             <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Target className="h-4 w-4 text-blue-600" />
-                  项目完整度
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="p-4 space-y-3">
                 <div>
                   <div className="mb-2 flex items-center justify-between text-sm">
                     <span className="text-gray-500 dark:text-gray-400">流程完成</span>
@@ -872,93 +1253,81 @@ export default function ProjectDetailPage() {
                   </div>
                   <Progress value={workflowProgress} max={100} size="sm" />
                 </div>
-                {missingItems.length > 0 ? (
-                  <div className="space-y-2">
-                    <div className="text-xs font-medium text-gray-500 dark:text-gray-400">待补充</div>
-                    <div className="flex flex-wrap gap-2">
-                      {missingItems.slice(0, 6).map((item) => (
-                        <Badge key={item} variant="warning">{item}</Badge>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700 dark:bg-green-900/20 dark:text-green-300">
-                    基础信息已完整，可以持续生成和审稿。
+                {missingItems.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {missingItems.slice(0, 4).map((item) => (
+                      <Badge key={item} variant="warning" className="text-xs">{item}</Badge>
+                    ))}
+                    {missingItems.length > 4 && (
+                      <Badge variant="outline" className="text-xs">+{missingItems.length - 4}</Badge>
+                    )}
                   </div>
                 )}
               </CardContent>
             </Card>
-          )}
 
-          {/* 项目信息 */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Layers className="h-5 w-5" />
-                项目信息
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-500">创作模式</span>
-                <Badge variant={project.projectMode === 'CREATE' ? 'primary' : 'secondary'}>
-                  {project.projectMode === 'CREATE' ? '创作' : '分析'}
-                </Badge>
-              </div>
-              {project.aiModelConfig && (
+            <Card>
+              <CardContent className="p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-500">AI 模型</span>
-                  <span className="text-sm font-medium">{project.aiModelConfig.name}</span>
+                  <span className="text-sm text-gray-500">创作模式</span>
+                  <Badge variant={project.projectMode === 'CREATE' ? 'primary' : 'secondary'}>
+                    {project.projectMode === 'CREATE' ? '创作' : '分析'}
+                  </Badge>
                 </div>
-              )}
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-500">创建时间</span>
-                <span className="text-sm">{new Date(project.createdAt).toLocaleDateString()}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-500">更新时间</span>
-                <span className="text-sm">{new Date(project.updatedAt).toLocaleDateString()}</span>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* 角色信息 */}
-          {project.protagonistProfile && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Users className="h-5 w-5" />
-                  主角设定
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-4">
-                  {project.protagonistProfile}
-                </p>
+                {project.aiModelConfig && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-500">AI 模型</span>
+                    <span className="text-sm font-medium">{project.aiModelConfig.name}</span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-500">更新时间</span>
+                  <span className="text-sm">{new Date(project.updatedAt).toLocaleDateString()}</span>
+                </div>
               </CardContent>
             </Card>
-          )}
 
-          {/* 世界设定 */}
-          {project.worldSetting && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Clock className="h-5 w-5" />
-                  世界设定
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-4">
-                  {project.worldSetting}
-                </p>
-              </CardContent>
-            </Card>
-          )}
+            {project.protagonistProfile && (
+              <Card>
+                <CardContent className="p-4">
+                  <h4 className="text-sm font-medium text-gray-900 dark:text-white flex items-center gap-1.5 mb-2">
+                    <Users className="h-4 w-4 text-blue-600" />
+                    主角设定
+                  </h4>
+                  <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-3">
+                    {project.protagonistProfile}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+
+            {project.worldSetting && (
+              <Card>
+                <CardContent className="p-4">
+                  <h4 className="text-sm font-medium text-gray-900 dark:text-white flex items-center gap-1.5 mb-2">
+                    <Clock className="h-4 w-4 text-blue-600" />
+                    世界设定
+                  </h4>
+                  <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-3">
+                    {project.worldSetting}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* 批量进度 */}
+      {sidebarCollapsed && project.projectMode === 'CREATE' && (
+        <button
+          onClick={() => setSidebarCollapsed(false)}
+          className="fixed right-0 top-1/2 -translate-y-1/2 z-10 bg-white dark:bg-gray-800 border border-r-0 border-gray-200 dark:border-gray-700 rounded-l-lg px-1.5 py-3 shadow-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          title="展开侧栏"
+        >
+          <ChevronDown className="h-4 w-4 text-gray-500 rotate-90" />
+        </button>
+      )}
+
       {batchProgressOpen && batchOptions && (
         <BatchProgress
           projectId={projectId}
@@ -971,7 +1340,6 @@ export default function ProjectDetailPage() {
         />
       )}
 
-      {/* 编辑项目 Modal */}
       <Modal
         open={showEditModal}
         onClose={() => setShowEditModal(false)}
@@ -1003,7 +1371,6 @@ export default function ProjectDetailPage() {
         />
       </Modal>
 
-      {/* 删除项目 Modal */}
       <Modal
         open={showDeleteModal}
         onClose={() => setShowDeleteModal(false)}
@@ -1020,7 +1387,6 @@ export default function ProjectDetailPage() {
         </div>
       </Modal>
 
-      {/* 大纲生成 Modal */}
       <Modal
         open={showOutlineGenerator}
         onClose={() => setShowOutlineGenerator(false)}
@@ -1060,7 +1426,6 @@ export default function ProjectDetailPage() {
         />
       </Modal>
 
-      {/* 分析剧情 Modal */}
       <Modal
         open={showPlotAnalysisModal}
         onClose={() => setShowPlotAnalysisModal(false)}
@@ -1074,7 +1439,6 @@ export default function ProjectDetailPage() {
         />
       </Modal>
 
-      {/* 继续生成 Modal */}
       <Modal
         open={showContinuationModal}
         onClose={() => setShowContinuationModal(false)}
@@ -1084,7 +1448,6 @@ export default function ProjectDetailPage() {
         <ContinuationPanel projectId={projectId} />
       </Modal>
 
-      {/* 资料研究 Modal */}
       <Modal
         open={showResearchModal}
         onClose={() => setShowResearchModal(false)}
@@ -1094,7 +1457,6 @@ export default function ProjectDetailPage() {
         <ResearchPanel projectId={projectId} />
       </Modal>
 
-      {/* 对抗审稿 Modal */}
       <Modal
         open={showReviewModal}
         onClose={() => setShowReviewModal(false)}
@@ -1111,7 +1473,6 @@ export default function ProjectDetailPage() {
         />
       </Modal>
 
-      {/* 去AI味 Modal */}
       <Modal
         open={showDeslopModal}
         onClose={() => setShowDeslopModal(false)}
@@ -1121,7 +1482,6 @@ export default function ProjectDetailPage() {
         <DeslopPanel projectId={projectId} />
       </Modal>
 
-      {/* 封面生成 Modal */}
       <Modal
         open={showCoverModal}
         onClose={() => setShowCoverModal(false)}
@@ -1131,7 +1491,6 @@ export default function ProjectDetailPage() {
         <CoverGenerator projectId={projectId} onCoverApplied={fetchProject} />
       </Modal>
 
-      {/* 短篇创作 Modal */}
       <Modal
         open={showShortStoryModal}
         onClose={() => setShowShortStoryModal(false)}
@@ -1141,7 +1500,6 @@ export default function ProjectDetailPage() {
         <ShortStoryPanel projectId={projectId} />
       </Modal>
 
-      {/* 分析模式特殊 Modal */}
       {project.projectMode === 'ANALYZE' && (
         <>
           <Modal
