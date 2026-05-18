@@ -36,7 +36,7 @@ interface ChapterDeslopResult {
 }
 
 // 快速评分计算
-function quickScore(content: string): number {
+export function quickScore(content: string): number {
   const wordScan = scanForbiddenWords(content)
   const patternScan = scanForbiddenPatterns(content)
   
@@ -50,6 +50,8 @@ function quickScore(content: string): number {
   
   return Math.max(0, Math.min(100, Math.round(score)))
 }
+
+export type { ChapterDeslopInput as DeslopInput, ChapterDeslopResult as DeslopResult, DeslopChange }
 
 /**
  * 章节去AI味处理
@@ -181,3 +183,6 @@ export async function batchChapterDeslopper(
 
   return results
 }
+
+// 别名导出，供 adapters.ts 使用
+export const deslopperAgent = chapterDeslopper

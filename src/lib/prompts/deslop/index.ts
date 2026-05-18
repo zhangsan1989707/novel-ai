@@ -181,7 +181,7 @@ export function buildChapterDeslopPrompt(input: ChapterDeslopPromptInput): strin
   parts.push('\n【输出格式】')
   parts.push('必须以严格JSON格式输出，不要包含任何解释性文字：')
   parts.push('{')
-  parts.push('  "revisedContent": "改写后的完整文本，保留原文所有段落结构"',')
+  parts.push('  "revisedContent": "改写后的完整文本，保留原文所有段落结构",')
   parts.push('  "changes": [')
   parts.push('    {')
   parts.push('      "type": "word|pattern|structure|rhythm|immersive",')

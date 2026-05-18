@@ -7,6 +7,13 @@ import { ArrowLeft, Save, Sparkles, Trash2, Maximize, Minimize, FileText, Settin
 import { ChapterStatus } from '@/types'
 import { ChapterQualityPanel } from '@/components/ai/ChapterQualityPanel'
 
+interface ChapterEditorProps {
+  projectId: number
+  chapterId?: number
+  initialChapter?: Record<string, any>
+  onSave?: (chapter: Record<string, any>) => void
+}
+
 const statusOptions = [
   { label: '草稿', value: 'DRAFT' },
   { label: '生成中', value: 'GENERATING' },
@@ -23,7 +30,7 @@ const statusVariantMap: Record<ChapterStatus, 'default' | 'primary' | 'secondary
 
 export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: ChapterEditorProps) {
   const router = useRouter()
-  const [chapter, setChapter] = useState<Partial<Chapter>>(initialChapter || {
+  const [chapter, setChapter] = useState<Record<string, any>>(initialChapter || {
     title: '',
     summary: '',
     content: '',
@@ -57,7 +64,7 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
         const data = await res.json()
         if (data.success && data.data.length > 0) {
           const chapterNumbers = data.data
-            .map((c: Chapter) => Number(c.chapterNumber))
+            .map((c: Record<string, any>) => Number(c.chapterNumber))
             .filter((num: number) => !isNaN(num) && num > 0)
           if (chapterNumbers.length > 0) {
             const maxNum = Math.max(...chapterNumbers, 0)

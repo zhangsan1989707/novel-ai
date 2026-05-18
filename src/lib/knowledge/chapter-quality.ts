@@ -313,11 +313,11 @@ function calculateDimensions(
   const patternIssues: Issue[] = patternScan.map(p => ({
     type: 'pattern' as const,
     severity: p.severity >= 2 ? 'critical' as const : 'warning' as const,
-    description: p.pattern,
+    description: String(p.pattern.description || p.pattern),
     location: p.matches.slice(0, 2).join('；'),
-    suggestion: p.pattern.examples?.good || '改变这种模式化写法',
+    suggestion: p.pattern.example?.good || '改变这种模式化写法',
   }))
-  suggestions.push(...patternScan.map(p => `修正模式问题：${p.pattern}`))
+  suggestions.push(...patternScan.map(p => `修正模式问题：${p.pattern.description || p.pattern}`))
 
   // 3. 结构维度
   const structureIssues: Issue[] = []
