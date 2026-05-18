@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { tryCatch, error } from '@/lib/api-response'
-import { quickScore } from '@/lib/agents/deslopper'
+import { quickScore, scanForbiddenWords, scanForbiddenPatterns } from '@/lib/knowledge/anti-ai'
 
 const detectSchema = z.object({
   content: z.string().min(1).max(100000),
@@ -17,7 +17,23 @@ export async function POST(request: NextRequest) {
     }
 
     const score = quickScore(data.content)
+    const forbiddenWordResults = scanForbiddenWords(data.content)
+    const forbiddenPatternResults = scanForbiddenPatterns(data.content)
 
-    return { score }
+    return {
+      score,
+      forbiddenWords: forbiddenWordResults.map(r => ({
+        word: r.word.word,
+        level: r.word.level,
+        count: r.count,
+        replacement: r.word.replacement,
+      })),
+      forbiddenPatterns: forbiddenPatternResults.map(r => ({
+        pattern: r.pattern.pattern,
+        description: r.pattern.description,
+        level: r.pattern.level,
+        matches: r.matches,
+      })),
+    }
   })
 }

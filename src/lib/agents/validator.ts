@@ -69,19 +69,24 @@ export async function validatorAgent(
       const report = JSON.parse(jsonMatch[0]) as ValidationReport
       return report
     } catch {
-      // 解析失败，返回默认报告
       return {
-        result: 'pass',
-        score: 70,
-        issues: [],
+        result: 'retry',
+        score: 40,
+        issues: [{
+          type: 'worldview',
+          severity: 'major',
+          description: '校验结果解析失败，需要重试',
+          location: '全文',
+          reference: '校验输出',
+        }],
         characterUpdates: {},
         newPlotlines: [],
         resolvedPlotlines: [],
         qualityMetrics: {
-          logicScore: 75,
-          characterScore: 75,
-          emotionScore: 75,
-          styleScore: 70,
+          logicScore: 40,
+          characterScore: 40,
+          emotionScore: 40,
+          styleScore: 40,
         },
       }
     }

@@ -18,6 +18,8 @@ services:
       retries: 5
 
   app:
+    # 使用预构建的镜像（快速部署），或者使用 build 本地构建
+    # image: novel-ai-app:latest
     build:
       context: .
       dockerfile: Dockerfile

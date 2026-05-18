@@ -63,6 +63,14 @@ export async function chapterDeslopper(input: ChapterDeslopInput): Promise<Chapt
   // 记录原始评分
   const originalScore = quickScore(content)
 
+  // 扫描检测到的问题
+  const wordScan = scanForbiddenWords(content)
+  const patternScan = scanForbiddenPatterns(content)
+  const detectedIssues = {
+    forbiddenWords: wordScan.map(r => ({ word: r.word.word, count: r.count })),
+    forbiddenPatterns: patternScan.map(r => ({ pattern: r.pattern.pattern, matches: r.matches })),
+  }
+
   // 获取项目信息构建上下文
   const provider = await AIService.createProvider({
     projectId,
@@ -77,12 +85,13 @@ export async function chapterDeslopper(input: ChapterDeslopInput): Promise<Chapt
     genre,
     writingStyle,
     strictness,
+    detectedIssues,
   })
 
   // 调用AI进行改写
   const result = await provider.generate(prompt, {
     temperature: 0.7,
-    maxTokens: Math.max(4000, content.length * 2),
+    maxTokens: Math.min(8192, Math.max(4000, Math.ceil(content.length * 1.5))),
   })
 
   // 解析结果

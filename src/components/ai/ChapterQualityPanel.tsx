@@ -254,23 +254,25 @@ export function ChapterQualityPanel({
     if (!optimizeResult) return
 
     try {
-      await fetch('/api/novel/ai/chapter-quality/optimize', {
-        method: 'POST',
+      const res = await fetch(`/api/novel/projects/${projectId}/chapters/${chapterId}`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          projectId,
-          chapterId,
-          strictness,
-          autoSave: true,
+          content: optimizeResult.revisedContent,
         }),
       })
-      onOptimizeComplete?.(optimizeResult.revisedContent)
-      setOptimizeResult(null)
-      setReport(optimizeResult.qualityReport)
-    } catch (error) {
-      console.error('保存失败:', error)
+      const data = await res.json()
+      if (data.success) {
+        onOptimizeComplete?.(optimizeResult.revisedContent)
+        setOptimizeResult(null)
+        setReport(optimizeResult.qualityReport)
+      } else {
+        console.error('保存失败:', data.error?.message)
+      }
+    } catch (err) {
+      console.error('保存失败:', err)
     }
-  }, [projectId, chapterId, strictness, optimizeResult, onOptimizeComplete])
+  }, [projectId, chapterId, optimizeResult, onOptimizeComplete])
 
   const toggleIssue = (index: number) => {
     setExpandedIssues(prev => {

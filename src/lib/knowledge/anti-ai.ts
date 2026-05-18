@@ -28,8 +28,6 @@ export const criticalWords: ForbiddenWord[] = [
   { word: '陡然', level: 'critical', reason: 'AI高频词', category: 'adverb', replacement: '忽然、突然、一下' },
   { word: '悄然', level: 'critical', reason: 'AI高频词', category: 'adverb', replacement: '偷偷、悄悄、暗暗' },
   { word: '旋即', level: 'critical', reason: 'AI高频词', category: 'adverb', replacement: '马上、立刻、很快' },
-  { word: '旋即', level: 'critical', reason: 'AI高频词', category: 'adverb', replacement: '很快、马上、立刻' },
-  { word: '不禁', level: 'critical', reason: 'AI高频词', category: 'emotion', replacement: '（直接写动作）' },
   { word: '确实', level: 'critical', reason: 'AI高频确认词', category: 'style', replacement: '（删除或改写）' },
   { word: '毋庸置疑', level: 'critical', reason: 'AI高频确认词', category: 'style', replacement: '（删除或改写）' },
   { word: '可以说', level: 'critical', reason: 'AI高频确认词', category: 'style', replacement: '（删除或改写）' },
@@ -47,7 +45,6 @@ export const warningWords: ForbiddenWord[] = [
   { word: '竟然', level: 'warning', reason: 'AI高频词', category: 'emotion', replacement: '居然、竟、偏' },
   { word: '居然', level: 'warning', reason: 'AI高频词', category: 'emotion', replacement: '竟然、竟、偏' },
   { word: '显然', level: 'warning', reason: 'AI高频词', category: 'style', replacement: '（删除或改写）' },
-  { word: '不由得', level: 'warning', reason: 'AI高频词', category: 'emotion', replacement: '（删除或改写）' },
   { word: '不由得', level: 'warning', reason: 'AI高频词', category: 'emotion', replacement: '忍不住、情不自禁' },
   { word: '不由自主', level: 'warning', reason: 'AI高频词', category: 'action', replacement: '控制不住、忍不住' },
   { word: '下意识', level: 'warning', reason: 'AI高频词', category: 'action', replacement: '（直接写动作）' },
@@ -67,7 +64,6 @@ export const optionalWords: ForbiddenWord[] = [
   { word: '总之', level: 'optional', reason: '过度规整', category: 'structure', replacement: '（改用自然的叙述）' },
   { word: '综上所述', level: 'optional', reason: '过度规整', category: 'structure', replacement: '（删除或改写）' },
   { word: '可见', level: 'optional', reason: '过度规整', category: 'structure', replacement: '（删除或改写）' },
-  { word: '此时此刻', level: 'optional', reason: '过度强调', category: 'style', replacement: '（删除或改写）' },
   { word: '此时此刻', level: 'optional', reason: '过度强调', category: 'style', replacement: '现在、这会儿' },
   { word: '换言之', level: 'optional', reason: '过度规整', category: 'style', replacement: '（删除或改写）' },
   { word: '换句话说', level: 'optional', reason: '过度规整', category: 'style', replacement: '（删除或改写）' },
@@ -77,7 +73,6 @@ export const optionalWords: ForbiddenWord[] = [
   { word: '主观来讲', level: 'optional', reason: '过度规整', category: 'style', replacement: '（删除或改写）' },
   { word: '不得不承认', level: 'optional', reason: '过度规整', category: 'style', replacement: '（删除或改写）' },
   { word: '有目共睹', level: 'optional', reason: '过度规整', category: 'style', replacement: '（删除或改写）' },
-  { word: '毋庸置疑', level: 'optional', reason: '过度规整', category: 'style', replacement: '（删除或改写）' },
   { word: '众所周知', level: 'optional', reason: '过度规整', category: 'style', replacement: '（删除或改写）' },
   { word: '不言而喻', level: 'optional', reason: '过度规整', category: 'style', replacement: '（删除或改写）' },
 ]
@@ -104,12 +99,23 @@ export function scanForbiddenWords(text: string): { word: ForbiddenWord; count: 
     const positions: number[] = []
     let idx = text.indexOf(fw.word)
     while (idx !== -1) {
-      // 检查是否是独立词（避免部分匹配）
-      const beforeChar = idx > 0 ? text[idx - 1] : ' '
-      const afterChar = idx + fw.word.length < text.length ? text[idx + fw.word.length] : ' '
-      // 如果前后都是字母数字或汉字的一部分，跳过
-      const isPartOfWord = /[\w\u4e00-\u9fa5]/.test(beforeChar) || /[\w\u4e00-\u9fa5]/.test(afterChar)
-      if (!isPartOfWord) {
+      const beforeChar = idx > 0 ? text[idx - 1] : ''
+      const afterChar = idx + fw.word.length < text.length ? text[idx + fw.word.length] : ''
+      const beforeIsCjk = /[\u4e00-\u9fa5]/.test(beforeChar)
+      const afterIsCjk = /[\u4e00-\u9fa5]/.test(afterChar)
+      const beforeIsPunctOrSpace = /[，。！？、；：""''（）\s\n\r,.\-—…]/.test(beforeChar) || idx === 0
+      const afterIsPunctOrSpace = /[，。！？、；：""''（）\s\n\r,.\-—…]/.test(afterChar) || idx + fw.word.length >= text.length
+      let isPartOfLongerWord = false
+      if (beforeIsCjk || afterIsCjk) {
+        if (beforeIsCjk && afterIsCjk) {
+          isPartOfLongerWord = true
+        } else if (beforeIsCjk && afterIsPunctOrSpace) {
+          isPartOfLongerWord = false
+        } else if (beforeIsPunctOrSpace && afterIsCjk) {
+          isPartOfLongerWord = false
+        }
+      }
+      if (!isPartOfLongerWord) {
         positions.push(idx)
       }
       idx = text.indexOf(fw.word, idx + fw.word.length)

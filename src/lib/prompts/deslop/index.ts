@@ -101,6 +101,10 @@ interface ChapterDeslopPromptInput {
   genre?: string | null
   writingStyle?: string | null
   strictness?: 'light' | 'medium' | 'heavy'
+  detectedIssues?: {
+    forbiddenWords: { word: string; count: number }[]
+    forbiddenPatterns: { pattern: string; matches: string[] }[]
+  }
 }
 
 /**
@@ -127,6 +131,26 @@ export function buildChapterDeslopPrompt(input: ChapterDeslopPromptInput): strin
   // 待处理文本
   parts.push('\n【待处理文本】')
   parts.push(input.content)
+
+  // 检测到的问题
+  if (input.detectedIssues) {
+    parts.push('\n【检测到的问题】')
+    if (input.detectedIssues.forbiddenWords.length > 0) {
+      parts.push('禁用词命中：')
+      for (const fw of input.detectedIssues.forbiddenWords) {
+        parts.push(`  - "${fw.word}" 出现 ${fw.count} 次`)
+      }
+    }
+    if (input.detectedIssues.forbiddenPatterns.length > 0) {
+      parts.push('禁止模式命中：')
+      for (const fp of input.detectedIssues.forbiddenPatterns) {
+        parts.push(`  - ${fp.pattern}：${fp.matches.join('；')}`)
+      }
+    }
+    if (input.detectedIssues.forbiddenWords.length === 0 && input.detectedIssues.forbiddenPatterns.length === 0) {
+      parts.push('未检测到明显的AI痕迹词或模式，但仍需检查整体风格。')
+    }
+  }
 
   // 禁用词库
   parts.push('\n【禁用词库】')

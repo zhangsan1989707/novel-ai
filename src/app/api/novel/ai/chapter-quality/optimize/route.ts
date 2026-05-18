@@ -9,7 +9,7 @@ const optimizeSchema = z.object({
   projectId: z.number().int().positive(),
   chapterId: z.number().int().positive(),
   strictness: z.enum(['light', 'medium', 'heavy']).default('medium'),
-  autoSave: z.boolean().default(true),
+  autoSave: z.boolean().default(false),
 })
 
 /**

@@ -16,7 +16,7 @@ interface DetectResult {
 }
 
 interface DeslopChange {
-  type: 'word' | 'pattern' | 'structure'
+  type: 'word' | 'pattern' | 'structure' | 'rhythm' | 'immersive'
   original: string
   revised: string
   reason: string
