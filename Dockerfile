@@ -9,8 +9,8 @@ WORKDIR /app
 # 复制 package 文件
 COPY package.json package-lock.json* ./
 
-# 安装依赖（仅生产依赖）
-RUN npm ci --omit=dev
+# 安装所有依赖（包括 devDependencies，因为构建需要）
+RUN npm ci
 
 # 构建阶段
 FROM base AS builder
