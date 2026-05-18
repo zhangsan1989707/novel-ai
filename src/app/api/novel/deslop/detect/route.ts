@@ -1,7 +1,8 @@
 import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { tryCatch, error } from '@/lib/api-response'
-import { quickScore, scanForbiddenWords, scanForbiddenPatterns } from '@/lib/knowledge/anti-ai'
+import { quickScore } from '@/lib/agents/deslopper'
+import { scanForbiddenWords, scanForbiddenPatterns } from '@/lib/knowledge/anti-ai'
 
 const detectSchema = z.object({
   content: z.string().min(1).max(100000),
