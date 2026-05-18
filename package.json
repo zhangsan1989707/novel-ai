@@ -18,7 +18,8 @@
     "docker:stop": "bash scripts/docker-stop.sh",
     "docker:build": "bash scripts/docker-build.sh",
     "docker:restart": "bash scripts/docker-restart.sh",
-    "docker:logs": "bash scripts/docker-logs.sh"
+    "docker:logs": "bash scripts/docker-logs.sh",
+    "deploy": "bash scripts/deploy-quick.sh"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.2",
