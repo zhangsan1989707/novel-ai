@@ -1,104 +1,89 @@
 import { AIService } from '@/lib/ai/service'
-import { scanForbiddenWords, scanForbiddenPatterns } from '@/lib/knowledge/anti-ai'
-import { buildDeslopPrompt } from '../prompts/deslop'
+import { scanForbiddenWords, scanForbiddenPatterns, scanWordsByLevel, getAntiAiPrompt, type ForbiddenWord } from '@/lib/knowledge/anti-ai'
+import { buildChapterDeslopPrompt } from '@/lib/prompts/deslop'
 
-interface DeslopInput {
+interface ChapterDeslopInput {
   projectId: number
+  chapterId: number
   content: string
+  chapterNumber?: number
+  chapterTitle?: string
   genre?: string | null
   writingStyle?: string | null
   strictness?: 'light' | 'medium' | 'heavy'
+  autoOptimize?: boolean
 }
 
 interface DeslopChange {
-  type: 'word' | 'pattern' | 'structure'
+  type: 'word' | 'pattern' | 'structure' | 'rhythm' | 'immersive'
   original: string
   revised: string
   reason: string
+  position?: { start: number; end: number }
 }
 
-interface DeslopResult {
+interface ChapterDeslopResult {
+  chapterId: number
   originalContent: string
   revisedContent: string
   changes: DeslopChange[]
-  aiScore: number
+  originalScore: number
+  revisedScore: number
+  improvement: number
   tokens?: number
+  duration?: number
+  autoApplied?: boolean
 }
 
-function calculateAiScore(
-  content: string,
-  wordHits: { word: string; count: number }[],
-  patternHits: { pattern: string; matches: string[] }[]
-): number {
-  let score = 100
-
-  const criticalWords = wordHits.filter(w => {
-    const fw = scanForbiddenWords(content).find(h => h.word.word === w.word)
-    return fw && fw.word.level === 'critical'
-  })
-  const warningWords = wordHits.filter(w => {
-    const fw = scanForbiddenWords(content).find(h => h.word.word === w.word)
-    return fw && fw.word.level === 'warning'
-  })
-
-  for (const w of criticalWords) {
-    score -= w.count * 5
-  }
-  for (const w of warningWords) {
-    score -= w.count * 2
-  }
-  for (const p of patternHits) {
-    score -= p.matches.length * 8
-  }
-
-  const paragraphs = content.split(/\n+/).filter(p => p.trim().length > 0)
-  if (paragraphs.length >= 3) {
-    const lengths = paragraphs.map(p => p.length)
-    const avgLen = lengths.reduce((a, b) => a + b, 0) / lengths.length
-    const variance = lengths.reduce((sum, l) => sum + Math.pow(l - avgLen, 2), 0) / lengths.length
-    const cv = Math.sqrt(variance) / (avgLen || 1)
-    if (cv < 0.2) {
-      score -= 10
-    }
-  }
-
-  return Math.max(0, Math.min(100, score))
-}
-
-export async function deslopperAgent(input: DeslopInput): Promise<DeslopResult> {
-  const { projectId, content, genre, writingStyle, strictness = 'medium' } = input
-
+// 快速评分计算
+function quickScore(content: string): number {
   const wordScan = scanForbiddenWords(content)
   const patternScan = scanForbiddenPatterns(content)
-
-  const detectedIssues = {
-    forbiddenWords: wordScan.map(w => ({ word: w.word.word, count: w.count })),
-    forbiddenPatterns: patternScan.map(p => ({
-      pattern: p.pattern.pattern,
-      matches: p.matches,
-    })),
+  
+  let score = 100
+  for (const w of wordScan) {
+    score -= w.word.level === 'critical' ? 5 : w.word.level === 'warning' ? 2 : 0.5
   }
+  for (const p of patternScan) {
+    score -= p.severity * 8
+  }
+  
+  return Math.max(0, Math.min(100, Math.round(score)))
+}
 
-  const originalScore = calculateAiScore(content, detectedIssues.forbiddenWords, detectedIssues.forbiddenPatterns)
+/**
+ * 章节去AI味处理
+ */
+export async function chapterDeslopper(input: ChapterDeslopInput): Promise<ChapterDeslopResult> {
+  const startTime = Date.now()
+  const { projectId, chapterId, content, chapterNumber, chapterTitle, genre, writingStyle, strictness = 'medium' } = input
 
+  // 记录原始评分
+  const originalScore = quickScore(content)
+
+  // 获取项目信息构建上下文
   const provider = await AIService.createProvider({
     projectId,
     usageType: 'DESLOPPER',
   })
 
-  const prompt = buildDeslopPrompt({
+  // 构建增强的提示词
+  const prompt = buildChapterDeslopPrompt({
     content,
+    chapterNumber,
+    chapterTitle,
     genre,
     writingStyle,
     strictness,
-    detectedIssues,
   })
 
+  // 调用AI进行改写
   const result = await provider.generate(prompt, {
     temperature: 0.7,
     maxTokens: Math.max(4000, content.length * 2),
   })
 
+  // 解析结果
   let revisedContent = content
   let changes: DeslopChange[] = []
 
@@ -113,64 +98,86 @@ export async function deslopperAgent(input: DeslopInput): Promise<DeslopResult> 
         changes = parsed.changes.filter(
           (c: DeslopChange) =>
             c.type && c.original && c.revised && c.reason &&
-            ['word', 'pattern', 'structure'].includes(c.type)
+            ['word', 'pattern', 'structure', 'rhythm', 'immersive'].includes(c.type)
         )
       }
     } catch {
+      // 解析失败，尝试直接使用返回内容
       revisedContent = result.content
     }
   } else {
     revisedContent = result.content
   }
 
-  const revisedWordScan = scanForbiddenWords(revisedContent)
-  const revisedPatternScan = scanForbiddenPatterns(revisedContent)
-  const revisedDetectedIssues = {
-    forbiddenWords: revisedWordScan.map(w => ({ word: w.word.word, count: w.count })),
-    forbiddenPatterns: revisedPatternScan.map(p => ({
-      pattern: p.pattern.pattern,
-      matches: p.matches,
-    })),
-  }
-  const revisedScore = calculateAiScore(revisedContent, revisedDetectedIssues.forbiddenWords, revisedDetectedIssues.forbiddenPatterns)
+  // 计算改进后的评分
+  const revisedScore = quickScore(revisedContent)
+  const improvement = revisedScore - originalScore
+  const duration = Date.now() - startTime
 
   return {
+    chapterId,
     originalContent: content,
     revisedContent,
     changes,
-    aiScore: revisedScore,
+    originalScore,
+    revisedScore,
+    improvement,
     tokens: result.totalTokens,
+    duration,
   }
 }
 
-export function detectAiScore(content: string): {
-  score: number
-  forbiddenWords: { word: string; count: number; level: string }[]
-  forbiddenPatterns: { pattern: string; description: string; matches: string[]; level: string }[]
-} {
-  const wordScan = scanForbiddenWords(content)
-  const patternScan = scanForbiddenPatterns(content)
+/**
+ * 批量章节去AI味
+ */
+export async function batchChapterDeslopper(
+  chapters: Array<{
+    chapterId: number
+    chapterNumber?: number
+    chapterTitle?: string
+    content: string
+  }>,
+  projectId: number,
+  options: {
+    genre?: string | null
+    writingStyle?: string | null
+    strictness?: 'light' | 'medium' | 'heavy'
+    onProgress?: (current: number, total: number, chapterId: number) => void
+  }
+): Promise<Array<ChapterDeslopResult & { success: boolean; error?: string }>> {
+  const results: Array<ChapterDeslopResult & { success: boolean; error?: string }> = []
+  const total = chapters.length
 
-  const forbiddenWords = wordScan.map(w => ({
-    word: w.word.word,
-    count: w.count,
-    level: w.word.level,
-  }))
+  for (let i = 0; i < chapters.length; i++) {
+    const chapter = chapters[i]
+    options.onProgress?.(i + 1, total, chapter.chapterId)
 
-  const forbiddenPatterns = patternScan.map(p => ({
-    pattern: p.pattern.pattern,
-    description: p.pattern.description,
-    matches: p.matches,
-    level: p.pattern.level,
-  }))
+    try {
+      const result = await chapterDeslopper({
+        projectId,
+        chapterId: chapter.chapterId,
+        content: chapter.content,
+        chapterNumber: chapter.chapterNumber,
+        chapterTitle: chapter.chapterTitle,
+        genre: options.genre,
+        writingStyle: options.writingStyle,
+        strictness: options.strictness,
+      })
+      results.push({ ...result, success: true })
+    } catch (err) {
+      results.push({
+        chapterId: chapter.chapterId,
+        originalContent: chapter.content,
+        revisedContent: chapter.content,
+        changes: [],
+        originalScore: 0,
+        revisedScore: 0,
+        improvement: 0,
+        success: false,
+        error: err instanceof Error ? err.message : '未知错误',
+      })
+    }
+  }
 
-  const score = calculateAiScore(
-    content,
-    forbiddenWords.map(w => ({ word: w.word, count: w.count })),
-    forbiddenPatterns.map(p => ({ pattern: p.pattern, matches: p.matches }))
-  )
-
-  return { score, forbiddenWords, forbiddenPatterns }
+  return results
 }
-
-export type { DeslopInput, DeslopResult, DeslopChange }

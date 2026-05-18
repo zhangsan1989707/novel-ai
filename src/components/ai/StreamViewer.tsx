@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Button, Progress } from '@/components/ui'
-import { Sparkles, Square, RefreshCw } from 'lucide-react'
+import { Sparkles, Square, RefreshCw, Wand2, Loader2 } from 'lucide-react'
 import { countChineseWords } from '@/lib/utils'
+import { ChapterQualityPanel } from './ChapterQualityPanel'
 
 // ============================================
 // Types
@@ -12,10 +13,13 @@ import { countChineseWords } from '@/lib/utils'
 interface StreamViewerProps {
   projectId: number
   chapterId: number
+  chapterNumber: number
+  chapterTitle: string
   initialContent?: string
   onStart?: () => void
   onComplete?: (content: string, wordCount: number) => void
   onError?: (error: string) => void
+  autoOptimize?: boolean
 }
 
 type StreamStatus = 'idle' | 'connecting' | 'streaming' | 'complete' | 'error'
@@ -36,10 +40,13 @@ interface StreamState {
 export function StreamViewer({
   projectId,
   chapterId,
+  chapterNumber,
+  chapterTitle,
   initialContent = '',
   onStart,
   onComplete,
   onError,
+  autoOptimize = false,
 }: StreamViewerProps) {
   const [state, setState] = useState<StreamState>({
     status: 'idle',
@@ -53,8 +60,11 @@ export function StreamViewer({
     contextChapterCount: 3,
     targetWordCount: 3000,
     temperature: 0.7,
+    autoOptimizeAfterGenerate: autoOptimize,
   })
   const [showSettings, setShowSettings] = useState(true)
+  const [showQualityPanel, setShowQualityPanel] = useState(false)
+  const [optimizedContent, setOptimizedContent] = useState<string | null>(null)
   const eventSourceRef = useRef<EventSource | null>(null)
   const contentRef = useRef<HTMLTextAreaElement>(null)
 
@@ -127,13 +137,21 @@ export function StreamViewer({
 
     eventSource.addEventListener('done', (e: MessageEvent) => {
       const data = JSON.parse(e.data)
+      const finalContent = state.content + ''
       setState((prev) => ({
         ...prev,
         status: 'complete',
         wordCount: data.wordCount,
         progress: 100,
       }))
-      onComplete?.(state.content + '', data.wordCount)
+      
+      // 如果启用了自动优化，显示优化面板
+      if (settings.autoOptimizeAfterGenerate && finalContent.length > 100) {
+        setShowQualityPanel(true)
+        setOptimizedContent(finalContent)
+      }
+      
+      onComplete?.(finalContent, data.wordCount)
       eventSource.close()
     })
 
@@ -236,6 +254,19 @@ export function StreamViewer({
           >
             {showSettings ? '隐藏设置' : '显示设置'}
           </Button>
+          
+          {/* 去AI味按钮 */}
+          {state.status === 'complete' && state.content.length > 100 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowQualityPanel(!showQualityPanel)}
+              className={showQualityPanel ? 'bg-purple-50 border-purple-500' : ''}
+            >
+              <Wand2 className="h-4 w-4 mr-1" />
+              {showQualityPanel ? '隐藏去AI味' : '去AI味'}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -307,6 +338,19 @@ export function StreamViewer({
               </div>
             )}
           </div>
+          
+          <div className="flex items-center gap-4">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={settings.autoOptimizeAfterGenerate}
+                onChange={(e) =>
+                  setSettings((s) => ({ ...s, autoOptimizeAfterGenerate: e.target.checked }))
+                }
+              />
+              <span className="text-sm">生成后自动去AI味</span>
+            </label>
+          </div>
         </div>
       )}
 
@@ -334,6 +378,23 @@ export function StreamViewer({
           </div>
         )}
       </div>
+
+      {/* AI质量分析面板 */}
+      {showQualityPanel && optimizedContent && (
+        <div className="mt-4">
+          <ChapterQualityPanel
+            projectId={projectId}
+            chapterId={chapterId}
+            chapterNumber={chapterNumber}
+            chapterTitle={chapterTitle}
+            content={optimizedContent}
+            onOptimizeComplete={(revisedContent) => {
+              setOptimizedContent(revisedContent)
+              setState((prev) => ({ ...prev, content: revisedContent }))
+            }}
+          />
+        </div>
+      )}
 
       {/* 状态信息 */}
       {state.status !== 'idle' && (

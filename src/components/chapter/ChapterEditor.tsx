@@ -3,33 +3,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button, Input, Textarea, Modal } from '@/components/ui'
-import { ArrowLeft, Save, Sparkles, Trash2, Maximize, Minimize, FileText, Settings } from 'lucide-react'
+import { ArrowLeft, Save, Sparkles, Trash2, Maximize, Minimize, FileText, Settings, Wand2 } from 'lucide-react'
 import { ChapterStatus } from '@/types'
-
-interface Chapter {
-  id: number
-  projectId: number
-  chapterNumber: number
-  title: string
-  content?: string
-  summary?: string
-  wordCount: number
-  status: ChapterStatus
-  generationPrompt?: string
-  generationParams?: Record<string, unknown>
-  generationCount: number
-  lastGeneratedTime?: string
-  virtualWriterId?: number
-  createdAt: string
-  updatedAt: string
-}
-
-interface ChapterEditorProps {
-  projectId: number
-  chapterId?: number
-  initialChapter?: Chapter
-  onSave?: (chapter: Chapter) => void
-}
+import { ChapterQualityPanel } from '@/components/ai/ChapterQualityPanel'
 
 const statusOptions = [
   { label: '草稿', value: 'DRAFT' },
@@ -57,6 +33,7 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
   const [saving, setSaving] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [showQualityPanel, setShowQualityPanel] = useState(false)
   const [wordCount, setWordCount] = useState(0)
   const [nextChapterNumber, setNextChapterNumber] = useState(1)
   const [status, setStatus] = useState<ChapterStatus>(ChapterStatus.DRAFT)
@@ -170,6 +147,20 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
     router.push(`/projects/${projectId}/chapters/${chapterId}/generate`)
   }
 
+  // 去AI味优化
+  const handleOptimizeComplete = useCallback((revisedContent: string) => {
+    setChapter(prev => ({ ...prev, content: revisedContent }))
+    const chars = revisedContent.replace(/\s/g, '').length
+    setWordCount(chars)
+  }, [])
+
+  // 处理章节内容更新
+  const handleContentChange = useCallback((content: string) => {
+    setChapter(prev => ({ ...prev, content }))
+    const chars = content.replace(/\s/g, '').length
+    setWordCount(chars)
+  }, [])
+
   // 状态切换处理
   const handleStatusChange = (newStatus: ChapterStatus) => {
     setStatus(newStatus)
@@ -246,6 +237,17 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
                   AI生成
                 </Button>
               )}
+              {chapterId && chapter.content && (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setShowQualityPanel(!showQualityPanel)}
+                  className={`gap-1.5 ${showQualityPanel ? 'bg-purple-50 border-purple-500 text-purple-700' : ''}`}
+                >
+                  <Wand2 className="h-4 w-4" />
+                  {showQualityPanel ? '隐藏优化' : '去AI味'}
+                </Button>
+              )}
               <Button variant="primary" size="sm" onClick={handleSave} loading={saving} className="gap-1.5">
                 <Save className="h-4 w-4" />
                 {chapterId ? '保存' : '创建'}
@@ -262,6 +264,20 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-6">
+        {/* AI质量分析面板 */}
+        {showQualityPanel && chapterId && chapter.content && (
+          <div className="mb-6">
+            <ChapterQualityPanel
+              projectId={projectId}
+              chapterId={chapterId}
+              chapterNumber={chapter.chapterNumber || nextChapterNumber}
+              chapterTitle={chapter.title || '无标题'}
+              content={chapter.content || ''}
+              onOptimizeComplete={handleOptimizeComplete}
+            />
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
           {/* 左侧：章节信息 */}
           <div className="lg:col-span-1 space-y-4">
@@ -320,7 +336,7 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
                 className="min-h-[550px] border-0 rounded-none focus:ring-0 resize-none bg-transparent text-base leading-relaxed p-6"
                 placeholder="开始创作..."
                 value={chapter.content || ''}
-                onChange={(e) => setChapter({ ...chapter, content: e.target.value })}
+                onChange={(e) => handleContentChange(e.target.value)}
               />
             </div>
 

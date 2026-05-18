@@ -144,6 +144,8 @@ export default function ChapterGeneratePage() {
             <StreamViewer
               projectId={projectId}
               chapterId={chapterId}
+              chapterNumber={chapter.chapterNumber}
+              chapterTitle={chapter.title}
               initialContent={chapter.content || ''}
               onComplete={handleComplete}
             />
