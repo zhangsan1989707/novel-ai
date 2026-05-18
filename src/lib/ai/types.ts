@@ -22,6 +22,7 @@ export interface GenerationParams {
   frequencyPenalty?: number
   presencePenalty?: number
   stop?: string[]
+  timeoutMs?: number
 }
 
 // ============================================

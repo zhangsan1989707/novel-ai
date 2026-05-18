@@ -19,12 +19,31 @@ export abstract class OpenAICompatibleProvider extends BaseAIProvider {
     return (this.config?.apiEndpoint || this.defaultBaseURL).replace(/\/+$/, '')
   }
 
+  private async fetchWithTimeout(url: string, init: RequestInit, timeoutMs = 45000): Promise<Response> {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), timeoutMs)
+
+    try {
+      return await fetch(url, {
+        ...init,
+        signal: controller.signal,
+      })
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error(`${this.name} API request timed out after ${Math.round(timeoutMs / 1000)}s`)
+      }
+      throw error
+    } finally {
+      clearTimeout(timeout)
+    }
+  }
+
   async generate(prompt: string, params?: GenerationParams): Promise<GenerationResult> {
     if (!this.config) {
       throw new Error('Provider not configured')
     }
 
-    const response = await fetch(`${this.getBaseURL()}${this.chatPath}`, {
+    const response = await this.fetchWithTimeout(`${this.getBaseURL()}${this.chatPath}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -40,7 +59,7 @@ export abstract class OpenAICompatibleProvider extends BaseAIProvider {
         presence_penalty: params?.presencePenalty,
         stop: params?.stop,
       }),
-    })
+    }, params?.timeoutMs)
 
     if (!response.ok) {
       const error = await response.text()
@@ -78,14 +97,14 @@ export abstract class OpenAICompatibleProvider extends BaseAIProvider {
       body.stream_options = { include_usage: true }
     }
 
-    const response = await fetch(`${this.getBaseURL()}${this.chatPath}`, {
+    const response = await this.fetchWithTimeout(`${this.getBaseURL()}${this.chatPath}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${this.config.apiKey}`,
       },
       body: JSON.stringify(body),
-    })
+    }, params?.timeoutMs)
 
     if (!response.ok) {
       const error = await response.text()

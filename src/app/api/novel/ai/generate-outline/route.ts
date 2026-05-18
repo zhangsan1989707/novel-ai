@@ -4,6 +4,9 @@ import { createProviderFromEnv, createProviderFromConfigId, buildOutlineGenerati
 import { AIVendor } from '@/types'
 import { logError } from '@/lib/logger'
 
+export const runtime = 'nodejs'
+export const maxDuration = 60
+
 const vendorEnum = z.enum(['OPENAI', 'ANTHROPIC', 'ALIBABA', 'DEEPSEEK', 'MINIMAX', 'VOLCENGINE'])
 
 const generateOutlineSchema = z.object({
@@ -61,7 +64,11 @@ export async function POST(request: NextRequest) {
       provider = createProviderFromEnv(vendor)
     }
 
-    const result = await provider.generate(prompt, { temperature })
+    const result = await provider.generate(prompt, {
+      temperature,
+      maxTokens: 3000,
+      timeoutMs: 45000,
+    })
 
     let outlineStages = null
     try {
