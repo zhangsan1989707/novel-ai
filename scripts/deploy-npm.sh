@@ -53,14 +53,19 @@ npx prisma migrate deploy
 echo "🏗️ 构建应用..."
 npm run build
 
+echo "📋 复制 standalone 所需的静态资源..."
+cp -r .next/static .next/standalone/.next/static
+cp -r public .next/standalone/public
+
 echo "🔄 停止旧的应用进程..."
-pkill -f "node.*server.js" 2>/dev/null || true
-pkill -f "next start" 2>/dev/null || true
+fuser -k 3200/tcp 2>/dev/null || true
 sleep 2
 
-echo "🚀 启动应用（后台运行）..."
-NODE_ENV=production nohup npm start > app.log 2>&1 &
+echo "🚀 启动应用（standalone 模式）..."
+cd .next/standalone
+PORT=3200 HOSTNAME=0.0.0.0 nohup node server.js > ../../app.log 2>&1 &
 APP_PID=$!
+cd ../..
 
 echo "✅ 应用已启动，PID: $APP_PID"
 
