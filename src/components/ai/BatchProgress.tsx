@@ -23,6 +23,7 @@ interface BatchProgressProps {
   open: boolean
   onClose: () => void
   onComplete?: (successCount: number, failCount: number) => void
+  onStatusChange?: (isGenerating: boolean, progress: number, completedCount: number, totalCount: number) => void
 }
 
 interface ChapterState {
@@ -46,8 +47,8 @@ export function BatchProgress({
   open,
   onClose,
   onComplete,
+  onStatusChange,
 }: BatchProgressProps) {
-  // 优先使用 options 参数，否则使用单独参数
   const effectiveChapterIds = options?.chapterIds ?? chapterIds
   const effectiveUseContext = options?.useContext ?? useContext
   const effectiveContextChapterCount = options?.contextChapterCount ?? contextChapterCount
@@ -60,24 +61,26 @@ export function BatchProgress({
   const [progress, setProgress] = useState(0)
   const [currentContent, setCurrentContent] = useState('')
   const abortControllerRef = useRef<AbortController | null>(null)
+  const isGeneratingRef = useRef(false)
 
   const handleStop = useCallback(() => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
     }
-    // 同步停止状态：将所有 generating 的章节标记为 error
     setChapters((prev) =>
       prev.map((ch) =>
         ch.status === 'generating' ? { ...ch, status: 'error' as const, error: '用户停止' } : ch
       )
     )
     setIsGenerating(false)
+    isGeneratingRef.current = false
   }, [])
 
   useEffect(() => {
     if (!open) return
 
     setIsGenerating(true)
+    isGeneratingRef.current = true
     setCurrentChapterIndex(0)
     setCurrentContent('')
     setProgress(0)
@@ -206,6 +209,7 @@ export function BatchProgress({
 
         case 'done':
           setIsGenerating(false)
+          isGeneratingRef.current = false
           setProgress(100)
           if (onComplete) {
             onComplete(data.successCount as number, data.failCount as number)
@@ -218,9 +222,6 @@ export function BatchProgress({
     }
 
     return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort()
-      }
     }
   }, [open, projectId, effectiveChapterIds, effectiveUseContext, effectiveContextChapterCount, effectiveTemperature, effectiveTargetWordCount, onComplete])
 
@@ -228,9 +229,11 @@ export function BatchProgress({
     if (totalChapters > 0) {
       const completed = chapters.filter((ch) => ch.status === 'completed').length
       const failed = chapters.filter((ch) => ch.status === 'error').length
-      setProgress(Math.round(((completed + failed) / totalChapters) * 100))
+      const p = Math.round(((completed + failed) / totalChapters) * 100)
+      setProgress(p)
+      onStatusChange?.(isGenerating, p, completed + failed, totalChapters)
     }
-  }, [chapters, totalChapters])
+  }, [chapters, totalChapters, isGenerating, onStatusChange])
 
   const completedCount = chapters.filter((ch) => ch.status === 'completed').length
   const failedCount = chapters.filter((ch) => ch.status === 'error').length
@@ -240,7 +243,7 @@ export function BatchProgress({
   return (
     <Modal
       open={open}
-      onClose={isGenerating ? handleStop : onClose}
+      onClose={onClose}
       title={isGenerating ? '正在生成...' : '生成完成'}
       className="max-w-2xl"
     >

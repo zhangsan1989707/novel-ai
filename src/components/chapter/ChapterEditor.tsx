@@ -3,9 +3,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button, Input, Textarea, Modal } from '@/components/ui'
-import { ArrowLeft, Save, Sparkles, Trash2, Maximize, Minimize, FileText, Settings, Wand2 } from 'lucide-react'
+import { ArrowLeft, Save, Sparkles, Trash2, Maximize, Minimize, FileText, Settings, Wand2, BookOpen } from 'lucide-react'
 import { ChapterStatus } from '@/types'
 import { ChapterQualityPanel } from '@/components/ai/ChapterQualityPanel'
+import { countChineseWords } from '@/lib/utils'
 
 interface ChapterEditorProps {
   projectId: number
@@ -48,8 +49,7 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
   // 计算字数
   useEffect(() => {
     if (chapter.content) {
-      const chars = chapter.content.replace(/\s/g, '').length
-      setWordCount(chars)
+      setWordCount(countChineseWords(chapter.content))
     } else {
       setWordCount(0)
     }
@@ -157,15 +157,12 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
   // 去AI味优化
   const handleOptimizeComplete = useCallback((revisedContent: string) => {
     setChapter(prev => ({ ...prev, content: revisedContent }))
-    const chars = revisedContent.replace(/\s/g, '').length
-    setWordCount(chars)
+    setWordCount(countChineseWords(revisedContent))
   }, [])
 
-  // 处理章节内容更新
   const handleContentChange = useCallback((content: string) => {
     setChapter(prev => ({ ...prev, content }))
-    const chars = content.replace(/\s/g, '').length
-    setWordCount(chars)
+    setWordCount(countChineseWords(content))
   }, [])
 
   // 状态切换处理
@@ -339,12 +336,38 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
                 <h3 className="font-medium text-gray-700 dark:text-gray-200">正文内容</h3>
                 <span className="ml-auto text-xs text-gray-400">{wordCount.toLocaleString()} 字</span>
               </div>
-              <Textarea
-                className="min-h-[550px] border-0 rounded-none focus:ring-0 resize-none bg-transparent text-base leading-relaxed p-6"
-                placeholder="开始创作..."
-                value={chapter.content || ''}
-                onChange={(e) => handleContentChange(e.target.value)}
-              />
+              {chapter.content ? (
+                <Textarea
+                  className="min-h-[550px] border-0 rounded-none focus:ring-0 resize-none bg-transparent text-base leading-relaxed p-6"
+                  placeholder="开始创作..."
+                  value={chapter.content}
+                  onChange={(e) => handleContentChange(e.target.value)}
+                />
+              ) : (
+                <div className="min-h-[400px] flex flex-col items-center justify-center p-8 text-center">
+                  <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 flex items-center justify-center mb-5">
+                    <BookOpen className="h-10 w-10 text-blue-400 dark:text-blue-500" />
+                  </div>
+                  <h4 className="text-lg font-medium text-gray-700 dark:text-gray-300 mb-2">还没有正文内容</h4>
+                  <p className="text-sm text-gray-400 dark:text-gray-500 mb-6 max-w-sm">
+                    可以使用 AI 生成章节内容，也可以直接在编辑器中手动创作
+                  </p>
+                  <div className="flex items-center gap-3">
+                    {chapterId && (
+                      <Button variant="primary" onClick={handleGenerate} className="gap-2">
+                        <Sparkles className="h-4 w-4" />
+                        AI 生成正文
+                      </Button>
+                    )}
+                    <Button variant="outline" onClick={() => {
+                      const textarea = document.querySelector<HTMLTextAreaElement>('textarea[placeholder="开始创作..."]')
+                      textarea?.focus()
+                    }}>
+                      手动创作
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* 字数统计 */}

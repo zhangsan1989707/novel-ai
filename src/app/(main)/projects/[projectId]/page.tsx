@@ -158,14 +158,14 @@ function getWorkflow(project: Project): WorkflowStep[] {
 
 function getMissingItems(project: Project): Array<{ label: string; action: WorkflowAction | null }> {
   const items: Array<{ label: string; action: WorkflowAction | null }> = []
-  if (!project.description?.trim()) items.push({ label: '缺少小说简介', action: 'settings' })
-  if (!project.genre) items.push({ label: '未选择小说类型（可选）', action: 'settings' })
-  if (!project.writingStyle) items.push({ label: '未选择写作风格（可选）', action: 'settings' })
-  if (!project.aiModelConfig) items.push({ label: '未绑定 AI 模型（可选）', action: 'settings' })
-  if (!project.worldSetting?.trim()) items.push({ label: '未补充世界设定（可选）', action: 'settings' })
-  if (!project.protagonistProfile?.trim()) items.push({ label: '未补充主角设定（可选）', action: 'settings' })
-  if (!hasOutline(project)) items.push({ label: '缺少大纲', action: 'outline' })
-  if (project.chapters.length === 0) items.push({ label: '缺少章节目录', action: 'chapters' })
+  if (!project.description?.trim()) items.push({ label: '补充小说简介', action: 'settings' })
+  if (!project.genre) items.push({ label: '选择小说类型（可选）', action: 'settings' })
+  if (!project.writingStyle) items.push({ label: '选择写作风格（可选）', action: 'settings' })
+  if (!project.aiModelConfig) items.push({ label: '绑定 AI 模型（可选）', action: 'settings' })
+  if (!project.worldSetting?.trim()) items.push({ label: '补充世界设定（可选）', action: 'settings' })
+  if (!project.protagonistProfile?.trim()) items.push({ label: '补充主角设定（可选）', action: 'settings' })
+  if (!hasOutline(project)) items.push({ label: '生成大纲', action: 'outline' })
+  if (project.chapters.length === 0) items.push({ label: '生成章节目录', action: 'chapters' })
   return items
 }
 
@@ -198,6 +198,8 @@ export default function ProjectDetailPage() {
   const [showPlotAnalysisModal, setShowPlotAnalysisModal] = useState(false)
   const [showContinuationModal, setShowContinuationModal] = useState(false)
   const [batchProgressOpen, setBatchProgressOpen] = useState(false)
+  const [batchGenerating, setBatchGenerating] = useState(false)
+  const [batchProgressInfo, setBatchProgressInfo] = useState({ progress: 0, completed: 0, total: 0 })
   const [selectedChapterIds, setSelectedChapterIds] = useState<number[]>([])
   const [isSelectMode, setIsSelectMode] = useState(false)
   const [batchOptions, setBatchOptions] = useState<{
@@ -926,6 +928,29 @@ export default function ProjectDetailPage() {
 
             {activeTab === 'write' && (
               <div className="space-y-4">
+                {batchGenerating && !batchProgressOpen && (
+                  <div
+                    className="flex items-center justify-between p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+                    onClick={() => setBatchProgressOpen(true)}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+                      <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                        正在后台生成 {batchProgressInfo.completed}/{batchProgressInfo.total} 章
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="w-32 h-2 bg-blue-200 dark:bg-blue-800 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-blue-500 transition-all duration-300"
+                          style={{ width: `${batchProgressInfo.progress}%` }}
+                        />
+                      </div>
+                      <span className="text-xs text-blue-500">{batchProgressInfo.progress}%</span>
+                      <span className="text-xs text-blue-400">点击查看详情 →</span>
+                    </div>
+                  </div>
+                )}
                 {project.chapters.length > 0 ? (
                   <Card>
                     <CardHeader>
@@ -1373,7 +1398,7 @@ export default function ProjectDetailPage() {
         </button>
       )}
 
-      {batchProgressOpen && batchOptions && (
+      {batchOptions && (
         <BatchProgress
           projectId={projectId}
           options={batchOptions}
@@ -1381,6 +1406,10 @@ export default function ProjectDetailPage() {
           onClose={() => {
             setBatchProgressOpen(false)
             fetchProject()
+          }}
+          onStatusChange={(isGenerating, progress, completed, total) => {
+            setBatchGenerating(isGenerating)
+            setBatchProgressInfo({ progress, completed, total })
           }}
         />
       )}
