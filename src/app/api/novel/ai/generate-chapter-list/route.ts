@@ -104,7 +104,8 @@ export async function POST(request: NextRequest) {
       provider = createProviderFromEnv(vendor)
     }
 
-    const result = await provider.generate(prompt, { temperature })
+    const estimatedTokens = Math.min(totalChapters * 300 + 1000, 65536)
+    const result = await provider.generate(prompt, { temperature, maxTokens: estimatedTokens, timeoutMs: 120000 })
 
     let chapterList = null
     let parseError = null
