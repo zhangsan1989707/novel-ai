@@ -7,7 +7,7 @@ import { logError } from '@/lib/logger'
 export const runtime = 'nodejs'
 export const maxDuration = 60
 
-const vendorEnum = z.enum(['OPENAI', 'ANTHROPIC', 'ALIBABA', 'DEEPSEEK', 'MINIMAX', 'VOLCENGINE'])
+const vendorEnum = z.enum(['OPENAI', 'ANTHROPIC', 'ALIBABA', 'DEEPSEEK', 'MINIMAX', 'VOLCENGINE', 'ZHIPU'])
 
 const generateOutlineSchema = z.object({
   projectTitle: z.string().min(1, '请输入小说标题'),

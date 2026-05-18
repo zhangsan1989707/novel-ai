@@ -12,6 +12,7 @@ import {
   DeepSeekProvider,
   MiniMaxProvider,
   VolcEngineProvider,
+  ZhipuProvider,
 } from './providers'
 
 // 注册所有 Provider
@@ -21,6 +22,7 @@ AIProviderFactory.register(AIVendor.ALIBABA, AlibabaProvider)
 AIProviderFactory.register(AIVendor.DEEPSEEK, DeepSeekProvider)
 AIProviderFactory.register(AIVendor.MINIMAX, MiniMaxProvider)
 AIProviderFactory.register(AIVendor.VOLCENGINE, VolcEngineProvider)
+AIProviderFactory.register(AIVendor.ZHIPU, ZhipuProvider)
 
 // 导出工厂和 Provider
 export { AIProviderFactory } from './base'
@@ -171,6 +173,13 @@ function createConfigFromEnv(vendor: AIVendor): AIConfig {
         apiKey: process.env.VOLCENGINE_API_KEY || '',
         apiEndpoint: process.env.VOLCENGINE_API_ENDPOINT || 'https://ark.cn-beijing.volces.com/api/coding/v3',
       }
+    case AIVendor.ZHIPU:
+      return {
+        vendor: AIVendor.ZHIPU,
+        modelId: process.env.ZHIPU_MODEL_ID || 'glm-4-0520',
+        apiKey: process.env.ZHIPU_API_KEY || '',
+        apiEndpoint: process.env.ZHIPU_API_ENDPOINT || 'https://open.bigmodel.cn/api/paas/v4',
+      }
     default:
       throw new Error(`Unsupported vendor: ${vendor}`)
   }
@@ -232,5 +241,6 @@ export function getSupportedAIProviders(): { vendor: AIVendor; name: string }[] 
     { vendor: AIVendor.DEEPSEEK, name: 'DeepSeek' },
     { vendor: AIVendor.MINIMAX, name: 'MiniMax' },
     { vendor: AIVendor.VOLCENGINE, name: '火山引擎 (字节跳动)' },
+    { vendor: AIVendor.ZHIPU, name: '智谱 AI (GLM)' },
   ]
 }

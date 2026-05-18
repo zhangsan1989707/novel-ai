@@ -42,6 +42,7 @@ export enum AIVendor {
   DEEPSEEK = 'DEEPSEEK',
   MINIMAX = 'MINIMAX',
   VOLCENGINE = 'VOLCENGINE',
+  ZHIPU = 'ZHIPU',
 }
 
 // 拆书分析维度

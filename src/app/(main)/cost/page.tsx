@@ -61,6 +61,7 @@ const vendorLabels: Record<AIVendor, string> = {
   [AIVendor.DEEPSEEK]: 'DeepSeek',
   [AIVendor.MINIMAX]: 'MiniMax',
   [AIVendor.VOLCENGINE]: '火山引擎',
+  [AIVendor.ZHIPU]: '智谱 AI',
 }
 
 export default function CostPage() {

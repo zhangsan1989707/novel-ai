@@ -4,7 +4,7 @@ import { analyzeOriginalStyle } from '@/lib/ai/style-analyzer'
 import { AIVendor } from '@/types'
 import { logError } from '@/lib/logger'
 
-const vendorEnum = z.enum(['OPENAI', 'ANTHROPIC', 'ALIBABA', 'DEEPSEEK', 'MINIMAX', 'VOLCENGINE'])
+const vendorEnum = z.enum(['OPENAI', 'ANTHROPIC', 'ALIBABA', 'DEEPSEEK', 'MINIMAX', 'VOLCENGINE', 'ZHIPU'])
 
 const requestSchema = z.object({
   vendor: vendorEnum.default('DEEPSEEK'),

@@ -21,7 +21,7 @@ const BATCH_SIZE = 8
 // Schema 验证
 // ============================================
 
-const vendorEnum = z.enum(['OPENAI', 'ANTHROPIC', 'ALIBABA', 'DEEPSEEK', 'MINIMAX', 'VOLCENGINE'])
+const vendorEnum = z.enum(['OPENAI', 'ANTHROPIC', 'ALIBABA', 'DEEPSEEK', 'MINIMAX', 'VOLCENGINE', 'ZHIPU'])
 
 const analyzePlotSchema = z.object({
   projectId: z.number().int().positive('请选择有效的小说项目'),

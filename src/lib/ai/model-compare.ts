@@ -283,6 +283,7 @@ export function getVendorDisplayName(vendor: AIVendor): string {
     [AIVendor.DEEPSEEK]: 'DeepSeek',
     [AIVendor.MINIMAX]: 'MiniMax',
     [AIVendor.VOLCENGINE]: '火山引擎',
+    [AIVendor.ZHIPU]: '智谱 AI (GLM)',
   }
   return names[vendor] || vendor
 }

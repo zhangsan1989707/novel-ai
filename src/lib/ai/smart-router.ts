@@ -163,6 +163,7 @@ export async function selectModel(
     AIVendor.OPENAI,
     AIVendor.ANTHROPIC,
     AIVendor.ALIBABA,
+    AIVendor.ZHIPU,
   ]
 
   // 根据不同 Agent 类型推荐不同模型
@@ -290,6 +291,14 @@ function getRecommendedModels(
       VALIDATOR: ['doubao-pro-32k'],
       SUMMARIZER: ['doubao-pro-32k'],
       ANALYZER: ['doubao-pro-32k'],
+    },
+    [AIVendor.ZHIPU]: {
+      WRITER: ['glm-4-0520', 'glm-4-flash'],
+      PLANNER: ['glm-4-0520'],
+      POLISHER: ['glm-4-0520'],
+      VALIDATOR: ['glm-4-0520'],
+      SUMMARIZER: ['glm-4-flash'],
+      ANALYZER: ['glm-4-0520'],
     },
   }
 

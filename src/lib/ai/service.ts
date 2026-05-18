@@ -160,6 +160,13 @@ export class AIService {
           apiKey: process.env.VOLCENGINE_API_KEY || '',
           apiEndpoint: process.env.VOLCENGINE_API_ENDPOINT || 'https://ark.cn-beijing.volces.com/api/coding/v3',
         }
+      case AIVendor.ZHIPU:
+        return {
+          vendor: AIVendor.ZHIPU,
+          modelId: process.env.ZHIPU_MODEL_ID || 'glm-4-0520',
+          apiKey: process.env.ZHIPU_API_KEY || '',
+          apiEndpoint: process.env.ZHIPU_API_ENDPOINT || 'https://open.bigmodel.cn/api/paas/v4',
+        }
       case AIVendor.DEEPSEEK:
       default:
         return {

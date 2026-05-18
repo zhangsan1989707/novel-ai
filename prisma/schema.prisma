@@ -54,6 +54,7 @@ enum AIVendor {
   DEEPSEEK   // DeepSeek
   MINIMAX    // MiniMax
   VOLCENGINE // 火山引擎 (字节跳动)
+  ZHIPU      // 智谱 AI (GLM)
 }
 
 // ============================================

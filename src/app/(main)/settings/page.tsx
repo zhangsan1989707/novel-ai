@@ -27,6 +27,7 @@ const vendorOptions = [
   { label: '阿里云 (通义千问)', value: AIVendor.ALIBABA },
   { label: 'MiniMax', value: AIVendor.MINIMAX },
   { label: '火山引擎 (字节)', value: AIVendor.VOLCENGINE },
+  { label: '智谱 AI (GLM)', value: AIVendor.ZHIPU },
 ]
 
 const vendorLabels: Record<AIVendor, string> = {
@@ -36,6 +37,7 @@ const vendorLabels: Record<AIVendor, string> = {
   [AIVendor.DEEPSEEK]: 'DeepSeek',
   [AIVendor.MINIMAX]: 'MiniMax',
   [AIVendor.VOLCENGINE]: '火山引擎',
+  [AIVendor.ZHIPU]: '智谱 AI',
 }
 
 const defaultModelIds: Record<AIVendor, string> = {
@@ -45,10 +47,12 @@ const defaultModelIds: Record<AIVendor, string> = {
   [AIVendor.DEEPSEEK]: 'deepseek-chat',
   [AIVendor.MINIMAX]: 'MiniMax-Text-01',
   [AIVendor.VOLCENGINE]: 'ark-code-latest',
+  [AIVendor.ZHIPU]: 'glm-4-0520',
 }
 
 const defaultApiEndpoints: Partial<Record<AIVendor, string>> = {
   [AIVendor.VOLCENGINE]: 'https://ark.cn-beijing.volces.com/api/coding/v3',
+  [AIVendor.ZHIPU]: 'https://open.bigmodel.cn/api/paas/v4',
 }
 
 export default function SettingsPage() {

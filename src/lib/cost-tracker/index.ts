@@ -19,6 +19,9 @@ const DEFAULT_PRICINGS: {
   { vendor: AIVendor.ALIBABA, modelId: 'qwen-max', inputPrice: 2.0, outputPrice: 6.0 },
   { vendor: AIVendor.MINIMAX, modelId: 'MiniMax-Text-01', inputPrice: 0.5, outputPrice: 1.5 },
   { vendor: AIVendor.VOLCENGINE, modelId: 'doubao-pro-32k', inputPrice: 1.5, outputPrice: 4.5 },
+  { vendor: AIVendor.ZHIPU, modelId: 'glm-4-0520', inputPrice: 1.0, outputPrice: 1.0 },
+  { vendor: AIVendor.ZHIPU, modelId: 'glm-4-flash', inputPrice: 0.1, outputPrice: 0.1 },
+  { vendor: AIVendor.ZHIPU, modelId: 'glm-4-airx', inputPrice: 0.6, outputPrice: 0.6 },
 ]
 
 /**
