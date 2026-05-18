@@ -65,20 +65,42 @@ export function StreamViewer({
   const [showSettings, setShowSettings] = useState(true)
   const [showQualityPanel, setShowQualityPanel] = useState(false)
   const [optimizedContent, setOptimizedContent] = useState<string | null>(null)
-  const eventSourceRef = useRef<EventSource | null>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
   const contentRef = useRef<HTMLTextAreaElement>(null)
 
-  // 自动滚动
   useEffect(() => {
     if (contentRef.current && state.status === 'streaming') {
       contentRef.current.scrollTop = contentRef.current.scrollHeight
     }
   }, [state.content, state.status])
 
-  // 连接 SSE
+  const parseSSEMessage = (buffer: string): { events: Array<{ event: string; data: string }>; remaining: string } => {
+    const events: Array<{ event: string; data: string }> = []
+    let remaining = buffer
+    const doubleNewline = '\n\n'
+    while (remaining.includes(doubleNewline)) {
+      const idx = remaining.indexOf(doubleNewline)
+      const block = remaining.substring(0, idx)
+      remaining = remaining.substring(idx + doubleNewline.length)
+      let event = 'message'
+      let data = ''
+      for (const line of block.split('\n')) {
+        if (line.startsWith('event: ')) {
+          event = line.substring(7).trim()
+        } else if (line.startsWith('data: ')) {
+          data = line.substring(6)
+        }
+      }
+      if (data) {
+        events.push({ event, data })
+      }
+    }
+    return { events, remaining }
+  }
+
   const connectSSE = useCallback(() => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close()
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
     }
 
     setState((prev) => ({
@@ -90,106 +112,129 @@ export function StreamViewer({
 
     onStart?.()
 
-    const params = new URLSearchParams({
-      chapterId: chapterId.toString(),
-      useContext: settings.useContext.toString(),
-      contextChapterCount: settings.contextChapterCount.toString(),
-      targetWordCount: settings.targetWordCount.toString(),
-      temperature: settings.temperature.toString(),
-    })
+    const controller = new AbortController()
+    abortControllerRef.current = controller
 
-    const eventSource = new EventSource(
-      `/api/novel/projects/${projectId}/generate/stream?${params}`
-    )
-    eventSourceRef.current = eventSource
-
-    eventSource.onopen = () => {
-      setState((prev) => ({ ...prev, status: 'streaming' }))
+    const body = {
+      chapterId,
+      useContext: settings.useContext,
+      contextChapterCount: settings.contextChapterCount,
+      targetWordCount: settings.targetWordCount,
+      temperature: settings.temperature,
     }
 
-    eventSource.addEventListener('start', () => {
-      setState((prev) => ({
-        ...prev,
-        status: 'streaming',
-        content: initialContent,
-        wordCount: initialContent ? countChineseWords(initialContent) : 0,
-      }))
+    fetch(`/api/novel/projects/${projectId}/generate/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
     })
-
-    eventSource.addEventListener('token', (e: MessageEvent) => {
-      const data = JSON.parse(e.data)
-      setState((prev) => ({
-        ...prev,
-        content: prev.content + data.content,
-        wordCount: countChineseWords(prev.content + data.content),
-        progress: Math.min(100, (countChineseWords(prev.content + data.content) / settings.targetWordCount) * 100),
-      }))
-    })
-
-    eventSource.addEventListener('wordCount', (e: MessageEvent) => {
-      const data = JSON.parse(e.data)
-      setState((prev) => ({
-        ...prev,
-        wordCount: data.count,
-        progress: Math.min(100, (data.count / settings.targetWordCount) * 100),
-      }))
-    })
-
-    eventSource.addEventListener('done', (e: MessageEvent) => {
-      const data = JSON.parse(e.data)
-      const finalContent = state.content + ''
-      setState((prev) => ({
-        ...prev,
-        status: 'complete',
-        wordCount: data.wordCount,
-        progress: 100,
-      }))
-      
-      // 如果启用了自动优化，显示优化面板
-      if (settings.autoOptimizeAfterGenerate && finalContent.length > 100) {
-        setShowQualityPanel(true)
-        setOptimizedContent(finalContent)
-      }
-      
-      onComplete?.(finalContent, data.wordCount)
-      eventSource.close()
-    })
-
-    eventSource.addEventListener('error', (e: MessageEvent) => {
-      let errorMessage = '生成失败'
-      try {
-        const data = JSON.parse(e.data)
-        errorMessage = data.message || errorMessage
-      } catch {
-        // e.data may not be JSON, use it directly if available
-        if (e.data && typeof e.data === 'string') {
-          errorMessage = e.data
+      .then(async (response) => {
+        if (!response.ok) {
+          let errorMsg = '生成失败'
+          try {
+            const errData = await response.json()
+            errorMsg = errData.error?.message || errorMsg
+          } catch {}
+          setState((prev) => ({ ...prev, status: 'error', error: errorMsg }))
+          onError?.(errorMsg)
+          return
         }
-      }
-      setState((prev) => ({
-        ...prev,
-        status: 'error',
-        error: errorMessage,
-      }))
-      onError?.(errorMessage)
-      eventSource.close()
-    })
 
-    eventSource.onerror = () => {
-      setState((prev) => ({
-        ...prev,
-        status: 'error',
-        error: '连接中断',
-      }))
-      eventSource.close()
-    }
+        setState((prev) => ({ ...prev, status: 'streaming' }))
+
+        const reader = response.body?.getReader()
+        if (!reader) {
+          setState((prev) => ({ ...prev, status: 'error', error: '无法读取流' }))
+          onError?.('无法读取流')
+          return
+        }
+
+        const decoder = new TextDecoder()
+        let buffer = ''
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+
+          buffer += decoder.decode(value, { stream: true })
+          const { events, remaining } = parseSSEMessage(buffer)
+          buffer = remaining
+
+          for (const evt of events) {
+            if (evt.event === 'start') {
+              setState((prev) => ({
+                ...prev,
+                status: 'streaming',
+                content: initialContent,
+                wordCount: initialContent ? countChineseWords(initialContent) : 0,
+              }))
+            } else if (evt.event === 'token') {
+              try {
+                const data = JSON.parse(evt.data)
+                setState((prev) => {
+                  const newContent = prev.content + data.content
+                  return {
+                    ...prev,
+                    content: newContent,
+                    wordCount: countChineseWords(newContent),
+                    progress: Math.min(100, (countChineseWords(newContent) / settings.targetWordCount) * 100),
+                  }
+                })
+              } catch {}
+            } else if (evt.event === 'wordCount') {
+              try {
+                const data = JSON.parse(evt.data)
+                setState((prev) => ({
+                  ...prev,
+                  wordCount: data.count,
+                  progress: Math.min(100, (data.count / settings.targetWordCount) * 100),
+                }))
+              } catch {}
+            } else if (evt.event === 'done') {
+              try {
+                const data = JSON.parse(evt.data)
+                let finalContent = ''
+                setState((prev) => {
+                  finalContent = prev.content
+                  return {
+                    ...prev,
+                    status: 'complete',
+                    wordCount: data.wordCount,
+                    progress: 100,
+                  }
+                })
+
+                if (settings.autoOptimizeAfterGenerate && finalContent.length > 100) {
+                  setShowQualityPanel(true)
+                  setOptimizedContent(finalContent)
+                }
+
+                onComplete?.(finalContent, data.wordCount)
+              } catch {}
+            } else if (evt.event === 'error') {
+              let errorMessage = '生成失败'
+              try {
+                const data = JSON.parse(evt.data)
+                errorMessage = data.message || errorMessage
+              } catch {}
+              setState((prev) => ({ ...prev, status: 'error', error: errorMessage }))
+              onError?.(errorMessage)
+            }
+          }
+        }
+      })
+      .catch((err) => {
+        if (err.name === 'AbortError') return
+        setState((prev) => ({ ...prev, status: 'error', error: '连接中断' }))
+        onError?.('连接中断')
+      })
   }, [projectId, chapterId, settings, initialContent, onStart, onComplete, onError])
 
-  // 停止生成
   const stopGeneration = useCallback(() => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close()
-      eventSourceRef.current = null
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+      abortControllerRef.current = null
     }
     setState((prev) => ({
       ...prev,
@@ -197,11 +242,10 @@ export function StreamViewer({
     }))
   }, [])
 
-  // 组件卸载时清理
   useEffect(() => {
     return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close()
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
       }
     }
   }, [])

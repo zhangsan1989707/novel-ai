@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { createProviderFromEnv, getDefaultVendor } from '@/lib/ai'
+import { createProviderFromEnv, createProviderFromConfigId, getDefaultVendor } from '@/lib/ai'
 import { AIVendor } from '@/types'
 import { prisma } from '@/lib/prisma'
 import { buildChapterListPrompt, buildSummaryCompletionPrompt } from '@/lib/ai/prompts'
@@ -90,9 +90,19 @@ export async function POST(request: NextRequest) {
       existingChapters: body.existingChapters,
     })
 
-    // 获取 AI Provider - 直接使用环境变量
-    const vendor = (requestedVendor || getDefaultVendor()) as AIVendor
-    const provider = createProviderFromEnv(vendor)
+    let provider
+    if (aiModelId) {
+      const configProvider = await createProviderFromConfigId(aiModelId)
+      if (configProvider) {
+        provider = configProvider
+      } else {
+        const vendor = (requestedVendor || getDefaultVendor()) as AIVendor
+        provider = createProviderFromEnv(vendor)
+      }
+    } else {
+      const vendor = (requestedVendor || getDefaultVendor()) as AIVendor
+      provider = createProviderFromEnv(vendor)
+    }
 
     const result = await provider.generate(prompt, { temperature })
 
