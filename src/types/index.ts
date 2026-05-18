@@ -128,10 +128,19 @@ export interface NovelProject {
 }
 
 export interface OutlineStages {
+  stages?: OutlineStageItem[]
   stage1?: OutlineStage[]
   stage2?: OutlineStage[]
   stage3?: OutlineStage[]
   stage4?: OutlineStage[]
+}
+
+export interface OutlineStageItem {
+  name: string
+  description: string
+  coreEvents?: string[]
+  chapterRatio?: number
+  chapterPlan?: string
 }
 
 export interface OutlineStage {

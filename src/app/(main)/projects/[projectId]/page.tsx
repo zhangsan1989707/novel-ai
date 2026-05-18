@@ -30,7 +30,15 @@ interface Project {
   currentWordCount: number
   chapterWordCount: number
   outline?: string | null
-  outlineStages?: Record<string, { title: string; summary: string }[]>
+  outlineStages?: Record<string, { title: string; summary: string }[]> & {
+    stages?: Array<{
+      name: string
+      description?: string
+      coreEvents?: string[]
+      chapterRatio?: number
+      chapterPlan?: string
+    }>
+  }
   worldSetting?: string | null
   powerSystem?: string | null
   protagonistProfile?: string | null
@@ -763,21 +771,51 @@ export default function ProjectDetailPage() {
                     <CardContent>
                       {project.outlineStages && Object.keys(project.outlineStages).length > 0 ? (
                         <div className="space-y-4">
-                          {Object.entries(project.outlineStages).map(([stageName, stages]) => (
-                            <div key={stageName}>
-                              <h4 className="font-medium text-gray-900 dark:text-white mb-2">{stageName}</h4>
-                              <div className="space-y-2">
-                                {stages.map((stage, idx) => (
-                                  <div key={idx} className="pl-4 border-l-2 border-blue-200 dark:border-blue-800">
-                                    <div className="text-sm font-medium text-gray-800 dark:text-gray-200">{stage.title}</div>
-                                    {stage.summary && (
-                                      <div className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{stage.summary}</div>
-                                    )}
+                          {project.outlineStages.stages && Array.isArray(project.outlineStages.stages) ? (
+                            project.outlineStages.stages.map((stage, idx) => (
+                              <div key={idx}>
+                                <div className="flex items-center gap-2 mb-2">
+                                  <h4 className="font-medium text-gray-900 dark:text-white">{stage.name}</h4>
+                                  {stage.chapterRatio != null && (
+                                    <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
+                                      约占全书{Math.round(stage.chapterRatio * 100)}%
+                                    </span>
+                                  )}
+                                </div>
+                                {stage.description && (
+                                  <div className="text-sm text-gray-600 dark:text-gray-300 mb-1">{stage.description}</div>
+                                )}
+                                {stage.coreEvents && stage.coreEvents.length > 0 && (
+                                  <div className="flex flex-wrap gap-1.5 mb-1">
+                                    {stage.coreEvents.map((event: string, i: number) => (
+                                      <span key={i} className="text-xs px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400">{event}</span>
+                                    ))}
                                   </div>
-                                ))}
+                                )}
+                                {stage.chapterPlan && (
+                                  <div className="text-sm text-gray-500 dark:text-gray-400 mt-1 pl-3 border-l-2 border-blue-200 dark:border-blue-800">{stage.chapterPlan}</div>
+                                )}
                               </div>
-                            </div>
-                          ))}
+                            ))
+                          ) : (
+                            Object.entries(project.outlineStages)
+                              .filter(([key]) => key !== 'stages')
+                              .map(([stageName, stages]) => (
+                              <div key={stageName}>
+                                <h4 className="font-medium text-gray-900 dark:text-white mb-2">{stageName}</h4>
+                                <div className="space-y-2">
+                                  {Array.isArray(stages) && (stages as Array<{ title: string; summary: string }>).map((stage, idx) => (
+                                    <div key={idx} className="pl-4 border-l-2 border-blue-200 dark:border-blue-800">
+                                      <div className="text-sm font-medium text-gray-800 dark:text-gray-200">{stage.title || stageName}</div>
+                                      {stage.summary && (
+                                        <div className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{stage.summary}</div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ))
+                          )}
                           {project.outline?.trim() && (
                             <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
                               <h4 className="font-medium text-gray-900 dark:text-white mb-2">完整大纲</h4>

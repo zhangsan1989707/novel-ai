@@ -64,13 +64,37 @@ interface OutlineStageItem {
   summary: string
 }
 
-type OutlineStages = Record<string, OutlineStageItem[]>
+interface OutlineStageNewItem {
+  name: string
+  description?: string
+  coreEvents?: string[]
+  chapterRatio?: number
+  chapterPlan?: string
+}
+
+type OutlineStages = Record<string, OutlineStageItem[]> & {
+  stages?: OutlineStageNewItem[]
+}
 
 export function extractStageOutline(
   outlineStages: OutlineStages | null | undefined,
   stage: number
 ): string | undefined {
   if (!outlineStages) return undefined
+
+  if (outlineStages.stages && Array.isArray(outlineStages.stages)) {
+    const stageData = outlineStages.stages[stage - 1]
+    if (!stageData) return undefined
+    const parts: string[] = []
+    parts.push(`${stageData.name}：${stageData.description || ''}`)
+    if (stageData.coreEvents && stageData.coreEvents.length > 0) {
+      parts.push(`核心事件：${stageData.coreEvents.join('、')}`)
+    }
+    if (stageData.chapterPlan) {
+      parts.push(`章节规划：${stageData.chapterPlan}`)
+    }
+    return parts.join('\n')
+  }
 
   const stageKey = `stage${stage}`
   const stageData = outlineStages[stageKey]
