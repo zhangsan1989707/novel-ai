@@ -120,13 +120,16 @@ export async function buildPromptContext(
     maxCharsPerChapter?: number
   }
 ): Promise<PromptContext> {
-  const maxCharsPerChapter = options.maxCharsPerChapter || 1000
+  const maxCharsPerChapter = options.maxCharsPerChapter || 600
+  const contextChapterCount = currentChapter.chapterNumber <= 3
+    ? 1
+    : Math.max(1, Math.min(options.contextChapterCount, 2))
 
   // 处理前文 - 正确地取章节开头部分，确保上下文连贯
   const processedPreviousChapters = options.useContext
     ? previousChapters
         .filter((ch) => ch.content && ch.status === 'COMPLETED')
-        .slice(-options.contextChapterCount) // 取最后 N 章
+        .slice(-contextChapterCount) // 取最后 N 章
         .map((ch) => ({
           chapterNumber: ch.chapterNumber,
           title: ch.title,

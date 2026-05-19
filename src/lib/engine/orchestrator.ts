@@ -5,6 +5,7 @@
 import { prisma } from '@/lib/prisma'
 import { ChapterStatus } from '@prisma/client'
 import { countChineseWords } from '@/lib/utils'
+import { getMinimumChapterWordCount, buildChapterWordCountWarning } from '@/lib/ai/chapter-quality'
 import { plannerAgent } from '../agents/planner'
 import { writerAgent } from '../agents/writer'
 import { polisherAgent } from '../agents/polisher'
@@ -61,12 +62,12 @@ export async function runChapterGenerationPipeline(
   const directorDirective = directorContext?.fullDirective || ''
 
   // 获取上下文数据（并行查询）
-  const [characterProfiles, openPlotlines, recentSummaries, currentState] = await Promise.all([
-    memory.getCharacterProfilesForChapter(projectId, chapterNo),
-    memory.getOpenPlotlines(projectId),
-    memory.getRecentChapterSummaries(projectId, 3),
-    storyState.getStoryState(projectId),
-  ])
+    const [characterProfiles, openPlotlines, recentSummaries, currentState] = await Promise.all([
+      memory.getCharacterProfilesForChapter(projectId, chapterNo),
+      memory.getOpenPlotlines(projectId),
+      memory.getRecentChapterSummaries(projectId, 2),
+      storyState.getStoryState(projectId),
+    ])
   const emotionalArc = currentState?.emotionalArc || []
 
   // 更新章节状态
@@ -359,13 +360,15 @@ export async function runChapterGenerationPipeline(
     // ========== 保存最终结果 ==========
     const finalWordCount = countChineseWords(finalContent)
     const polishedWordCount = countChineseWords(polishedContent)
+    const minimumWordCount = getMinimumChapterWordCount(project.chapterWordCount || 3000, chapterNo)
+    const chapterReady = finalWordCount >= minimumWordCount
     await prisma.novelChapter.update({
       where: { id: chapter.id },
       data: {
         title: outline.chapterTitle,
         content: finalContent,
         summary: summaryData.summary,
-        status: ChapterStatus.COMPLETED,
+        status: chapterReady ? ChapterStatus.COMPLETED : ChapterStatus.REVIEWING,
         validationReport: validationReport as any,
         wordCount: finalWordCount,
         lastAgentType: 'POLISHER',
@@ -394,6 +397,9 @@ export async function runChapterGenerationPipeline(
       data: {
         chapterId: chapter.id,
         wordCount: polishedWordCount,
+        minimumWordCount,
+        qualityStatus: chapterReady ? 'completed' : 'reviewing',
+        warning: chapterReady ? undefined : buildChapterWordCountWarning(finalWordCount, project.chapterWordCount || 3000, chapterNo),
         duration: Date.now() - startTime,
       },
     })

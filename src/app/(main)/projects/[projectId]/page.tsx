@@ -389,6 +389,7 @@ export default function ProjectDetailPage() {
     : null
 
   const completedChapters = project.chapters.filter(c => c.status === 'COMPLETED').length
+  const reviewingChapters = project.chapters.filter(c => c.status === 'REVIEWING').length
   const arcGroups = groupChaptersByArc(project)
 
   return (
@@ -565,6 +566,11 @@ export default function ProjectDetailPage() {
                       <Badge variant="secondary">
                         {completedChapters}/{project.chapters.length} 已完成
                       </Badge>
+                      {reviewingChapters > 0 && (
+                        <Badge variant="warning">
+                          {reviewingChapters} 待审稿
+                        </Badge>
+                      )}
                     </CardTitle>
                   </div>
                 </CardHeader>

@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { getAIProvider, buildPromptContext, buildNovelGenerationPrompt, createProviderFromDefaultConfig } from '@/lib/ai'
 import { countChineseWords } from '@/lib/utils'
+import { getMinimumChapterWordCount, isChapterWordCountSufficient, buildChapterWordCountWarning } from '@/lib/ai/chapter-quality'
 import { AIVendor, ChapterStatus } from '@/types'
 import { logError } from '@/lib/logger'
 import { toProjectDTO, toChapterDTO } from '@/types/dto'
@@ -280,13 +281,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             }
 
             // 保存生成内容
-            const oldWordCount = chapter.content ? countChineseWords(chapter.content) : 0
-            const wordCountDiff = wordCount - oldWordCount
+            const minimumWordCount = getMinimumChapterWordCount(targetWordCount, chapter.chapterNumber)
+            const chapterReady = isChapterWordCountSufficient(wordCount, targetWordCount, chapter.chapterNumber)
 
             const updateData: Record<string, unknown> = {
               content: extractedContent,
               wordCount,
-              status: ChapterStatus.COMPLETED,
+              status: chapterReady ? ChapterStatus.COMPLETED : ChapterStatus.REVIEWING,
               generationCount: { increment: 1 },
             }
             if (extractedTitle) {
@@ -305,20 +306,26 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             })
 
             // 更新项目总字数
-            if (wordCountDiff !== 0) {
-              await prisma.novelProject.update({
-                where: { id: projectIdNum },
-                data: {
-                  currentWordCount: { increment: wordCountDiff },
-                  status: 'WRITING',
-                },
-              })
-            }
+            const totalWordCount = await prisma.novelChapter.aggregate({
+              where: { projectId: projectIdNum, status: 'COMPLETED' },
+              _sum: { wordCount: true },
+            })
+
+            await prisma.novelProject.update({
+              where: { id: projectIdNum },
+              data: {
+                currentWordCount: totalWordCount._sum.wordCount || 0,
+                status: 'WRITING',
+              },
+            })
 
             // 发送章节完成事件
             sendEvent('chapter_done', {
               chapterId: chapter.id,
               wordCount,
+              minimumWordCount,
+              qualityStatus: chapterReady ? 'completed' : 'reviewing',
+              warning: chapterReady ? undefined : buildChapterWordCountWarning(wordCount, targetWordCount, chapter.chapterNumber),
               index: i,
               total: chaptersToGenerate.length,
             })

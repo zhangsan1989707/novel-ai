@@ -4,6 +4,8 @@ import { prisma } from '@/lib/prisma'
 import { createProviderFromDefaultConfig } from '@/lib/ai'
 import { buildNovelGenerationPrompt, buildEndingPrompt, buildRevisionPrompt } from '@/lib/ai/prompts'
 import { buildPromptContext } from '@/lib/ai/context-manager'
+import { countChineseWords } from '@/lib/utils'
+import { getMinimumChapterWordCount, isChapterWordCountSufficient } from '@/lib/ai/chapter-quality'
 import { logError } from '@/lib/logger'
 import { toProjectDTO, toChapterDTO } from '@/types/dto'
 
@@ -277,14 +279,29 @@ export async function POST(
             extractedContent = contentMatch[1].trim()
           }
 
+          const wordCount = countChineseWords(extractedContent)
+          const chapterReady = isChapterWordCountSufficient(wordCount, targetWordCount, chapterNumber)
+
           // 更新章节内容
           await prisma.novelChapter.update({
             where: { id: newChapter.id },
             data: {
               title: extractedTitle,
               content: extractedContent,
-              wordCount: extractedContent.length,
-              status: 'COMPLETED',
+              wordCount,
+              status: chapterReady ? 'COMPLETED' : 'REVIEWING',
+            },
+          })
+
+          const totalWordCount = await prisma.novelChapter.aggregate({
+            where: { projectId: projectIdNum as number, status: 'COMPLETED' },
+            _sum: { wordCount: true },
+          })
+
+          await prisma.novelProject.update({
+            where: { id: projectIdNum as number },
+            data: {
+              currentWordCount: totalWordCount._sum.wordCount || 0,
             },
           })
 
@@ -292,7 +309,9 @@ export async function POST(
           sendEvent('done', {
             chapterId: newChapter.id,
             chapterNumber,
-            wordCount: fullContent.length,
+            wordCount,
+            minimumWordCount: getMinimumChapterWordCount(targetWordCount, chapterNumber),
+            qualityStatus: chapterReady ? 'completed' : 'reviewing',
           })
         } catch (error) {
           // 标记章节为失败

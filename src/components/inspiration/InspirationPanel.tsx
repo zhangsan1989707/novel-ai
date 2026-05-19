@@ -9,6 +9,7 @@ interface InspirationPanelProps {
   onSelect: (inspiration: HotInspiration) => void
   compact?: boolean
   limit?: number
+  className?: string
 }
 
 const categoryLabels: Record<InspirationCategory, string> = {
@@ -23,7 +24,7 @@ const categoryColors: Record<InspirationCategory, 'primary' | 'secondary' | 'suc
   unisex: 'success',
 }
 
-export function InspirationPanel({ onSelect, compact = false, limit = 6 }: InspirationPanelProps) {
+export function InspirationPanel({ onSelect, compact = false, limit = 6, className = '' }: InspirationPanelProps) {
   const [inspirations, setInspirations] = useState<HotInspiration[]>([])
   const [loading, setLoading] = useState(true)
   const [activeCategory, setActiveCategory] = useState<InspirationCategory | 'all'>('all')
@@ -65,14 +66,15 @@ export function InspirationPanel({ onSelect, compact = false, limit = 6 }: Inspi
   }
 
   return (
-    <div className={compact ? 'space-y-3' : 'space-y-4'}>
-      <div className="flex items-center justify-between">
+    <div className={`${compact ? 'space-y-3' : 'space-y-4'} ${className}`.trim()}>
+      <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <Sparkles className={compact ? 'h-4 w-4 text-amber-500' : 'h-5 w-5 text-amber-500'} />
           <h3 className={compact ? 'text-sm font-semibold text-gray-900 dark:text-white' : 'font-medium text-lg'}>热门灵感</h3>
           {!compact && <span className="text-xs text-gray-500">从热榜中挑一个开写</span>}
         </div>
         <Button
+          type="button"
           variant="ghost"
           size="sm"
           onClick={handleRefresh}
@@ -85,6 +87,7 @@ export function InspirationPanel({ onSelect, compact = false, limit = 6 }: Inspi
 
       <div className="flex flex-wrap gap-2">
         <button
+          type="button"
           onClick={() => setActiveCategory('all')}
           className={`px-3 py-1.5 text-sm rounded-full transition-colors ${
             activeCategory === 'all'
@@ -95,6 +98,7 @@ export function InspirationPanel({ onSelect, compact = false, limit = 6 }: Inspi
           全部
         </button>
         <button
+          type="button"
           onClick={() => setActiveCategory('male')}
           className={`px-3 py-1.5 text-sm rounded-full transition-colors ${
             activeCategory === 'male'
@@ -105,6 +109,7 @@ export function InspirationPanel({ onSelect, compact = false, limit = 6 }: Inspi
           男频
         </button>
         <button
+          type="button"
           onClick={() => setActiveCategory('female')}
           className={`px-3 py-1.5 text-sm rounded-full transition-colors ${
             activeCategory === 'female'
@@ -115,6 +120,7 @@ export function InspirationPanel({ onSelect, compact = false, limit = 6 }: Inspi
           女频
         </button>
         <button
+          type="button"
           onClick={() => setActiveCategory('unisex')}
           className={`px-3 py-1.5 text-sm rounded-full transition-colors ${
             activeCategory === 'unisex'
@@ -165,7 +171,7 @@ function InspirationCard({ inspiration, onSelect, compact = false }: Inspiration
 
   return (
     <Card hover className="group overflow-hidden">
-      <CardContent className={compact ? 'p-3' : 'p-4'}>
+      <CardContent className={`${compact ? 'p-3' : 'p-4'} flex h-full flex-col`}>
         <div className="flex items-start justify-between mb-2">
           <div className="flex items-center gap-2">
             <Badge variant={categoryColors[inspiration.category]} className="text-xs">
@@ -198,7 +204,7 @@ function InspirationCard({ inspiration, onSelect, compact = false }: Inspiration
         </div>
 
         {expanded && (
-          <div className="mb-3 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+          <div className="mb-3 rounded-lg bg-gray-50 p-3 dark:bg-gray-800/50">
             <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
               <span className="font-medium">代表作品：</span>
               {inspiration.exampleWorks.join('、')}
@@ -210,18 +216,20 @@ function InspirationCard({ inspiration, onSelect, compact = false }: Inspiration
           </div>
         )}
 
-        <div className="flex items-center justify-between">
+        <div className="mt-auto grid grid-cols-2 gap-2">
           <button
+            type="button"
             onClick={() => setExpanded(!expanded)}
-            className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+            className="flex h-8 items-center justify-center rounded-md border border-gray-200 px-2 text-xs text-gray-500 transition-colors hover:border-gray-300 hover:text-gray-700 dark:border-gray-700 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:text-gray-200"
           >
             {expanded ? '收起' : '查看详情'}
           </button>
           <Button
+            type="button"
             size="sm"
             variant="outline"
             onClick={() => onSelect(inspiration)}
-            className="h-7 text-xs"
+            className="h-8 w-full justify-center whitespace-nowrap text-xs"
           >
             使用此灵感
             <ChevronRight className="h-3 w-3 ml-1" />

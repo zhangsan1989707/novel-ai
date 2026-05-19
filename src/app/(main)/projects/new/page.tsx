@@ -25,6 +25,7 @@ interface NewProjectForm {
   corePitch: string
   writingStyle: string
   lengthType: LengthType | ''
+  targetAudience?: 'MALE' | 'FEMALE'
   title: string
   description: string
   targetWordCount: number | undefined
@@ -69,6 +70,7 @@ export default function NewProjectPage() {
       corePitch: '',
       writingStyle: '',
       lengthType: '',
+      targetAudience: undefined,
       title: '',
       description: '',
       targetWordCount: undefined,
@@ -118,6 +120,7 @@ export default function NewProjectPage() {
           genre: data.genre || undefined,
           writingStyle: data.writingStyle || undefined,
           corePitch: data.corePitch || undefined,
+          targetAudience: data.targetAudience || undefined,
           targetWordCount: data.targetWordCount || undefined,
           chapterWordCount: data.chapterWordCount || undefined,
           aiModelId: data.aiModelId || undefined,
@@ -158,22 +161,11 @@ export default function NewProjectPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-2xl px-4 py-6 sm:px-6">
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-          <section className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-            <div className="mb-4 flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-base font-semibold text-gray-900 dark:text-white">灵感选择</h2>
-                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                  先选一个热门灵感，系统会自动补充题材、风格和灵感摘要，不需要你先想好完整一句话。
-                </p>
-              </div>
-            </div>
-            <InspirationPanel onSelect={handleInspirationSelect} />
-          </section>
-
-          <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-            <div className="space-y-5">
+      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
+        <form onSubmit={handleSubmit(onSubmit)} className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="space-y-6">
+            <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+              <div className="space-y-5">
               <div>
                 <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
                   平台选择 <span className="text-red-500">*</span>
@@ -251,93 +243,106 @@ export default function NewProjectPage() {
                 {errors.lengthType && <p className="mt-1 text-sm text-red-500">{errors.lengthType.message}</p>}
               </div>
             </div>
-          </div>
+            </div>
 
-          <CollapsibleSection title="高级设置" description="标题、字数、AI 模型（可选）">
-            <div className="space-y-4 pt-1">
-              <Input
-                label="项目标题"
-                placeholder="留空则自动生成，不会用灵感代替"
-                maxLength={200}
-                {...register('title')}
-              />
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                标题和灵感是两个字段；留空时系统会自动补一个标题。
-              </p>
-
-              <Textarea
-                label="描述 / 世界观"
-                placeholder="可选，补充更多设定信息"
-                rows={3}
-                {...register('description')}
-              />
-
-              <div className="grid gap-4 sm:grid-cols-2">
+            <CollapsibleSection title="高级设置" description="标题、字数、AI 模型（可选）">
+              <div className="space-y-4 pt-1">
                 <Input
-                  label="目标字数"
-                  type="number"
-                  placeholder="例如 300000"
-                  min={1000}
-                  max={100000000}
-                  {...register('targetWordCount', { valueAsNumber: true })}
+                  label="项目标题"
+                  placeholder="留空则自动生成，不会用灵感代替"
+                  maxLength={200}
+                  {...register('title')}
                 />
-                <Input
-                  label="每章字数"
-                  type="number"
-                  placeholder="3000"
-                  min={100}
-                  max={100000}
-                  {...register('chapterWordCount', { valueAsNumber: true })}
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  标题和灵感是两个字段；留空时系统会自动补一个标题。
+                </p>
+
+                <Textarea
+                  label="描述 / 世界观"
+                  placeholder="可选，补充更多设定信息"
+                  rows={3}
+                  {...register('description')}
                 />
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Input
+                    label="目标字数"
+                    type="number"
+                    placeholder="例如 300000"
+                    min={1000}
+                    max={100000000}
+                    {...register('targetWordCount', { valueAsNumber: true })}
+                  />
+                  <Input
+                    label="每章字数"
+                    type="number"
+                    placeholder="3000"
+                    min={100}
+                    max={100000}
+                    {...register('chapterWordCount', { valueAsNumber: true })}
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    AI 模型配置
+                  </label>
+                  {loadingConfigs ? (
+                    <p className="text-sm text-gray-500">加载中...</p>
+                  ) : aiConfigs.length === 0 ? (
+                    <div className="flex items-center gap-2 text-sm text-amber-600">
+                      <span>暂无可用的 AI 配置</span>
+                      <Button type="button" size="sm" variant="outline" onClick={() => router.push('/settings')}>
+                        <Settings className="h-3.5 w-3.5" />
+                        去配置
+                      </Button>
+                    </div>
+                  ) : (
+                    <select
+                      className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                      {...register('aiModelId', { valueAsNumber: true })}
+                    >
+                      <option value="">使用默认配置</option>
+                      {aiConfigs.map((config) => (
+                        <option key={config.id} value={config.id}>
+                          {config.name} ({config.vendor} / {config.modelId})
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
               </div>
+            </CollapsibleSection>
 
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  AI 模型配置
-                </label>
-                {loadingConfigs ? (
-                  <p className="text-sm text-gray-500">加载中...</p>
-                ) : aiConfigs.length === 0 ? (
-                  <div className="flex items-center gap-2 text-sm text-amber-600">
-                    <span>暂无可用的 AI 配置</span>
-                    <Button type="button" size="sm" variant="outline" onClick={() => router.push('/settings')}>
-                      <Settings className="h-3.5 w-3.5" />
-                      去配置
-                    </Button>
-                  </div>
-                ) : (
-                  <select
-                    className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
-                    {...register('aiModelId', { valueAsNumber: true })}
-                  >
-                    <option value="">使用默认配置</option>
-                    {aiConfigs.map((config) => (
-                      <option key={config.id} value={config.id}>
-                        {config.name} ({config.vendor} / {config.modelId})
-                      </option>
-                    ))}
-                  </select>
-                )}
+            <div className="sticky bottom-0 -mx-4 border-t border-gray-200 bg-white/95 px-4 py-4 backdrop-blur dark:border-gray-700 dark:bg-gray-900/95 sm:mx-0 sm:rounded-lg sm:border sm:shadow-sm">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  先选灵感，再补少量设定即可快速创建项目
+                </p>
+                <div className="flex gap-3">
+                  <Button type="button" variant="outline" onClick={() => router.back()}>
+                    取消
+                  </Button>
+                  <Button type="submit" loading={submitting}>
+                    <Sparkles className="h-4 w-4" />
+                    开始创作
+                  </Button>
+                </div>
               </div>
             </div>
-          </CollapsibleSection>
-
-          <div className="sticky bottom-0 -mx-4 border-t border-gray-200 bg-white/95 px-4 py-4 backdrop-blur dark:border-gray-700 dark:bg-gray-900/95 sm:mx-0 sm:rounded-lg sm:border sm:shadow-sm">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                先选灵感，再补少量设定即可快速创建项目
-              </p>
-              <div className="flex gap-3">
-                <Button type="button" variant="outline" onClick={() => router.back()}>
-                  取消
-                </Button>
-                <Button type="submit" loading={submitting}>
-                  <Sparkles className="h-4 w-4" />
-                  开始创作
-                </Button>
-              </div>
-            </div>
           </div>
+
+          <aside className="lg:sticky lg:top-20 lg:self-start">
+            <section className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
+              <div className="mb-4">
+                <h2 className="text-base font-semibold text-gray-900 dark:text-white">灵感库</h2>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                  选一个方向即可，不需要在这里完成全部设定。
+                </p>
+              </div>
+              <InspirationPanel onSelect={handleInspirationSelect} compact limit={4} />
+            </section>
+          </aside>
         </form>
       </main>
     </div>

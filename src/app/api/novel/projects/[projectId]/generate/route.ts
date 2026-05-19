@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { getAIProvider, buildPromptContext, buildNovelGenerationPrompt, createProviderFromDefaultConfig } from '@/lib/ai'
 import { countChineseWords } from '@/lib/utils'
+import { getMinimumChapterWordCount, isChapterWordCountSufficient } from '@/lib/ai/chapter-quality'
 import { AIVendor } from '@/types'
 import { logError } from '@/lib/logger'
 import { toProjectDTO, toChapterDTO } from '@/types/dto'
@@ -163,13 +164,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const wordCount = countChineseWords(extractedContent)
 
     // 保存生成内容
-    const oldWordCount = chapter.content ? countChineseWords(chapter.content) : 0
-    const wordCountDiff = wordCount - oldWordCount
+    const chapterReady = isChapterWordCountSufficient(wordCount, targetWordCount, chapter.chapterNumber)
 
     const updateData: Record<string, unknown> = {
       content: extractedContent,
       wordCount,
-      status: 'COMPLETED',
+      status: chapterReady ? 'COMPLETED' : 'REVIEWING',
     }
     if (extractedTitle) {
       updateData.title = extractedTitle
@@ -181,14 +181,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     })
 
     // 更新项目总字数
-    if (wordCountDiff !== 0) {
-      await prisma.novelProject.update({
-        where: { id: projectIdNum },
-        data: {
-          currentWordCount: { increment: wordCountDiff },
-        },
-      })
-    }
+    const totalWordCount = await prisma.novelChapter.aggregate({
+      where: { projectId: projectIdNum, status: 'COMPLETED' },
+      _sum: { wordCount: true },
+    })
+
+    await prisma.novelProject.update({
+      where: { id: projectIdNum },
+      data: {
+        currentWordCount: totalWordCount._sum.wordCount || 0,
+      },
+    })
 
     return NextResponse.json({
       success: true,
@@ -197,6 +200,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         content: extractedContent,
         title: extractedTitle,
         wordCount,
+        minimumWordCount: getMinimumChapterWordCount(targetWordCount, chapter.chapterNumber),
+        qualityStatus: chapterReady ? 'completed' : 'reviewing',
         usage: result.usage,
       },
     })

@@ -128,13 +128,14 @@ export function buildNovelGenerationPrompt(
   const chapterNum = context.currentChapterNumber
   let wordCountGuidance = ''
   if (chapterNum <= 3) {
-    wordCountGuidance = '开篇章节，字数约2000-2500字，重点在于建立人设和世界观'
+    wordCountGuidance = '开篇章节，字数至少2000字，优先保证开局钩子、人物出场和世界观落地，不得提前收束'
   } else if (chapterNum % 10 === 0) {
-    wordCountGuidance = '阶段高潮章节，字数约3500-4500字，需有重大冲突和转折'
+    wordCountGuidance = '阶段高潮章节，字数至少3500字，需有重大冲突和转折，必须把情绪推到位'
   } else {
-    wordCountGuidance = '普通章节，字数约2500-3500字，平稳推进剧情'
+    wordCountGuidance = '普通章节，字数至少2500字，平稳推进剧情，禁止草草收尾'
   }
   parts.push(`\n【字数要求】${wordCountGuidance}`)
+  parts.push(`如果首次生成不足目标字数，不要直接结束，必须继续补写到达要求。`)
 
   parts.push(`\n请确保内容连贯、情节合理、人物性格一致。`)
   parts.push(`注意：禁止重复前文已有的情节描写和表达方式。`)

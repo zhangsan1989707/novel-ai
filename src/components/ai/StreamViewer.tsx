@@ -57,7 +57,7 @@ export function StreamViewer({
   })
   const [settings, setSettings] = useState({
     useContext: true,
-    contextChapterCount: 3,
+    contextChapterCount: 2,
     targetWordCount: 3000,
     temperature: 0.7,
     autoOptimizeAfterGenerate: autoOptimize,
