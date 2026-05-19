@@ -8,7 +8,7 @@
 | SSH 端口 | 22 |
 | 应用端口 | 3200 |
 | 部署目录 | /opt/novel-ai |
-| 数据库端口 | 5433 (映射自容器 5432) |
+| 数据库端口 | 5433 (docker-compose 映射自容器 5432) |
 
 ## 二、部署流程
 
@@ -82,14 +82,13 @@ EOF
 
 **错误信息**：`Authentication failed against database server`
 
-**原因**：数据库端口配置错误
+**原因**：docker-compose.db.yml 中数据库端口映射为 `5433:5432`，但代码中 DATABASE_URL 可能配置为 5432
 
-**解决方案**：
+**解决方案**（自动处理）：部署脚本会自动将 `localhost:5432` 替换为 `localhost:5433`
+
+**手动修复**：
 ```bash
-# 检查数据库容器端口映射
-docker compose -f docker-compose.db.yml ps
-
-# 如果端口是 5433，修改环境变量
+# 修改环境变量
 sed -i 's|localhost:5432|localhost:5433|g' .env .env.local
 ```
 
@@ -156,7 +155,7 @@ sshpass -p "密码" ssh root@47.109.85.168 "ps aux | grep node"
 ## 六、注意事项
 
 1. **密码安全**：不要将 `.deploy-password` 提交到 git
-2. **数据库备份**：部署前建议备份数据库
+2. **数据库端口**：docker-compose.db.yml 映射端口为 5433，部署脚本会自动处理
 3. **环境变量**：确保 `.env.local` 包含正确的配置
 4. **端口冲突**：确保 3200 端口未被其他服务占用
 5. **构建缓存**：服务器端构建可利用 npm ci 缓存

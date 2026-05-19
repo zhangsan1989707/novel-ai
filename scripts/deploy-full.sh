@@ -125,6 +125,9 @@ echo "📦 解压文件..."
 tar -xzf novel-ai-code.tar.gz 2>/dev/null || true
 rm -f novel-ai-code.tar.gz
 
+echo "🔧 修复数据库端口配置（docker-compose.db.yml 映射端口为 5433）..."
+sed -i 's|localhost:5432|localhost:5433|g' .env .env.local 2>/dev/null || true
+
 echo "🐳 启动数据库..."
 docker compose -f docker-compose.db.yml up -d 2>/dev/null || true
 
@@ -147,9 +150,6 @@ echo "📋 复制静态资源..."
 cp -r .next/static "$BUILD_DIR/.next/static"
 cp -r public "$BUILD_DIR/public"
 cp .env.local "$BUILD_DIR/.env.local" 2>/dev/null || true
-
-echo "🔄 修复数据库端口..."
-sed -i 's|localhost:5432|localhost:5433|g' "$BUILD_DIR/.env" "$BUILD_DIR/.env.local" 2>/dev/null || true
 
 echo "⏹️ 停止旧进程..."
 fuser -k 3200/tcp 2>/dev/null || true
