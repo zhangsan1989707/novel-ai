@@ -24,7 +24,16 @@ export async function GET(
       )
     }
 
-    if (!project.pipelineJobId) {
+    let jobId = project.pipelineJobId
+    if (!jobId) {
+      const latestJob = await prisma.generationJob.findFirst({
+        where: { projectId },
+        orderBy: { createdAt: 'desc' },
+      })
+      jobId = latestJob?.id || null
+    }
+
+    if (!jobId) {
       return NextResponse.json({
         success: true,
         data: {
@@ -38,7 +47,7 @@ export async function GET(
     }
 
     const job = await prisma.generationJob.findUnique({
-      where: { id: project.pipelineJobId },
+      where: { id: jobId },
     })
 
     if (!job) {

@@ -155,21 +155,26 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const validatedData = createProjectSchema.parse(body)
 
-    const title = validatedData.title || validatedData.corePitch?.slice(0, 50) || `新项目 ${new Date().toLocaleDateString('zh-CN')}`
+    const title = validatedData.title?.trim()
+      || '未命名小说项目'
 
     let creatorId = getCurrentUserId()
 
-    // 确保用户存在
-    const user = await prisma.user.findUnique({ where: { id: creatorId } })
-    if (!user) {
-      const newUser = await prisma.user.create({
-        data: {
-          email: 'dev@example.com',
-          name: '开发者',
-          password: 'hashed_password_placeholder',
-        },
-      })
-      creatorId = newUser.id
+    // 确保用户存在：优先使用当前 ID，否则回退到开发用户（按邮箱查找或创建）
+    const userById = await prisma.user.findUnique({ where: { id: creatorId } })
+    if (!userById) {
+      const devEmail = 'dev@example.com'
+      let devUser = await prisma.user.findUnique({ where: { email: devEmail } })
+      if (!devUser) {
+        devUser = await prisma.user.create({
+          data: {
+            email: devEmail,
+            name: '开发者',
+            password: 'hashed_password_placeholder',
+          },
+        })
+      }
+      creatorId = devUser.id
     }
 
     const project = await prisma.novelProject.create({

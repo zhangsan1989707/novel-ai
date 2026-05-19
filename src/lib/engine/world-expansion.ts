@@ -1,4 +1,5 @@
 import { ArcStage } from '@/types'
+import { toInternalArcStage } from './production-mapping'
 
 interface WorldState {
   mapLevel: number
@@ -19,7 +20,7 @@ const expansionThresholds: Record<ArcStage, { maps: number; factions: number; po
 }
 
 export function shouldExpandWorld(currentArc: ArcStage, worldState: WorldState): boolean {
-  const threshold = expansionThresholds[currentArc]
+  const threshold = expansionThresholds[toInternalArcStage(currentArc)]
   if (!threshold) return false
 
   return (
@@ -31,7 +32,8 @@ export function shouldExpandWorld(currentArc: ArcStage, worldState: WorldState):
 }
 
 export function generateExpansionPrompt(currentArc: ArcStage, worldState: WorldState): string {
-  const threshold = expansionThresholds[currentArc]
+  const internalArc = toInternalArcStage(currentArc)
+  const threshold = expansionThresholds[internalArc]
   const gaps: string[] = []
 
   if (worldState.mapLevel < threshold.maps) {
@@ -49,7 +51,7 @@ export function generateExpansionPrompt(currentArc: ArcStage, worldState: WorldS
 
   if (gaps.length === 0) return ''
 
-  return `世界扩张需求（当前阶段：${currentArc}）：\n${gaps.map(g => `- ${g}`).join('\n')}\n\n请在当前批次的章节中适当引入新的地域、势力、力量层级或文明设定，避免前期把世界范围写死。`
+  return `世界扩张需求（当前阶段：${internalArc}）：\n${gaps.map(g => `- ${g}`).join('\n')}\n\n请在当前批次的章节中适当引入新的地域、势力、力量层级或文明设定，避免前期把世界范围写死。`
 }
 
 export function getWorldExpansionDimensions(): string[] {

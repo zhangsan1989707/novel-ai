@@ -229,11 +229,14 @@ export default function NewProjectPage() {
           <CollapsibleSection title="高级设置" description="标题、字数、AI 模型（可选）">
             <div className="space-y-4 pt-1">
               <Input
-                label="小说标题"
-                placeholder="留空则由 AI 自动生成"
+                label="项目标题"
+                placeholder="留空则自动生成，不会用卖点代替"
                 maxLength={200}
                 {...register('title')}
               />
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                标题和一句话卖点是两个字段；留空时系统会自动补一个标题。
+              </p>
 
               <Textarea
                 label="描述 / 世界观"

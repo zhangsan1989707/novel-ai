@@ -1,6 +1,8 @@
 import { BaseAIProvider } from '../base'
 import type { GenerationParams, GenerationResult } from '../types'
 
+const DEFAULT_REQUEST_TIMEOUT_MS = Number(process.env.AI_REQUEST_TIMEOUT_MS || 120000)
+
 /**
  * OpenAI 兼容 Provider 基类
  * DeepSeek、Alibaba、VolcEngine、MiniMax 等均使用 OpenAI 兼容 API
@@ -19,7 +21,7 @@ export abstract class OpenAICompatibleProvider extends BaseAIProvider {
     return (this.config?.apiEndpoint || this.defaultBaseURL).replace(/\/+$/, '')
   }
 
-  private async fetchWithTimeout(url: string, init: RequestInit, timeoutMs = 45000): Promise<Response> {
+  private async fetchWithTimeout(url: string, init: RequestInit, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS): Promise<Response> {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), timeoutMs)
 
@@ -58,6 +60,7 @@ export abstract class OpenAICompatibleProvider extends BaseAIProvider {
         frequency_penalty: params?.frequencyPenalty,
         presence_penalty: params?.presencePenalty,
         stop: params?.stop,
+        ...(params?.responseFormat ? { response_format: params.responseFormat } : {}),
       }),
     }, params?.timeoutMs)
 
@@ -95,6 +98,9 @@ export abstract class OpenAICompatibleProvider extends BaseAIProvider {
 
     if (this.supportsStreamOptions) {
       body.stream_options = { include_usage: true }
+    }
+    if (params?.responseFormat) {
+      body.response_format = params.responseFormat
     }
 
     const response = await this.fetchWithTimeout(`${this.getBaseURL()}${this.chatPath}`, {

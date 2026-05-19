@@ -1,7 +1,8 @@
 import { prisma } from '@/lib/prisma'
-import { StorySteering, Platform } from '@/types'
+import { StorySteering } from '@/types'
 import { applySteering, getSteeringSummary } from '@/lib/engine/story-steering'
 import { getPlatformTemplate } from '@/lib/engine/platform-style'
+import { toInternalPlatform } from '@/lib/engine/production-mapping'
 
 interface DirectorContext {
   chapterNumber: number
@@ -39,7 +40,7 @@ export async function directChapter(chapterNumber: number, projectId: number): P
     mysteryDensity: project.mysteryDensity || 0.3,
   }
 
-  const platform = (project.platform || 'qidian') as Platform
+  const platform = toInternalPlatform(project.platform)
   const template = getPlatformTemplate(platform)
 
   const totalChapters = project.chapters.length

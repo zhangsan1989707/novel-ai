@@ -3,9 +3,9 @@
  */
 import { prisma } from '@/lib/prisma'
 import { AIService } from '@/lib/ai/service'
-import { buildPlannerPrompt as buildPlannerPromptV1 } from '../prompts/chapter/planning'
 import { buildPlannerPrompt as buildPlannerPromptV2 } from '../prompts/chapter/planning-v2'
 import type { ChapterOutline, AgentContext } from '../engine/types'
+import { parseAiJsonObject } from '@/lib/engine/ai-json'
 
 interface PlannerInput extends AgentContext {
   characterProfiles: { name: string; role: string; description: string }[]
@@ -51,20 +51,42 @@ export async function plannerAgent(
 
   // 执行生成
   const result = await provider.generate(prompt, {
-    temperature: 0.7,
+    temperature: 0.2,
     maxTokens: 1500,
+    responseFormat: { type: 'json_object' },
   })
 
-  // 解析 JSON
-  const jsonMatch = result.content.match(/\{[\s\S]*\}/)
-  if (jsonMatch) {
+  try {
+    const outline = parseAiJsonObject<ChapterOutline>(result.content)
+    return { outline, tokens: result.usage?.totalTokens }
+  } catch (error) {
+    const repairPrompt = `你必须只输出一个合法 JSON 对象，不要解释，不要代码块，不要多余文本。
+
+原始任务：
+${prompt}
+
+JSON 格式要求：
+{
+  "chapterTitle": "string",
+  "chapterGoal": "string",
+  "mainConflict": "string",
+  "keyScenes": [
+    { "scene": "string", "characters": ["string"], "emotion": "string" }
+  ],
+  "ending": "string",
+  "foreshadows": ["string"],
+  "resolvedPlotlines": ["string"]
+}`
+    const repaired = await provider.generate(repairPrompt, {
+      temperature: 0.1,
+      maxTokens: 1200,
+      responseFormat: { type: 'json_object' },
+    })
     try {
-      const outline = JSON.parse(jsonMatch[0]) as ChapterOutline
-      return { outline, tokens: result.usage?.totalTokens }
+      const outline = parseAiJsonObject<ChapterOutline>(repaired.content)
+      return { outline, tokens: repaired.usage?.totalTokens }
     } catch {
-      throw new Error('策划 Agent 输出格式错误：无法解析 JSON')
+      throw new Error(`策划 Agent 输出格式错误：${error instanceof Error ? error.message : 'JSON 解析失败'}`)
     }
   }
-
-  throw new Error('策划 Agent 输出格式错误：未找到 JSON')
 }

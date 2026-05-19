@@ -1,0 +1,400 @@
+import { prisma } from '@/lib/prisma'
+import { createProviderFromConfigId, createProviderFromDefaultConfig } from '@/lib/ai/factory'
+import type { AIProvider } from '@/lib/ai/types'
+import type { PipelineStep } from '@/types'
+import { calculateBatchSize } from './batch-planner'
+import { completeJob, failJob, saveCheckpoint, updateJobStep } from './generation-job'
+import { validateAndWarn } from './long-novel-controller'
+import { toInternalArcStage, toInternalPlatform, toPrismaArcStage } from './production-mapping'
+import { runChapterGenerationPipeline } from './orchestrator'
+import { parseAiJsonArray, parseAiJsonObject } from './ai-json'
+
+type ChapterOutline = {
+  chapterNumber: number
+  title: string
+  summary: string
+}
+
+type BlueprintOutput = {
+  corePitch?: string
+  worldDirection?: string
+  mainlineDirection?: string
+  growthDirection?: string
+  endingDirection?: string
+  constraints?: string[]
+}
+
+type ArcPlanOutput = {
+  arcNumber?: number
+  name?: string
+  stage?: string
+  description?: string
+  startChapter?: number
+  endChapter?: number
+  batchSize?: number
+  goals?: string[]
+  keyEvents?: string[]
+}
+
+async function createProjectProvider(projectId: number): Promise<AIProvider> {
+  const project = await prisma.novelProject.findUnique({
+    where: { id: projectId },
+    select: { aiModelId: true },
+  })
+
+  if (project?.aiModelId) {
+    const provider = await createProviderFromConfigId(project.aiModelId)
+    if (provider) return provider
+  }
+
+  return createProviderFromDefaultConfig()
+}
+
+async function ensureBlueprint(projectId: number, provider: AIProvider) {
+  const existing = await prisma.bookBlueprint.findUnique({ where: { projectId } })
+  if (existing) return existing
+
+  const project = await prisma.novelProject.findUnique({ where: { id: projectId } })
+  if (!project) throw new Error('项目不存在')
+
+  const prompt = `你是 AI 网文导演系统的总策划。请生成 Book Blueprint，只定义长篇方向，不要生成完整章节。
+
+项目信息：
+- 标题：${project.title}
+- 平台：${project.platform || 'QIDIAN'}
+- 题材：${project.genre || '未知'}
+- 一句话卖点：${project.corePitch || project.description || '暂无'}
+- 风格：${project.writingStyle || '默认'}
+- 长度类型：${project.lengthType || 'LONG'}
+
+输出 JSON，不要 markdown：
+{
+  "corePitch": "重新提炼的一句话卖点",
+  "worldDirection": "世界扩张方向，包含地图、势力、力量层级",
+  "mainlineDirection": "主线推进方向，强调长期矛盾而非提前收束",
+  "growthDirection": "主角成长方向",
+  "endingDirection": "远景终局可能性，只能作为远景，不决定近期结局",
+  "constraints": ["禁止提前大结局", "当前阶段只解决阶段矛盾"]
+}`
+
+  const result = await provider.generate(prompt, {
+    temperature: 0.2,
+    maxTokens: 2000,
+    timeoutMs: 120000,
+    responseFormat: { type: 'json_object' },
+  })
+  let blueprint: BlueprintOutput
+  try {
+    blueprint = parseAiJsonObject<BlueprintOutput>(result.content)
+  } catch (error) {
+    const retryPrompt = `${prompt}\n\n上一次输出未严格符合 JSON。请只输出一个合法 JSON 对象，不要解释，不要代码块，不要多余文本。`
+    const retry = await provider.generate(retryPrompt, {
+      temperature: 0.1,
+      maxTokens: 1200,
+      timeoutMs: 120000,
+      responseFormat: { type: 'json_object' },
+    })
+    try {
+      blueprint = parseAiJsonObject<BlueprintOutput>(retry.content)
+    } catch {
+      throw new Error(`Blueprint 生成失败：${error instanceof Error ? error.message : 'JSON 解析失败'}`)
+    }
+  }
+  const data = {
+    corePitch: blueprint.corePitch || project.corePitch || project.description || project.title,
+    worldDirection: blueprint.worldDirection || '',
+    mainlineDirection: blueprint.mainlineDirection || '',
+    growthDirection: blueprint.growthDirection || '',
+    endingDirection: blueprint.endingDirection || '',
+    constraints: Array.isArray(blueprint.constraints) ? blueprint.constraints : [],
+  }
+
+  return prisma.bookBlueprint.create({ data: { projectId, ...data } })
+}
+
+async function ensureArcPlans(projectId: number, provider: AIProvider) {
+  const existing = await prisma.arcPlan.findMany({ where: { projectId }, orderBy: { arcNumber: 'asc' } })
+  if (existing.length > 0) return existing
+
+  const project = await prisma.novelProject.findUnique({
+    where: { id: projectId },
+    include: { bookBlueprint: true },
+  })
+  if (!project || !project.bookBlueprint) throw new Error('Book Blueprint 不存在')
+
+  const totalChapters = Math.max(1, Math.ceil((project.targetWordCount || 300000) / (project.chapterWordCount || 3000)))
+  const stages = ['OPENING', 'GROWTH', 'EXPANSION', 'MID_CONFLICT', 'PRE_FINALE', 'FINALE']
+  const chaptersPerStage = Math.ceil(totalChapters / stages.length)
+  const platform = toInternalPlatform(project.platform)
+
+  const prompt = `你是 AI 网文导演系统的阶段规划 Agent。请基于 Book Blueprint 生成 Arc Plan。
+
+要求：
+- 只规划阶段，不要列出全书所有章节
+- 前 85% 进度不得出现最终决战、大结局、天下太平、一切结束
+- 每个 Arc 都要保留后续扩张空间
+- batchSize 范围 10-30
+
+项目信息：
+- 标题：${project.title}
+- 平台：${project.platform || 'QIDIAN'}
+- 题材：${project.genre || '未知'}
+- 总章数：约 ${totalChapters} 章
+- 每阶段约 ${chaptersPerStage} 章
+
+Book Blueprint：
+- 核心卖点：${project.bookBlueprint.corePitch}
+- 世界方向：${project.bookBlueprint.worldDirection || ''}
+- 主线方向：${project.bookBlueprint.mainlineDirection || ''}
+- 成长方向：${project.bookBlueprint.growthDirection || ''}
+- 远景终局：${project.bookBlueprint.endingDirection || ''}
+
+输出 JSON 数组，不要 markdown。stage 只能是 OPENING, GROWTH, EXPANSION, MID_CONFLICT, PRE_FINALE, FINALE：
+[
+  {
+    "arcNumber": 1,
+    "name": "阶段名称",
+    "stage": "OPENING",
+    "description": "阶段描述",
+    "startChapter": 1,
+    "endChapter": ${chaptersPerStage},
+    "batchSize": ${calculateBatchSize(platform, 'opening', 0.5, 0.5)},
+    "goals": ["阶段目标"],
+    "keyEvents": ["关键事件"]
+  }
+]`
+
+  const result = await provider.generate(prompt, {
+    temperature: 0.2,
+    maxTokens: 5000,
+    timeoutMs: 120000,
+    responseFormat: { type: 'json_object' },
+  })
+  let arcPlans: ArcPlanOutput[]
+  try {
+    arcPlans = parseAiJsonArray<ArcPlanOutput>(result.content)
+  } catch (error) {
+    const retryPrompt = `${prompt}\n\n上一次输出未严格符合 JSON 数组。请只输出一个合法 JSON 数组，不要解释，不要代码块，不要多余文本。`
+    const retry = await provider.generate(retryPrompt, {
+      temperature: 0.1,
+      maxTokens: 3000,
+      timeoutMs: 120000,
+      responseFormat: { type: 'json_object' },
+    })
+    try {
+      arcPlans = parseAiJsonArray<ArcPlanOutput>(retry.content)
+    } catch {
+      throw new Error(`ArcPlan 生成失败：${error instanceof Error ? error.message : 'JSON 解析失败'}`)
+    }
+  }
+  const created = []
+
+  for (let index = 0; index < arcPlans.length; index++) {
+    const item = arcPlans[index]
+    const arcNumber = item.arcNumber || index + 1
+    const stage = toInternalArcStage(item.stage || stages[index] || 'OPENING')
+    const defaultBatchSize = calculateBatchSize(platform, stage, 0.5, 0.5)
+    created.push(await prisma.arcPlan.create({
+      data: {
+        projectId,
+        arcNumber,
+        name: item.name || `第${arcNumber}阶段`,
+        stage: toPrismaArcStage(stage) as any,
+        description: item.description || '',
+        startChapter: item.startChapter || (index * chaptersPerStage + 1),
+        endChapter: item.endChapter || Math.min(totalChapters, (index + 1) * chaptersPerStage),
+        batchSize: Math.max(10, Math.min(30, item.batchSize || defaultBatchSize)),
+        goals: Array.isArray(item.goals) ? item.goals : [],
+        keyEvents: Array.isArray(item.keyEvents) ? item.keyEvents : [],
+      },
+    }))
+  }
+
+  return created
+}
+
+async function planChapterBatch(projectId: number, provider: AIProvider): Promise<ChapterOutline[]> {
+  const project = await prisma.novelProject.findUnique({
+    where: { id: projectId },
+    include: {
+      bookBlueprint: true,
+      arcPlans: { orderBy: { arcNumber: 'asc' } },
+      chapters: { orderBy: { chapterNumber: 'asc' } },
+      worldState: true,
+    },
+  })
+  if (!project || !project.bookBlueprint) throw new Error('项目 Blueprint 不完整')
+
+  const currentArc = project.arcPlans.find(arc => !arc.isCompleted) || project.arcPlans[0]
+  if (!currentArc) throw new Error('Arc Plan 不存在')
+
+  const existingMaxChapter = project.chapters.reduce((max, chapter) => Math.max(max, chapter.chapterNumber), 0)
+  const startChapter = Math.max(existingMaxChapter + 1, currentArc.startChapter)
+  const endLimit = currentArc.endChapter || startChapter + currentArc.batchSize - 1
+  const endChapter = Math.min(endLimit, startChapter + currentArc.batchSize - 1)
+  if (startChapter > endLimit) return []
+
+  const totalChapters = Math.max(1, Math.ceil((project.targetWordCount || 300000) / (project.chapterWordCount || 3000)))
+  const progressRatio = startChapter / totalChapters
+  const platform = toInternalPlatform(project.platform)
+  const arcStage = toInternalArcStage(currentArc.stage)
+  const worldState = project.worldState
+    ? `地图层级 ${project.worldState.mapLevel}/10，势力 ${project.worldState.factionCount}，力量上限 ${project.worldState.powerLevel}/10，文明层级 ${project.worldState.civilizationLevel}/10`
+    : '世界状态未初始化，需要在当前批次逐步扩张'
+
+  const prompt = `你是 AI 网文导演系统的当前批次目录 Agent。请只生成当前批次章节目录。
+
+硬性规则：
+- 只生成第 ${startChapter} 章到第 ${endChapter} 章
+- 这是阶段目录，不是全书目录
+- 当前全书进度约 ${Math.round(progressRatio * 100)}%
+- 如果进度低于 85%，禁止出现终局、大结局、最终决战、天下太平、一切结束、终焉、全部伏笔回收
+- 每章必须留下后续推进空间
+
+项目信息：
+- 标题：${project.title}
+- 平台：${platform}
+- 题材：${project.genre || '未知'}
+- 风格：${project.writingStyle || '默认'}
+- 当前 Arc：${currentArc.name} / ${arcStage}
+- Arc 目标：${currentArc.goals.join('、') || '推进阶段目标'}
+- 关键事件：${currentArc.keyEvents.join('、') || '由 AI 决定'}
+- 世界状态：${worldState}
+
+Book Blueprint：
+- 核心卖点：${project.bookBlueprint.corePitch}
+- 世界方向：${project.bookBlueprint.worldDirection || ''}
+- 主线方向：${project.bookBlueprint.mainlineDirection || ''}
+
+输出 JSON 数组，不要 markdown：
+[
+  { "chapterNumber": ${startChapter}, "title": "章节标题", "summary": "本章剧情概要，强调阶段推进和下一章钩子" }
+]`
+
+  const result = await provider.generate(prompt, {
+    temperature: 0.2,
+    maxTokens: 6000,
+    timeoutMs: 120000,
+    responseFormat: { type: 'json_object' },
+  })
+  let outlines: ChapterOutline[]
+  try {
+    outlines = parseAiJsonArray<ChapterOutline>(result.content)
+  } catch (error) {
+    const retryPrompt = `${prompt}\n\n上一次输出未严格符合 JSON 数组。请只输出一个合法 JSON 数组，不要解释，不要代码块，不要多余文本。`
+    const retry = await provider.generate(retryPrompt, {
+      temperature: 0.1,
+      maxTokens: 3000,
+      timeoutMs: 120000,
+      responseFormat: { type: 'json_object' },
+    })
+    try {
+      outlines = parseAiJsonArray<ChapterOutline>(retry.content)
+    } catch {
+      throw new Error(`章节目录生成失败：${error instanceof Error ? error.message : 'JSON 解析失败'}`)
+    }
+  }
+  outlines = outlines
+    .filter(item => item.chapterNumber >= startChapter && item.chapterNumber <= endChapter)
+    .map(item => ({
+      chapterNumber: item.chapterNumber,
+      title: item.title || `第${item.chapterNumber}章`,
+      summary: item.summary || item.title || `第${item.chapterNumber}章剧情推进`,
+    }))
+
+  const validation = validateAndWarn(outlines, progressRatio)
+  if (!validation.passed) {
+    throw new Error(`当前批次目录触发防提前结局规则：${validation.violations.join('；')}`)
+  }
+
+  for (const outline of outlines) {
+    await prisma.novelChapter.upsert({
+      where: { projectId_chapterNumber: { projectId, chapterNumber: outline.chapterNumber } },
+      update: {
+        title: outline.title,
+        summary: outline.summary,
+        chapterOutline: outline as any,
+        sortOrder: outline.chapterNumber,
+      },
+      create: {
+        projectId,
+        chapterNumber: outline.chapterNumber,
+        title: outline.title,
+        summary: outline.summary,
+        chapterOutline: outline as any,
+        sortOrder: outline.chapterNumber,
+        status: 'DRAFT',
+      },
+    })
+  }
+
+  return outlines
+}
+
+async function markCompletedArcIfNeeded(projectId: number) {
+  const arcs = await prisma.arcPlan.findMany({ where: { projectId }, orderBy: { arcNumber: 'asc' } })
+  for (const arc of arcs) {
+    if (!arc.endChapter || arc.isCompleted) continue
+    const incomplete = await prisma.novelChapter.count({
+      where: {
+        projectId,
+        chapterNumber: { gte: arc.startChapter, lte: arc.endChapter },
+        status: { not: 'COMPLETED' },
+      },
+    })
+    if (incomplete === 0) {
+      await prisma.arcPlan.update({ where: { id: arc.id }, data: { isCompleted: true } })
+    }
+  }
+}
+
+export async function runProductionPipeline(jobId: number): Promise<void> {
+  const job = await prisma.generationJob.findUnique({ where: { id: jobId } })
+  if (!job) return
+
+  const projectId = job.projectId
+
+  try {
+    const provider = await createProjectProvider(projectId)
+
+    await updateJobStep(jobId, 'blueprint' as PipelineStep, 1)
+    const blueprint = await ensureBlueprint(projectId, provider)
+    await saveCheckpoint(jobId, 'blueprint' as PipelineStep, { projectId }, { blueprintId: blueprint.id })
+
+    await updateJobStep(jobId, 'arc_plan' as PipelineStep, 2)
+    const arcPlans = await ensureArcPlans(projectId, provider)
+    await saveCheckpoint(jobId, 'arc_plan' as PipelineStep, { projectId }, { arcCount: arcPlans.length })
+
+    await updateJobStep(jobId, 'chapter_list' as PipelineStep, 3)
+    const outlines = await planChapterBatch(projectId, provider)
+    await prisma.generationJob.update({
+      where: { id: jobId },
+      data: { totalChapters: outlines.length },
+    })
+    await saveCheckpoint(jobId, 'chapter_list' as PipelineStep, { projectId }, { chapters: outlines })
+
+    let completed = 0
+    for (const outline of outlines) {
+      await updateJobStep(jobId, 'write' as PipelineStep, 4, outlines.length, completed + 1)
+      const result = await runChapterGenerationPipeline(projectId, outline.chapterNumber, () => {})
+      if (!result.success) {
+        throw new Error(result.error || `第 ${outline.chapterNumber} 章生成失败`)
+      }
+      completed++
+      await saveCheckpoint(
+        jobId,
+        'write' as PipelineStep,
+        { chapterNumber: outline.chapterNumber },
+        { chapterId: result.chapterId, completed }
+      )
+    }
+
+    await updateJobStep(jobId, 'summarize' as PipelineStep, 8, outlines.length, completed)
+    await markCompletedArcIfNeeded(projectId)
+    await saveCheckpoint(jobId, 'summarize' as PipelineStep, { projectId }, { completedChapters: completed })
+    await completeJob(jobId)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    await failJob(jobId, message)
+  }
+}

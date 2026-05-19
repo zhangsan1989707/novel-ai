@@ -1,5 +1,6 @@
 import { Platform, ArcStage, PlatformTemplate } from '@/types'
 import { getPlatformTemplate } from './platform-style'
+import { toInternalArcStage, toInternalPlatform } from './production-mapping'
 
 const stageMultipliers: Record<ArcStage, number> = {
   opening: 0.7,
@@ -16,9 +17,11 @@ export function calculateBatchSize(
   worldComplexity: number,
   plotDensity: number
 ): number {
-  const template: PlatformTemplate = getPlatformTemplate(platform)
+  const internalPlatform = toInternalPlatform(platform)
+  const internalStage = toInternalArcStage(stage)
+  const template: PlatformTemplate = getPlatformTemplate(internalPlatform)
   const baseline = template.batchSizeBaseline
-  const multiplier = stageMultipliers[stage] || 1.0
+  const multiplier = stageMultipliers[internalStage] || 1.0
   const complexityFactor = 0.8 + worldComplexity * 0.4
   const densityFactor = 0.8 + plotDensity * 0.4
 

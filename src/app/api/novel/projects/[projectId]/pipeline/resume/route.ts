@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { resumeJob } from '@/lib/engine/generation-job'
+import { runProductionPipeline } from '@/lib/engine/production-pipeline'
 
 export async function POST(
   request: NextRequest,
@@ -32,6 +33,7 @@ export async function POST(
         { status: 400 }
       )
     }
+    void runProductionPipeline(project.pipelineJobId)
 
     return NextResponse.json({ success: true, data: { jobId: project.pipelineJobId, status: 'pending' } })
   } catch (error) {

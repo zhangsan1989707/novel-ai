@@ -1,4 +1,5 @@
 import { Platform, PlatformTemplate } from '@/types'
+import { toInternalPlatform } from './production-mapping'
 
 const platformTemplates: Record<Platform, PlatformTemplate> = {
   qidian: {
@@ -54,12 +55,13 @@ const platformTemplates: Record<Platform, PlatformTemplate> = {
 }
 
 export function getPlatformTemplate(platform: Platform): PlatformTemplate {
-  return platformTemplates[platform] || platformTemplates.qidian
+  return platformTemplates[toInternalPlatform(platform)] || platformTemplates.qidian
 }
 
 export function getStylePrompt(platform: Platform, genre: string, style: string): string {
-  const template = getPlatformTemplate(platform)
-  return `平台要求：${platform}平台
+  const internalPlatform = toInternalPlatform(platform)
+  const template = getPlatformTemplate(internalPlatform)
+  return `平台要求：${internalPlatform}平台
 节奏：${template.pace}
 每章字数目标：${template.chapterWordTarget}字
 爽点密度：${template.slapFaceDensity}

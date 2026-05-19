@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
 import { createJob } from '@/lib/engine/generation-job'
+import { runProductionPipeline } from '@/lib/engine/production-pipeline'
 
 export async function POST(
   request: NextRequest,
@@ -16,7 +18,23 @@ export async function POST(
       )
     }
 
+    const activeJob = await prisma.generationJob.findFirst({
+      where: {
+        projectId,
+        status: { in: ['PENDING', 'RUNNING', 'PAUSED'] },
+      },
+      orderBy: { createdAt: 'desc' },
+    })
+
+    if (activeJob) {
+      return NextResponse.json({
+        success: true,
+        data: { jobId: activeJob.id, projectId, status: activeJob.status },
+      })
+    }
+
     const jobId = await createJob(projectId)
+    void runProductionPipeline(jobId)
 
     return NextResponse.json({
       success: true,

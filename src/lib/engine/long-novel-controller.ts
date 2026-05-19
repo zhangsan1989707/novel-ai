@@ -4,7 +4,7 @@ import { calculateBatchSize } from './batch-planner'
 import { validateOutline } from './outline-validator'
 import { shouldExpandWorld, generateExpansionPrompt } from './world-expansion'
 import { getVillainPrompt } from './villain-lifecycle'
-import { getPlatformTemplate } from './platform-style'
+import { toInternalArcStage, toInternalPlatform } from './production-mapping'
 
 interface BatchContext {
   shouldExpand: boolean
@@ -29,7 +29,7 @@ export async function getNextBatchContext(projectId: number): Promise<BatchConte
   if (!project) throw new Error(`项目 ${projectId} 不存在`)
 
   const currentArc = project.arcPlans.find(a => !a.isCompleted)
-  const arcStage: ArcStage = currentArc?.stage as ArcStage || 'opening'
+  const arcStage = toInternalArcStage(currentArc?.stage)
 
   const totalChapters = project.chapters?.length || 0
   const estimatedTotal = project.targetWordCount
@@ -43,12 +43,11 @@ export async function getNextBatchContext(projectId: number): Promise<BatchConte
   const shouldExpand = shouldExpandWorld(arcStage, worldState)
   const expansionPrompt = shouldExpand ? generateExpansionPrompt(arcStage, worldState) : ''
 
-  const platform = (project.platform || 'qidian') as Platform
-  const template = getPlatformTemplate(platform)
+  const platform = toInternalPlatform(project.platform)
 
   const worldComplexity = worldState.mapLevel / 10
   const plotDensity = 0.5
-  const batchSize = calculateBatchSize(platform, arcStage, worldComplexity, plotDensity)
+  const batchSize = calculateBatchSize(platform as Platform, arcStage as ArcStage, worldComplexity, plotDensity)
 
   const villainPrompt = getVillainPrompt(
     project.villains.map(v => ({

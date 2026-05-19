@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { createProviderFromConfigId, createProviderFromDefaultConfig } from '@/lib/ai/factory'
 import { calculateBatchSize } from '@/lib/engine/batch-planner'
+import { parseAiJsonArray } from '@/lib/engine/ai-json'
+import { toInternalPlatform, toPrismaArcStage } from '@/lib/engine/production-mapping'
 
 export async function GET(
   request: NextRequest,
@@ -81,12 +83,12 @@ export async function POST(
     const targetWordCount = project.targetWordCount || 300000
     const chapterWordCount = project.chapterWordCount || 3000
     const totalChapters = Math.ceil(targetWordCount / chapterWordCount)
-    const platform = (project.platform || 'QIDIAN').toLowerCase()
+    const platform = toInternalPlatform(project.platform)
 
     const stages = ['OPENING', 'GROWTH', 'EXPANSION', 'MID_CONFLICT', 'PRE_FINALE', 'FINALE']
     const chaptersPerStage = Math.ceil(totalChapters / stages.length)
 
-    const batchSize = calculateBatchSize(platform as any, 'RISING' as any, 1, 1)
+    const batchSize = calculateBatchSize(platform, 'opening', 1, 1)
 
     const prompt = `你是一个小说策划师。请根据以下信息生成这部小说的Arc Plan（阶段规划）：
 
@@ -123,25 +125,33 @@ Book Blueprint：
 batchSize建议范围10-30，根据阶段节奏调整。`
 
     let result = ''
-    for await (const token of provider.generateStream(prompt, { temperature: 0.7 })) {
+    for await (const token of provider.generateStream(prompt, {
+      temperature: 0.2,
+      responseFormat: { type: 'json_object' },
+    })) {
       result += token
     }
 
     let arcPlansData: Record<string, unknown>[]
     try {
-      const jsonMatch = result.match(/\[[\s\S]*\]/)
-      if (!jsonMatch) {
+      arcPlansData = parseAiJsonArray<Record<string, unknown>>(result)
+    } catch {
+      const retryPrompt = `${prompt}\n\n上一次输出未严格符合 JSON 数组。请只输出一个合法 JSON 数组，不要解释，不要代码块，不要多余文本。`
+      let retry = ''
+      for await (const token of provider.generateStream(retryPrompt, {
+        temperature: 0.1,
+        responseFormat: { type: 'json_object' },
+      })) {
+        retry += token
+      }
+      try {
+        arcPlansData = parseAiJsonArray<Record<string, unknown>>(retry)
+      } catch {
         return NextResponse.json(
-          { success: false, error: { code: 'PARSE_ERROR', message: 'AI返回格式异常' } },
+          { success: false, error: { code: 'PARSE_ERROR', message: 'ArcPlan JSON解析失败' } },
           { status: 500 }
         )
       }
-      arcPlansData = JSON.parse(jsonMatch[0])
-    } catch {
-      return NextResponse.json(
-        { success: false, error: { code: 'PARSE_ERROR', message: 'ArcPlan JSON解析失败' } },
-        { status: 500 }
-      )
     }
 
     await prisma.arcPlan.deleteMany({ where: { projectId } })
@@ -153,7 +163,7 @@ batchSize建议范围10-30，根据阶段节奏调整。`
           projectId,
           arcNumber: (ap.arcNumber as number) || 1,
           name: (ap.name as string) || `第${ap.arcNumber}阶段`,
-          stage: ((ap.stage as string) || 'OPENING') as any,
+          stage: toPrismaArcStage(ap.stage) as any,
           description: (ap.description as string) || '',
           startChapter: (ap.startChapter as number) || 1,
           endChapter: (ap.endChapter as number) || null,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { createProviderFromConfigId, createProviderFromDefaultConfig } from '@/lib/ai/factory'
+import { parseAiJsonObject } from '@/lib/engine/ai-json'
 
 export async function POST(
   request: NextRequest,
@@ -58,25 +59,33 @@ export async function POST(
 }`
 
     let result = ''
-    for await (const token of provider.generateStream(prompt, { temperature: 0.7 })) {
+    for await (const token of provider.generateStream(prompt, {
+      temperature: 0.2,
+      responseFormat: { type: 'json_object' },
+    })) {
       result += token
     }
 
     let blueprint: Record<string, unknown>
     try {
-      const jsonMatch = result.match(/\{[\s\S]*\}/)
-      if (!jsonMatch) {
+      blueprint = parseAiJsonObject<Record<string, unknown>>(result)
+    } catch {
+      const retryPrompt = `${prompt}\n\n上一次输出未严格符合 JSON。请只输出一个合法 JSON 对象，不要解释，不要代码块，不要多余文本。`
+      let retry = ''
+      for await (const token of provider.generateStream(retryPrompt, {
+        temperature: 0.1,
+        responseFormat: { type: 'json_object' },
+      })) {
+        retry += token
+      }
+      try {
+        blueprint = parseAiJsonObject<Record<string, unknown>>(retry)
+      } catch {
         return NextResponse.json(
-          { success: false, error: { code: 'PARSE_ERROR', message: 'AI返回格式异常' } },
+          { success: false, error: { code: 'PARSE_ERROR', message: 'Blueprint JSON解析失败' } },
           { status: 500 }
         )
       }
-      blueprint = JSON.parse(jsonMatch[0])
-    } catch {
-      return NextResponse.json(
-        { success: false, error: { code: 'PARSE_ERROR', message: 'Blueprint JSON解析失败' } },
-        { status: 500 }
-      )
     }
 
     const constraints = Array.isArray(blueprint.constraints) ? (blueprint.constraints as string[]) : []

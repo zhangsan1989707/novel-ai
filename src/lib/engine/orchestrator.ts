@@ -12,6 +12,8 @@ import { summarizerAgent } from '../agents/summarizer'
 import * as memory from '../memory'
 import * as storyState from './story-state'
 import { hookRegistry } from '../hooks/registry'
+import { directChapter } from '../agents/narrative-director'
+import { chapterDeslopper } from '../agents/deslopper'
 import type {
   ChapterOutline,
   CharacterProfile,
@@ -60,6 +62,8 @@ export async function runChapterGenerationPipeline(
 
   // 初始化故事状态（如果不存在）
   await storyState.initStoryState(projectId, project.totalVolumes * 25)
+  const directorContext = await directChapter(chapterNo, projectId).catch(() => null)
+  const directorDirective = directorContext?.fullDirective || ''
 
   // 获取上下文数据（并行查询）
   const [characterProfiles, openPlotlines, recentSummaries, currentState] = await Promise.all([
@@ -109,8 +113,8 @@ export async function runChapterGenerationPipeline(
       chapterNo,
       projectTitle: project.title,
       genre: project.genre,
-      writingStyle: project.writingStyle,
-      worldSetting: project.worldSetting,
+      writingStyle: [project.writingStyle, directorDirective].filter(Boolean).join('\n\n'),
+      worldSetting: [project.worldSetting, directorDirective].filter(Boolean).join('\n\n'),
       powerSystem: project.powerSystem,
       protagonistProfile: project.protagonistProfile,
       antagonistSetting: project.antagonistSetting,
@@ -169,9 +173,11 @@ export async function runChapterGenerationPipeline(
         projectTitle: project.title,
         genre: project.genre,
         writingStyle: project.writingStyle,
-        worldSetting: researchContext
-          ? `${project.worldSetting || ''}\n\n【研究参考资料】\n${researchContext}`
-          : project.worldSetting,
+        worldSetting: [
+          project.worldSetting,
+          directorDirective,
+          researchContext ? `【研究参考资料】\n${researchContext}` : '',
+        ].filter(Boolean).join('\n\n'),
         powerSystem: project.powerSystem,
         protagonistProfile: project.protagonistProfile,
         antagonistSetting: project.antagonistSetting,
@@ -270,14 +276,41 @@ export async function runChapterGenerationPipeline(
       return runChapterGenerationPipeline(projectId, chapterNo, emit)
     }
 
-    // ========== Phase 5: 摘要 Agent ==========
+    // ========== Phase 5: 去 AI 味 Agent ==========
+    emit({ type: 'agent_switch', data: { agent: 'deslopper' } })
+
+    let finalContent = polishedContent
+    try {
+      const deslopResult = await chapterDeslopper({
+        projectId,
+        chapterId: chapter.id,
+        content: polishedContent,
+        chapterNumber: chapterNo,
+        chapterTitle: outline.chapterTitle,
+        genre: project.genre,
+        writingStyle: project.writingStyle,
+        strictness: 'medium',
+      })
+      finalContent = deslopResult.revisedContent
+    } catch (deslopError) {
+      emit({
+        type: 'hook_warning',
+        data: {
+          warnings: [
+            `去 AI 味失败，已保留润色稿：${deslopError instanceof Error ? deslopError.message : '未知错误'}`,
+          ],
+        },
+      })
+    }
+
+    // ========== Phase 6: 摘要 Agent ==========
     emit({ type: 'agent_switch', data: { agent: 'summarizer' } })
 
     const summaryData = await summarizerAgent({
       projectId,
       chapterNo,
       chapterTitle: outline.chapterTitle,
-      chapterContent: polishedContent,
+      chapterContent: finalContent,
       worldSetting: project.worldSetting,
       protagonistProfile: project.protagonistProfile,
     })
@@ -322,7 +355,7 @@ export async function runChapterGenerationPipeline(
     await storyState.recordStoryEvent(
       projectId,
       'CHAPTER_COMPLETED',
-      `第${chapterNo}章生成完成，字数${polishedContent.length}`,
+      `第${chapterNo}章生成完成，字数${finalContent.length}`,
       chapterNo
     )
 
@@ -331,12 +364,12 @@ export async function runChapterGenerationPipeline(
       where: { id: chapter.id },
       data: {
         title: outline.chapterTitle,
-        content: polishedContent,
+        content: finalContent,
         summary: summaryData.summary,
         status: ChapterStatus.COMPLETED,
         validationReport: validationReport as any,
-        wordCount: polishedContent.length,
-        lastAgentType: 'VALIDATOR',
+        wordCount: finalContent.length,
+        lastAgentType: 'POLISHER',
       },
     })
 
@@ -354,7 +387,7 @@ export async function runChapterGenerationPipeline(
     await hookRegistry.execute('chapter_generate_end', {
       projectId,
       chapterNo,
-      content: polishedContent,
+      content: finalContent,
     })
 
     emit({

@@ -23,6 +23,7 @@ export interface GenerationParams {
   presencePenalty?: number
   stop?: string[]
   timeoutMs?: number
+  responseFormat?: Record<string, unknown>
 }
 
 // ============================================

@@ -138,6 +138,7 @@ export default function ProjectDetailPage() {
   const [showDeslopModal, setShowDeslopModal] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [pipelineStarting, setPipelineStarting] = useState(false)
   const [activeTab, setActiveTab] = useState<DashboardTab>('dashboard')
 
   const [pipeline, setPipeline] = useState<PipelineStatus | null>(null)
@@ -249,6 +250,33 @@ export default function ProjectDetailPage() {
       }
     } catch {
       toast.error('恢复失败')
+    }
+  }
+
+  const handleStartPipeline = async () => {
+    setPipelineStarting(true)
+    try {
+      const res = await fetch(`/api/novel/projects/${projectId}/pipeline/start`, {
+        method: 'POST',
+      })
+      const data = await res.json()
+      if (data.success) {
+        toast.success('AI 生产流水线已启动')
+        setPipeline({
+          status: 'PENDING',
+          currentStep: 'BLUEPRINT',
+          progress: 0,
+          currentChapter: 0,
+          totalChapters: 0,
+          pipelineJobId: data.data.jobId,
+        })
+      } else {
+        toast.error(data.error?.message || '启动失败')
+      }
+    } catch {
+      toast.error('启动失败')
+    } finally {
+      setPipelineStarting(false)
     }
   }
 
@@ -401,6 +429,17 @@ export default function ProjectDetailPage() {
         </div>
         <div className="flex items-center gap-2">
           <Button
+            variant="primary"
+            size="sm"
+            onClick={handleStartPipeline}
+            loading={pipelineStarting}
+            disabled={pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING'}
+            className="gap-1.5"
+          >
+            <Rocket className="h-4 w-4" />
+            启动 AI 生产
+          </Button>
+          <Button
             variant="outline"
             size="sm"
             onClick={() => setShowToolbox(true)}
@@ -496,6 +535,17 @@ export default function ProjectDetailPage() {
                       <p className="text-sm text-gray-500 dark:text-gray-400">
                         暂无章节，启动流水线后自动生成
                       </p>
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={handleStartPipeline}
+                        loading={pipelineStarting}
+                        disabled={pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING'}
+                        className="mt-4 gap-1.5"
+                      >
+                        <Rocket className="h-4 w-4" />
+                        启动 AI 生产
+                      </Button>
                     </div>
                   ) : (
                     <div className="space-y-6">
