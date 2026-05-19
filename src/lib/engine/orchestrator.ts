@@ -24,10 +24,6 @@ import type {
 
 const MAX_RETRY_COUNT = 3
 
-type JsonValue = string | number | boolean | null | JsonObject | JsonArray
-type JsonObject = Record<string, JsonValue>
-type JsonArray = JsonValue[]
-
 interface GenerationResult {
   success: boolean
   chapterId: number
@@ -134,7 +130,7 @@ export async function runChapterGenerationPipeline(
     await prisma.novelChapter.update({
       where: { id: chapter.id },
       data: {
-        chapterOutline: outline as unknown as Record<string, unknown>,
+        chapterOutline: outline as any,
         lastAgentType: 'VALIDATOR',
       },
     })
@@ -245,7 +241,7 @@ export async function runChapterGenerationPipeline(
             content: polishedContent,
             status: ChapterStatus.REVIEWING,
             retryCount,
-            validationReport: validationReport as unknown as Record<string, unknown>,
+            validationReport: validationReport as any,
             wordCount: failedWordCount,
             lastAgentType: 'VALIDATOR',
           },
@@ -370,7 +366,7 @@ export async function runChapterGenerationPipeline(
         content: finalContent,
         summary: summaryData.summary,
         status: ChapterStatus.COMPLETED,
-        validationReport: validationReport as unknown as Record<string, unknown>,
+        validationReport: validationReport as any,
         wordCount: finalWordCount,
         lastAgentType: 'POLISHER',
       },
