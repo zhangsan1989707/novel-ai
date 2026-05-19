@@ -683,6 +683,7 @@ export default function ProjectDetailPage() {
                   onCancel={() => setActiveTab('dashboard')}
                   loading={submitting}
                   submitLabel="保存修改"
+                  showAdvancedFields={false}
                 />
               </CardContent>
             </Card>
@@ -891,6 +892,7 @@ export default function ProjectDetailPage() {
           onCancel={() => setShowEditModal(false)}
           loading={submitting}
           submitLabel="保存修改"
+          showAdvancedFields={false}
         />
       </Modal>
 

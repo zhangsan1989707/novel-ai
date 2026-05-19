@@ -42,8 +42,6 @@ const createProjectSchema = z.object({
   corePitch: z.string().optional(),
 })
 
-const updateProjectSchema = createProjectSchema.partial()
-
 function normalizeGeneratedTitle(text: string): string {
   return text
     .trim()
@@ -51,6 +49,26 @@ function normalizeGeneratedTitle(text: string): string {
     .replace(/["'`【】《》\[\]\s]+$/, '')
     .replace(/\s+/g, ' ')
     .slice(0, 50)
+}
+
+function buildFallbackTitle(input: {
+  corePitch?: string
+  description?: string
+  genre?: string
+}): string {
+  const pitch = input.corePitch || input.description || ''
+  const match = pitch.match(/([^，。！？,.;；]{2,18})/)
+  const core = match?.[1]?.trim()
+
+  if (core) {
+    return normalizeGeneratedTitle(`${core}记`)
+  }
+
+  if (input.genre) {
+    return `${input.genre}小说`
+  }
+
+  return '未命名小说项目'
 }
 
 async function generateNovelTitle(input: {
@@ -244,7 +262,7 @@ export async function POST(request: NextRequest) {
       creatorId = devUser.id
     }
 
-    const title = validatedData.title?.trim()
+  const title = validatedData.title?.trim()
       || await generateNovelTitle({
         corePitch: validatedData.corePitch,
         description: validatedData.description,
@@ -254,7 +272,11 @@ export async function POST(request: NextRequest) {
         lengthType: validatedData.lengthType,
         aiModelId: validatedData.aiModelId,
       })
-      || '未命名小说项目'
+      || buildFallbackTitle({
+        corePitch: validatedData.corePitch,
+        description: validatedData.description,
+        genre: validatedData.genre,
+      })
 
     const project = await prisma.novelProject.create({
       data: {

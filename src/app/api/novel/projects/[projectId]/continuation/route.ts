@@ -22,7 +22,7 @@ const continuationSchema = z.object({
   userInput: z.string().optional(),
   // 通用参数
   useContext: z.boolean().default(true),
-  contextChapterCount: z.number().int().min(1).max(10).default(3),
+  contextChapterCount: z.number().int().min(1).max(10).default(2),
   targetWordCount: z.number().int().positive().default(3000),
   temperature: z.number().min(0).max(2).default(0.7),
 })

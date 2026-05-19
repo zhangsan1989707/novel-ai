@@ -15,7 +15,7 @@ import { toProjectDTO, toChapterDTO } from '@/types/dto'
 const generateSchema = z.object({
   chapterId: z.number().int().positive(),
   useContext: z.boolean().default(true),
-  contextChapterCount: z.number().int().min(1).max(10).default(3),
+  contextChapterCount: z.number().int().min(1).max(10).default(2),
   targetWordCount: z.number().int().positive().default(3000),
   temperature: z.number().min(0).max(2).default(0.7),
   virtualWriterId: z.number().int().positive().optional(),
@@ -34,7 +34,6 @@ interface RouteParams {
  * SSE 流式生成章节内容
  */
 export async function POST(request: NextRequest, { params }: RouteParams) {
-  const startTime = Date.now()
   let projectIdNum: number | null = null
   let chapterId: number | undefined
   try {

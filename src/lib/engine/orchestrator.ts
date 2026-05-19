@@ -4,6 +4,7 @@
  */
 import { prisma } from '@/lib/prisma'
 import { ChapterStatus } from '@prisma/client'
+import { countChineseWords } from '@/lib/utils'
 import { plannerAgent } from '../agents/planner'
 import { writerAgent } from '../agents/writer'
 import { polisherAgent } from '../agents/polisher'
@@ -16,8 +17,6 @@ import { directChapter } from '../agents/narrative-director'
 import { chapterDeslopper } from '../agents/deslopper'
 import type {
   ChapterOutline,
-  CharacterProfile,
-  PlotlineData,
   ValidationReport,
   SSEEvent,
   AgentType,
@@ -26,8 +25,8 @@ import type {
 const MAX_RETRY_COUNT = 3
 
 type JsonValue = string | number | boolean | null | JsonObject | JsonArray
-interface JsonObject { [key: string]: JsonValue }
-interface JsonArray extends Array<JsonValue> {}
+type JsonObject = Record<string, JsonValue>
+type JsonArray = JsonValue[]
 
 interface GenerationResult {
   success: boolean
@@ -126,7 +125,7 @@ export async function runChapterGenerationPipeline(
       })),
       openPlotlines: openPlotlines.map(p => ({ id: p.id, description: p.description })),
       emotionalArc,
-      recentChapterCount: 3,
+      recentChapterCount: 2,
     })
 
     const outline = plannerResult.outline
@@ -135,7 +134,7 @@ export async function runChapterGenerationPipeline(
     await prisma.novelChapter.update({
       where: { id: chapter.id },
       data: {
-        chapterOutline: outline as any,
+        chapterOutline: outline as unknown as Record<string, unknown>,
         lastAgentType: 'VALIDATOR',
       },
     })
@@ -239,14 +238,15 @@ export async function runChapterGenerationPipeline(
 
       if (retryCount >= MAX_RETRY_COUNT) {
         // 超限降级输出，标记人工审核
+        const failedWordCount = countChineseWords(polishedContent)
         await prisma.novelChapter.update({
           where: { id: chapter.id },
           data: {
             content: polishedContent,
             status: ChapterStatus.REVIEWING,
             retryCount,
-            validationReport: validationReport as any,
-            wordCount: polishedContent.length,
+            validationReport: validationReport as unknown as Record<string, unknown>,
+            wordCount: failedWordCount,
             lastAgentType: 'VALIDATOR',
           },
         })
@@ -322,7 +322,7 @@ export async function runChapterGenerationPipeline(
     if (summaryData.plantedPlotlines.length > 0) {
       await memory.batchCreatePlotlines(
         projectId,
-        summaryData.plantedPlotlines.map((desc, i) => ({
+        summaryData.plantedPlotlines.map((desc) => ({
           description: desc,
           plantedAt: chapterNo,
           type: 'FORESHADOW',
@@ -356,11 +356,13 @@ export async function runChapterGenerationPipeline(
     await storyState.recordStoryEvent(
       projectId,
       'CHAPTER_COMPLETED',
-      `第${chapterNo}章生成完成，字数${finalContent.length}`,
+      `第${chapterNo}章生成完成，字数${countChineseWords(finalContent)}`,
       chapterNo
     )
 
     // ========== 保存最终结果 ==========
+    const finalWordCount = countChineseWords(finalContent)
+    const polishedWordCount = countChineseWords(polishedContent)
     await prisma.novelChapter.update({
       where: { id: chapter.id },
       data: {
@@ -368,8 +370,8 @@ export async function runChapterGenerationPipeline(
         content: finalContent,
         summary: summaryData.summary,
         status: ChapterStatus.COMPLETED,
-        validationReport: validationReport as any,
-        wordCount: finalContent.length,
+        validationReport: validationReport as unknown as Record<string, unknown>,
+        wordCount: finalWordCount,
         lastAgentType: 'POLISHER',
       },
     })
@@ -395,7 +397,7 @@ export async function runChapterGenerationPipeline(
       type: 'done',
       data: {
         chapterId: chapter.id,
-        wordCount: polishedContent.length,
+        wordCount: polishedWordCount,
         duration: Date.now() - startTime,
       },
     })

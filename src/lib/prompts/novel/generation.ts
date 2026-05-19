@@ -51,7 +51,7 @@ export function buildNovelGenerationPrompt(
     // 注意：context.previousChapters 已经在 context-manager 中正确处理
     for (const chapter of context.previousChapters) {
       // 取章节开头部分，确保故事的延续性和连贯性
-      const relevantContent = chapter.content?.slice(0, 500) || ''
+      const relevantContent = chapter.content?.slice(0, 300) || ''
       parts.push(`\n=== 第${chapter.chapterNumber}章 "${chapter.title}" ===`)
       parts.push(relevantContent)
     }

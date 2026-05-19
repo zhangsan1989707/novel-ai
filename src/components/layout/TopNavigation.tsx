@@ -2,10 +2,9 @@
 
 import { useRouter, usePathname } from 'next/navigation'
 import { Button } from '@/components/ui'
-import { BookOpen, Settings, DollarSign, Search, TrendingUp, MoreVertical } from 'lucide-react'
+import { BookOpen, Settings, DollarSign, Search, TrendingUp } from 'lucide-react'
 import { ThemeToggle } from './ThemeToggle'
 import { HelpModal } from './HelpModal'
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui'
 
 interface TopNavigationProps {
   children: React.ReactNode
@@ -43,7 +42,7 @@ export function TopNavigation({ children }: TopNavigationProps) {
             </div>
 
             <nav className="hidden md:flex items-center gap-1">
-              {primaryNavItems.map((item) => {
+              {[...primaryNavItems, ...secondaryNavItems].map((item) => {
                 const Icon = item.icon
                 const active = isActive(item.href)
                 return (
@@ -58,25 +57,6 @@ export function TopNavigation({ children }: TopNavigationProps) {
                   </Button>
                 )
               })}
-              <DropdownMenu>
-                <DropdownMenuTrigger>
-                  <Button variant="ghost" size="sm" className="gap-1.5 text-gray-500">
-                    <MoreVertical className="h-4 w-4" />
-                    更多
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                  {secondaryNavItems.map((item) => {
-                    const Icon = item.icon
-                    return (
-                      <DropdownMenuItem key={item.href} onClick={() => router.push(item.href)}>
-                        <Icon className="h-4 w-4 mr-2 text-gray-400" />
-                        {item.label}
-                      </DropdownMenuItem>
-                    )
-                  })}
-                </DropdownMenuContent>
-              </DropdownMenu>
             </nav>
 
             <div className="flex items-center gap-3">

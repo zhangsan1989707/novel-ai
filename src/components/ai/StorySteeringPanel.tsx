@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Card, CardContent, Button, toast } from '@/components/ui'
 import { Sliders, Save } from 'lucide-react'
 import type { StorySteering } from '@/types'
@@ -35,12 +35,6 @@ export function StorySteeringPanel({ projectId, initialValues, onSave }: StorySt
   })
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
-    if (initialValues) {
-      setSteering(prev => ({ ...prev, ...initialValues }))
-    }
-  }, [initialValues])
-
   const handleSliderChange = (key: keyof StorySteering, value: number) => {
     setSteering(prev => ({ ...prev, [key]: value }))
   }
@@ -71,6 +65,12 @@ export function StorySteeringPanel({ projectId, initialValues, onSave }: StorySt
     { label: '爽文模式', values: { pace: 0.8, conflictIntensity: 0.8, darkness: 0.2, humor: 0.4, romance: 0.3, powerGrowth: 0.7, mysteryDensity: 0.3 } },
     { label: '烧脑模式', values: { pace: 0.4, conflictIntensity: 0.6, darkness: 0.5, humor: 0.2, romance: 0.2, powerGrowth: 0.4, mysteryDensity: 0.8 } },
     { label: '虐恋模式', values: { pace: 0.5, conflictIntensity: 0.6, darkness: 0.6, humor: 0.2, romance: 0.9, powerGrowth: 0.3, mysteryDensity: 0.4 } },
+    { label: '悬疑模式', values: { pace: 0.5, conflictIntensity: 0.7, darkness: 0.5, humor: 0.1, romance: 0.1, powerGrowth: 0.4, mysteryDensity: 0.9 } },
+    { label: '群像模式', values: { pace: 0.6, conflictIntensity: 0.6, darkness: 0.3, humor: 0.3, romance: 0.3, powerGrowth: 0.5, mysteryDensity: 0.5 } },
+    { label: '慢热模式', values: { pace: 0.35, conflictIntensity: 0.45, darkness: 0.25, humor: 0.35, romance: 0.25, powerGrowth: 0.45, mysteryDensity: 0.45 } },
+    { label: '恋爱模式', values: { pace: 0.55, conflictIntensity: 0.45, darkness: 0.2, humor: 0.35, romance: 0.95, powerGrowth: 0.35, mysteryDensity: 0.25 } },
+    { label: '黑深残', values: { pace: 0.45, conflictIntensity: 0.85, darkness: 0.95, humor: 0.05, romance: 0.1, powerGrowth: 0.25, mysteryDensity: 0.7 } },
+    { label: '极爽推进', values: { pace: 0.92, conflictIntensity: 0.9, darkness: 0.15, humor: 0.35, romance: 0.2, powerGrowth: 0.9, mysteryDensity: 0.25 } },
     { label: '默认', values: { pace: 0.5, conflictIntensity: 0.5, darkness: 0.3, humor: 0.3, romance: 0.2, powerGrowth: 0.5, mysteryDensity: 0.3 } },
   ]
 

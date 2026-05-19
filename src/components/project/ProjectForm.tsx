@@ -88,22 +88,22 @@ interface ProjectFormProps {
   onCancel?: () => void
   loading?: boolean
   submitLabel?: string
+  showAdvancedFields?: boolean
 }
 
-export function ProjectForm({ defaultValues, onSubmit, onCancel, loading, submitLabel }: ProjectFormProps) {
+export function ProjectForm({ defaultValues, onSubmit, onCancel, loading, submitLabel, showAdvancedFields = true }: ProjectFormProps) {
   const router = useRouter()
   const [aiConfigs, setAiConfigs] = useState<AIConfig[]>([])
   const [loadingConfigs, setLoadingConfigs] = useState(true)
-  const [showMoreSettings, setShowMoreSettings] = useState(false)
+  const [showMoreSettings, setShowMoreSettings] = useState(() =>
+    Boolean(defaultValues?.worldSetting || defaultValues?.powerSystem || defaultValues?.protagonistProfile)
+  )
   const [generatingSynopsis, setGeneratingSynopsis] = useState(false)
   const [generatingSettings, setGeneratingSettings] = useState(false)
   const [showInspiration, setShowInspiration] = useState(true)
 
   useEffect(() => {
     fetchAIConfigs()
-    if (defaultValues?.worldSetting || defaultValues?.powerSystem || defaultValues?.protagonistProfile) {
-      setShowMoreSettings(true)
-    }
   }, [])
 
   const fetchAIConfigs = async () => {
@@ -264,6 +264,17 @@ export function ProjectForm({ defaultValues, onSubmit, onCancel, loading, submit
       totalVolumes: data.totalVolumes ? Number(data.totalVolumes) : 4,
       aiModelId: data.aiModelId ? Number(data.aiModelId) : undefined,
     }
+
+    if (!showAdvancedFields) {
+      processed.worldSetting = defaultValues?.worldSetting
+      processed.powerSystem = defaultValues?.powerSystem
+      processed.protagonistProfile = defaultValues?.protagonistProfile
+      processed.protagonistGoal = defaultValues?.protagonistGoal
+      processed.antagonistSetting = defaultValues?.antagonistSetting
+      processed.endingPlan = defaultValues?.endingPlan
+      processed.writingPrompt = defaultValues?.writingPrompt
+    }
+
     return onSubmit(processed)
   }
 
@@ -419,20 +430,26 @@ export function ProjectForm({ defaultValues, onSubmit, onCancel, loading, submit
 
       {/* 更多设定 - 可折叠 */}
       <div className="border-t pt-4">
-        <button
-          type="button"
-          onClick={() => setShowMoreSettings(!showMoreSettings)}
-          className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 transition-colors"
-        >
-          {showMoreSettings ? (
-            <ChevronUp className="h-4 w-4" />
-          ) : (
-            <ChevronDown className="h-4 w-4" />
-          )}
-          {showMoreSettings ? '收起' : '更多'}小说设定
-        </button>
+        {!showAdvancedFields ? (
+          <div className="rounded-lg border border-dashed border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 p-4 text-sm text-gray-500 dark:text-gray-400">
+            世界观、力量体系、主角/反派设定、结局规划等内容由系统 AI 自动维护，默认不对外开放编辑。
+          </div>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={() => setShowMoreSettings(!showMoreSettings)}
+              className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 transition-colors"
+            >
+              {showMoreSettings ? (
+                <ChevronUp className="h-4 w-4" />
+              ) : (
+                <ChevronDown className="h-4 w-4" />
+              )}
+              {showMoreSettings ? '收起' : '更多'}小说设定
+            </button>
 
-        {showMoreSettings && (
+            {showMoreSettings && (
           <div className="space-y-4 mt-4">
             <div className="flex justify-end">
               <Button
@@ -505,6 +522,8 @@ export function ProjectForm({ defaultValues, onSubmit, onCancel, loading, submit
               {...register('writingPrompt')}
             />
           </div>
+            )}
+          </>
         )}
       </div>
 

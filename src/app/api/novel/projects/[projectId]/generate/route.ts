@@ -14,7 +14,7 @@ import { toProjectDTO, toChapterDTO } from '@/types/dto'
 const generateSchema = z.object({
   chapterId: z.number().int().positive(),
   useContext: z.boolean().default(true),
-  contextChapterCount: z.number().int().min(1).max(10).default(3),
+  contextChapterCount: z.number().int().min(1).max(10).default(2),
   targetWordCount: z.number().int().positive().default(3000),
   temperature: z.number().min(0).max(2).default(0.7),
 })
@@ -163,7 +163,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const wordCount = countChineseWords(extractedContent)
 
     // 保存生成内容
-    const oldWordCount = chapter.content?.length || 0
+    const oldWordCount = chapter.content ? countChineseWords(chapter.content) : 0
     const wordCountDiff = wordCount - oldWordCount
 
     const updateData: Record<string, unknown> = {
