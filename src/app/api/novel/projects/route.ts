@@ -8,6 +8,9 @@ import { getCurrentUserId } from '@/lib/auth'
 // Schema 验证
 // ============================================
 
+const PLATFORM_ENUM = z.enum(['QIDIAN', 'FANQIE', 'FEILU', 'JINJIANG', 'QIMAO'])
+const LENGTH_TYPE_ENUM = z.enum(['SHORT', 'MEDIUM', 'LONG', 'ULTRA_LONG'])
+
 const createProjectSchema = z.object({
   title: z.string().min(1, '标题不能为空').max(200),
   description: z.string().optional(),
@@ -33,6 +36,9 @@ const createProjectSchema = z.object({
   totalVolumes: z.coerce.number().int().min(1).max(10).default(4),
   aiModelId: z.coerce.number().int().positive().optional(),
   targetAudience: z.enum(['MALE', 'FEMALE']).optional(),
+  platform: PLATFORM_ENUM.optional(),
+  lengthType: LENGTH_TYPE_ENUM.optional(),
+  corePitch: z.string().optional(),
 })
 
 const updateProjectSchema = createProjectSchema.partial()
