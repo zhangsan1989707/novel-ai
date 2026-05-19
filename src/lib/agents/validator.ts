@@ -2,6 +2,7 @@
  * 校验 Agent - 一致性检查
  */
 import { AIService } from '@/lib/ai/service'
+import type { AIProvider } from '@/lib/ai/types'
 import { buildValidatorPrompt as buildValidatorPromptV1 } from '../prompts/chapter/validating'
 import { buildValidatorPrompt as buildValidatorPromptV2, type ValidationReport as ValidationReportV2 } from '../prompts/chapter/validating-v2'
 import type { CharacterProfile, PlotlineData } from '../engine/types'
@@ -17,6 +18,7 @@ interface ValidatorInput {
   chapterTitle?: string
   chapterGoal?: string
   useEnhancedPrompt?: boolean
+  provider?: AIProvider
 }
 
 // 默认使用增强版校验
@@ -29,7 +31,7 @@ export async function validatorAgent(
   const { projectId, chapterNo, newChapterContent, characterProfiles, recentSummaries, worldSetting, openPlotlines, chapterTitle, chapterGoal } = input
 
   // 获取可追踪的 AI Provider
-  const provider = await AIService.createProvider({
+  const provider = input.provider || await AIService.createProvider({
     projectId,
     usageType: 'VALIDATOR',
   })

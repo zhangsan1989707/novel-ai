@@ -3,6 +3,7 @@
  */
 import { prisma } from '@/lib/prisma'
 import { AIService } from '@/lib/ai/service'
+import type { AIProvider } from '@/lib/ai/types'
 import { logger } from '@/lib/logger'
 import { buildPlannerPrompt as buildPlannerPromptV2 } from '../prompts/chapter/planning-v2'
 import type { ChapterOutline, AgentContext } from '../engine/types'
@@ -15,6 +16,7 @@ interface PlannerInput extends AgentContext {
   recentChapterCount: number
   targetWordCount: number
   useEnhancedPrompt?: boolean
+  provider?: AIProvider
 }
 
 // 默认使用增强版提示词
@@ -60,7 +62,7 @@ export async function plannerAgent(
   const { projectId, chapterNo, ...context } = input
 
   // 获取可追踪的 AI Provider
-  const provider = await AIService.createProvider({
+  const provider = input.provider || await AIService.createProvider({
     projectId,
     usageType: 'PLANNER',
   })

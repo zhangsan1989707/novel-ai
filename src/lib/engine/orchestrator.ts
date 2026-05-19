@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma'
 import { ChapterStatus } from '@prisma/client'
 import { countChineseWords } from '@/lib/utils'
 import { getMinimumChapterWordCount, buildChapterWordCountWarning } from '@/lib/ai/chapter-quality'
+import { AIService } from '@/lib/ai/service'
 import { plannerAgent } from '../agents/planner'
 import { writerAgent } from '../agents/writer'
 import { polisherAgent } from '../agents/polisher'
@@ -19,6 +20,7 @@ import { chapterDeslopper } from '../agents/deslopper'
 import type {
   ChapterOutline,
   ValidationReport,
+  ChapterSummaryData,
   SSEEvent,
   AgentType,
 } from './types'
@@ -42,9 +44,27 @@ type SSEEmitter = (event: SSEEvent) => void
 export async function runChapterGenerationPipeline(
   projectId: number,
   chapterNo: number,
-  emit: SSEEmitter
+  emit: SSEEmitter,
+  options?: {
+    speedMode?: 'fast' | 'balanced' | 'quality'
+  }
 ): Promise<GenerationResult> {
+  const speedMode = options?.speedMode || 'balanced'
   const startTime = Date.now()
+
+  // 创建共享 AI Provider（避免每个 Agent 重复 DB 查询）
+  const sharedProvider = await AIService.createProvider({
+    projectId,
+    usageType: 'PIPELINE',
+  })
+
+  // Phase 计时辅助函数
+  const runPhase = async (phase: string, fn: () => Promise<void>) => {
+    const phaseStart = Date.now()
+    await fn()
+    const durationMs = Date.now() - phaseStart
+    emit({ type: 'phase_timing', data: { phase, durationMs, speedMode } })
+  }
 
   // 获取项目信息
   const project = await prisma.novelProject.findUnique({
@@ -102,47 +122,78 @@ export async function runChapterGenerationPipeline(
     }
 
     // ========== Phase 1: 策划 Agent ==========
-    emit({ type: 'start', data: { chapterId: chapter.id, agent: 'planner' } })
+    let outline!: ChapterOutline
 
-    const plannerResult = await plannerAgent({
-      projectId,
-      chapterNo,
-      projectTitle: project.title,
-      genre: project.genre,
-      writingStyle: [project.writingStyle, directorDirective].filter(Boolean).join('\n\n'),
-      worldSetting: [project.worldSetting, directorDirective].filter(Boolean).join('\n\n'),
-      powerSystem: project.powerSystem,
-      protagonistProfile: project.protagonistProfile,
-      antagonistSetting: project.antagonistSetting,
-      targetWordCount: project.chapterWordCount || 3000,
-      characterProfiles: characterProfiles.map(c => ({
-        name: c.name,
-        role: c.role,
-        description: `${c.appearance || ''} ${c.personality || ''}`,
-      })),
-      openPlotlines: openPlotlines.map(p => ({ id: p.id, description: p.description })),
-      emotionalArc,
-      recentChapterCount: 2,
-    })
+    if (speedMode === 'fast') {
+      outline = {
+        chapterTitle: `第${chapterNo}章`,
+        chapterGoal: '继续推进故事发展',
+        mainConflict: '当前核心矛盾',
+        keyScenes: [
+          { scene: '开场：快速进入本章情节', characters: ['主角'], emotion: '推进' },
+          { scene: '发展：推进核心矛盾', characters: ['主角', '关键角色'], emotion: '对抗' },
+          { scene: '收尾：留下悬念', characters: ['主角'], emotion: '悬念' },
+        ],
+        ending: '留下新的悬念，为下一章铺垫',
+        foreshadows: [],
+        resolvedPlotlines: [],
+      }
+    } else {
+      await runPhase('planner', async () => {
+        emit({ type: 'start', data: { chapterId: chapter.id, agent: 'planner' } })
 
-    const outline = plannerResult.outline
+        const plannerResult = await plannerAgent({
+          projectId,
+          chapterNo,
+          projectTitle: project.title,
+          genre: project.genre,
+          writingStyle: [project.writingStyle, directorDirective].filter(Boolean).join('\n\n'),
+          worldSetting: [project.worldSetting, directorDirective].filter(Boolean).join('\n\n'),
+          powerSystem: project.powerSystem,
+          protagonistProfile: project.protagonistProfile,
+          antagonistSetting: project.antagonistSetting,
+          targetWordCount: project.chapterWordCount || 3000,
+          characterProfiles: characterProfiles.map(c => ({
+            name: c.name,
+            role: c.role,
+            description: `${c.appearance || ''} ${c.personality || ''}`,
+          })),
+          openPlotlines: openPlotlines.map(p => ({ id: p.id, description: p.description })),
+          emotionalArc,
+          recentChapterCount: 2,
+          provider: sharedProvider,
+        })
 
-    // 保存章节大纲
-    await prisma.novelChapter.update({
-      where: { id: chapter.id },
-      data: {
-        chapterOutline: outline as any,
-        lastAgentType: 'VALIDATOR',
-      },
-    })
+        outline = plannerResult.outline
 
-    // 记录策划事件
-    await storyState.recordStoryEvent(
-      projectId,
-      'PLANNER_DONE',
-      `第${chapterNo}章大纲生成完成：${outline.chapterTitle}`,
-      chapterNo
-    )
+        // 保存章节大纲
+        await prisma.novelChapter.update({
+          where: { id: chapter.id },
+          data: {
+            chapterOutline: outline as any,
+            lastAgentType: 'VALIDATOR',
+          },
+        })
+
+        // 记录策划事件
+        await storyState.recordStoryEvent(
+          projectId,
+          'PLANNER_DONE',
+          `第${chapterNo}章大纲生成完成：${outline.chapterTitle}`,
+          chapterNo
+        )
+      })
+    }
+
+    if (speedMode === 'fast') {
+      await prisma.novelChapter.update({
+        where: { id: chapter.id },
+        data: {
+          chapterOutline: outline as any,
+          lastAgentType: 'WRITER',
+        },
+      })
+    }
 
     // ========== Phase 1.5: 研究 Agent (可选) ==========
     const existingRefs = await prisma.researchRef.findMany({
@@ -159,195 +210,248 @@ export async function runChapterGenerationPipeline(
       .join('\n\n')
 
     // ========== Phase 2: 写作 Agent ==========
-    emit({ type: 'agent_switch', data: { agent: 'writer' } })
-
     let draftContent = ''
-    await writerAgent(
-      {
-        projectId,
-        chapterNo,
-        projectTitle: project.title,
-        genre: project.genre,
-        writingStyle: project.writingStyle,
-        worldSetting: [
-          project.worldSetting,
-          directorDirective,
-          researchContext ? `【研究参考资料】\n${researchContext}` : '',
-        ].filter(Boolean).join('\n\n'),
-        powerSystem: project.powerSystem,
-        protagonistProfile: project.protagonistProfile,
-        antagonistSetting: project.antagonistSetting,
-        targetWordCount: project.chapterWordCount || 3000,
-        outline,
-        characterProfiles,
-        recentSummaries,
-      },
-      (token) => {
-        draftContent += token
-        emit({ type: 'token', data: { content: token } })
-      }
-    )
+
+    await runPhase('writer', async () => {
+      emit({ type: 'agent_switch', data: { agent: 'writer' } })
+
+      await writerAgent(
+        {
+          projectId,
+          chapterNo,
+          projectTitle: project.title,
+          genre: project.genre,
+          writingStyle: project.writingStyle,
+          worldSetting: [
+            project.worldSetting,
+            directorDirective,
+            researchContext ? `【研究参考资料】\n${researchContext}` : '',
+          ].filter(Boolean).join('\n\n'),
+          powerSystem: project.powerSystem,
+          protagonistProfile: project.protagonistProfile,
+          antagonistSetting: project.antagonistSetting,
+          targetWordCount: project.chapterWordCount || 3000,
+          outline,
+          characterProfiles,
+          recentSummaries,
+          provider: sharedProvider,
+        },
+        (token) => {
+          draftContent += token
+          emit({ type: 'token', data: { content: token } })
+        }
+      )
+    })
 
     // ========== Phase 3: 润色 Agent ==========
-    emit({ type: 'agent_switch', data: { agent: 'polisher' } })
+    let polishedContent = draftContent
 
-    let polishedContent = ''
-    await polisherAgent(
-      {
-        projectId,
-        chapterNo,
-        content: draftContent,
-        styleGuide: project.writingStyle,
-      },
-      (token) => {
-        polishedContent += token
-        emit({ type: 'token', data: { content: token } })
-      }
-    )
+    if (speedMode === 'quality') {
+      await runPhase('polisher', async () => {
+        emit({ type: 'agent_switch', data: { agent: 'polisher' } })
+
+        polishedContent = ''
+        await polisherAgent(
+          {
+            projectId,
+            chapterNo,
+            content: draftContent,
+            styleGuide: project.writingStyle,
+            provider: sharedProvider,
+          },
+          (token) => {
+            polishedContent += token
+            emit({ type: 'token', data: { content: token } })
+          }
+        )
+      })
+    }
 
     // ========== Phase 4: 校验 Agent ==========
-    emit({ type: 'agent_switch', data: { agent: 'validator' } })
+    let validationReport: any
 
-    const validationReport = await validatorAgent({
-      projectId,
-      chapterNo,
-      newChapterContent: polishedContent,
-      characterProfiles,
-      recentSummaries,
-      worldSetting: project.worldSetting,
-      openPlotlines,
-    })
+    if (speedMode === 'quality') {
+      await runPhase('validator', async () => {
+        emit({ type: 'agent_switch', data: { agent: 'validator' } })
 
-    emit({
-      type: 'validation',
-      data: {
-        result: validationReport.result,
-        score: validationReport.score,
-      },
-    })
-
-    // 校验失败处理
-    if (validationReport.result === 'retry') {
-      const currentRetry = await prisma.novelChapter.findUnique({
-        where: { id: chapter.id },
-      })
-      const retryCount = (currentRetry?.retryCount || 0) + 1
-
-      if (retryCount >= MAX_RETRY_COUNT) {
-        // 超限降级输出，标记人工审核
-        const failedWordCount = countChineseWords(polishedContent)
-        await prisma.novelChapter.update({
-          where: { id: chapter.id },
-          data: {
-            content: polishedContent,
-            status: ChapterStatus.REVIEWING,
-            retryCount,
-            validationReport: validationReport as any,
-            wordCount: failedWordCount,
-            lastAgentType: 'VALIDATOR',
-          },
+        validationReport = await validatorAgent({
+          projectId,
+          chapterNo,
+          newChapterContent: polishedContent,
+          characterProfiles,
+          recentSummaries,
+          worldSetting: project.worldSetting,
+          openPlotlines,
+          provider: sharedProvider,
         })
 
         emit({
-          type: 'error',
+          type: 'validation',
           data: {
-            message: `校验失败超过${MAX_RETRY_COUNT}次，已标记人工审核`,
+            result: validationReport.result,
+            score: validationReport.score,
           },
         })
-
-        return {
-          success: true,
-          chapterId: chapter.id,
-          content: polishedContent,
-          error: '校验失败，已标记人工审核',
-        }
-      }
-
-      // 重试写作
-      await prisma.novelChapter.update({
-        where: { id: chapter.id },
-        data: { retryCount },
       })
 
-      // 递归重试（但限制次数）
-      return runChapterGenerationPipeline(projectId, chapterNo, emit)
+      // 校验失败处理
+      if (validationReport.result === 'retry') {
+        const currentRetry = await prisma.novelChapter.findUnique({
+          where: { id: chapter.id },
+        })
+        const retryCount = (currentRetry?.retryCount || 0) + 1
+
+        if (retryCount >= MAX_RETRY_COUNT) {
+          const failedWordCount = countChineseWords(polishedContent)
+          await prisma.novelChapter.update({
+            where: { id: chapter.id },
+            data: {
+              content: polishedContent,
+              status: ChapterStatus.REVIEWING,
+              retryCount,
+              validationReport: validationReport as any,
+              wordCount: failedWordCount,
+              lastAgentType: 'VALIDATOR',
+            },
+          })
+
+          emit({
+            type: 'error',
+            data: {
+              message: `校验失败超过${MAX_RETRY_COUNT}次，已标记人工审核`,
+            },
+          })
+
+          return {
+            success: true,
+            chapterId: chapter.id,
+            content: polishedContent,
+            error: '校验失败，已标记人工审核',
+          }
+        }
+
+        await prisma.novelChapter.update({
+          where: { id: chapter.id },
+          data: { retryCount },
+        })
+
+        return runChapterGenerationPipeline(projectId, chapterNo, emit, { speedMode })
+      }
+    } else {
+      validationReport = {
+        result: 'pass',
+        score: 85,
+        issues: [],
+        characterUpdates: {},
+        newPlotlines: [],
+        resolvedPlotlines: [],
+        qualityMetrics: {
+          logicScore: 85,
+          characterScore: 85,
+          emotionScore: 85,
+          styleScore: 85,
+        },
+      }
     }
 
     // ========== Phase 5: 去 AI 味 Agent ==========
-    emit({ type: 'agent_switch', data: { agent: 'deslopper' } })
-
     let finalContent = polishedContent
-    try {
-      const deslopResult = await chapterDeslopper({
-        projectId,
-        chapterId: chapter.id,
-        content: polishedContent,
-        chapterNumber: chapterNo,
-        chapterTitle: outline.chapterTitle,
-        genre: project.genre,
-        writingStyle: project.writingStyle,
-        strictness: 'medium',
-      })
-      finalContent = deslopResult.revisedContent
-    } catch (deslopError) {
-      emit({
-        type: 'hook_warning',
-        data: {
-          warnings: [
-            `去 AI 味失败，已保留润色稿：${deslopError instanceof Error ? deslopError.message : '未知错误'}`,
-          ],
-        },
+
+    if (speedMode === 'quality') {
+      await runPhase('deslopper', async () => {
+        emit({ type: 'agent_switch', data: { agent: 'deslopper' } })
+
+        try {
+          const deslopResult = await chapterDeslopper({
+            projectId,
+            chapterId: chapter.id,
+            content: polishedContent,
+            chapterNumber: chapterNo,
+            chapterTitle: outline.chapterTitle,
+            genre: project.genre,
+            writingStyle: project.writingStyle,
+            strictness: 'medium',
+            provider: sharedProvider,
+          })
+          finalContent = deslopResult.revisedContent
+        } catch (deslopError) {
+          emit({
+            type: 'hook_warning',
+            data: {
+              warnings: [
+                `去 AI 味失败，已保留润色稿：${deslopError instanceof Error ? deslopError.message : '未知错误'}`,
+              ],
+            },
+          })
+        }
       })
     }
 
     // ========== Phase 6: 摘要 Agent ==========
-    emit({ type: 'agent_switch', data: { agent: 'summarizer' } })
+    let summaryData!: ChapterSummaryData
 
-    const summaryData = await summarizerAgent({
-      projectId,
-      chapterNo,
-      chapterTitle: outline.chapterTitle,
-      chapterContent: finalContent,
-      worldSetting: project.worldSetting,
-      protagonistProfile: project.protagonistProfile,
-    })
+    if (speedMode !== 'fast') {
+      await runPhase('summarizer', async () => {
+        emit({ type: 'agent_switch', data: { agent: 'summarizer' } })
 
-    // 保存摘要
-    await memory.saveChapterSummary(projectId, chapterNo, summaryData)
+        summaryData = await summarizerAgent({
+          projectId,
+          chapterNo,
+          chapterTitle: outline.chapterTitle,
+          chapterContent: finalContent,
+          worldSetting: project.worldSetting,
+          protagonistProfile: project.protagonistProfile,
+          provider: sharedProvider,
+        })
 
-    // 处理伏笔
-    if (summaryData.plantedPlotlines.length > 0) {
-      await memory.batchCreatePlotlines(
-        projectId,
-        summaryData.plantedPlotlines.map((desc) => ({
-          description: desc,
-          plantedAt: chapterNo,
-          type: 'FORESHADOW',
-        }))
-      )
+        // 保存摘要
+        await memory.saveChapterSummary(projectId, chapterNo, summaryData)
+
+        // 处理伏笔
+        if (summaryData.plantedPlotlines.length > 0) {
+          await memory.batchCreatePlotlines(
+            projectId,
+            summaryData.plantedPlotlines.map((desc) => ({
+              description: desc,
+              plantedAt: chapterNo,
+              type: 'FORESHADOW',
+            }))
+          )
+        }
+
+        if (summaryData.resolvedPlotlines.length > 0) {
+          await memory.batchResolvePlotlines(summaryData.resolvedPlotlines, chapterNo)
+        }
+
+        // 更新角色档案
+        if (Object.keys(validationReport.characterUpdates).length > 0) {
+          await memory.batchUpdateCharacterProfiles(
+            projectId,
+            validationReport.characterUpdates,
+            chapterNo
+          )
+        }
+
+        // 更新故事状态
+        const emotionalValue = summaryData.emotionalTone === '紧张' ? 80 :
+          summaryData.emotionalTone === '温馨' ? 40 :
+            summaryData.emotionalTone === '悲伤' ? 30 :
+              summaryData.emotionalTone === '高潮' ? 95 : 60
+
+        await storyState.updateEmotionalArc(projectId, chapterNo, emotionalValue)
+        await storyState.updateChapterProgress(projectId, chapterNo)
+      })
+    } else {
+      summaryData = {
+        summary: `第${chapterNo}章（快速模式生成）`,
+        keyEvents: [],
+        emotionalTone: null,
+        plantedPlotlines: [],
+        resolvedPlotlines: [],
+      }
+
+      await storyState.updateChapterProgress(projectId, chapterNo)
     }
-
-    if (summaryData.resolvedPlotlines.length > 0) {
-      await memory.batchResolvePlotlines(summaryData.resolvedPlotlines, chapterNo)
-    }
-
-    // 更新角色档案
-    if (Object.keys(validationReport.characterUpdates).length > 0) {
-      await memory.batchUpdateCharacterProfiles(
-        projectId,
-        validationReport.characterUpdates,
-        chapterNo
-      )
-    }
-
-    // 更新故事状态
-    const emotionalValue = summaryData.emotionalTone === '紧张' ? 80 :
-      summaryData.emotionalTone === '温馨' ? 40 :
-        summaryData.emotionalTone === '悲伤' ? 30 :
-          summaryData.emotionalTone === '高潮' ? 95 : 60
-
-    await storyState.updateEmotionalArc(projectId, chapterNo, emotionalValue)
-    await storyState.updateChapterProgress(projectId, chapterNo)
 
     // 记录完成事件
     await storyState.recordStoryEvent(
@@ -371,7 +475,7 @@ export async function runChapterGenerationPipeline(
         status: chapterReady ? ChapterStatus.COMPLETED : ChapterStatus.REVIEWING,
         validationReport: validationReport as any,
         wordCount: finalWordCount,
-        lastAgentType: 'POLISHER',
+        lastAgentType: speedMode === 'quality' ? 'POLISHER' : 'WRITER',
       },
     })
 

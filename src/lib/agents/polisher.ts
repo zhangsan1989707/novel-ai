@@ -2,6 +2,7 @@
  * 润色 Agent - 文风优化
  */
 import { AIService } from '@/lib/ai/service'
+import type { AIProvider } from '@/lib/ai/types'
 import { buildPolisherPrompt as buildPolisherPromptV1 } from '../prompts/chapter/polishing'
 import { buildPolisherPrompt as buildPolisherPromptV2 } from '../prompts/chapter/polishing-v2'
 
@@ -14,6 +15,7 @@ interface PolisherInput {
   genre?: string | null
   chapterTitle?: string
   useEnhancedPrompt?: boolean
+  provider?: AIProvider
 }
 
 // 默认使用增强版提示词
@@ -26,7 +28,7 @@ export async function polisherAgent(
   const { projectId, chapterNo, content, styleGuide } = input
 
   // 获取可追踪的 AI Provider
-  const provider = await AIService.createProvider({
+  const provider = input.provider || await AIService.createProvider({
     projectId,
     usageType: 'POLISHER',
   })

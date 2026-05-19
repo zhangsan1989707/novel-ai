@@ -1,4 +1,5 @@
 import { AIService } from '@/lib/ai/service'
+import type { AIProvider } from '@/lib/ai/types'
 import { scanForbiddenWords, scanForbiddenPatterns, scanWordsByLevel, getAntiAiPrompt, type ForbiddenWord } from '@/lib/knowledge/anti-ai'
 import { buildChapterDeslopPrompt } from '@/lib/prompts/deslop'
 
@@ -12,6 +13,7 @@ interface ChapterDeslopInput {
   writingStyle?: string | null
   strictness?: 'light' | 'medium' | 'heavy'
   autoOptimize?: boolean
+  provider?: AIProvider
 }
 
 interface DeslopChange {
@@ -72,7 +74,7 @@ export async function chapterDeslopper(input: ChapterDeslopInput): Promise<Chapt
   }
 
   // 获取项目信息构建上下文
-  const provider = await AIService.createProvider({
+  const provider = input.provider || await AIService.createProvider({
     projectId,
     usageType: 'DESLOPPER',
   })
@@ -91,7 +93,7 @@ export async function chapterDeslopper(input: ChapterDeslopInput): Promise<Chapt
   // 调用AI进行改写
   const result = await provider.generate(prompt, {
     temperature: 0.7,
-    maxTokens: Math.min(8192, Math.max(4000, Math.ceil(content.length * 1.5))),
+    maxTokens: Math.min(4096, Math.max(2000, Math.ceil(content.length * 0.6))),
   })
 
   // 解析结果

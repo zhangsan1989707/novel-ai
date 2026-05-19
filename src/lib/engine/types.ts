@@ -88,12 +88,18 @@ export interface ValidationIssue {
 }
 
 export interface ValidationReport {
-  result: 'pass' | 'retry'
+  result: 'pass' | 'retry' | 'fail'
   score: number  // 0-100
   issues: ValidationIssue[]
   characterUpdates: Record<string, Record<string, unknown>>
   newPlotlines: string[]
   resolvedPlotlines: string[]
+  qualityMetrics?: {
+    logicScore: number
+    characterScore: number
+    emotionScore: number
+    styleScore: number
+  }
 }
 
 // 章节摘要
@@ -147,6 +153,6 @@ export interface AgentResult {
 
 // SSE 事件类型
 export interface SSEEvent {
-  type: 'start' | 'token' | 'agent_switch' | 'validation' | 'done' | 'error' | 'wordCount' | 'research' | 'hook_warning'
+  type: 'start' | 'token' | 'agent_switch' | 'validation' | 'done' | 'error' | 'wordCount' | 'research' | 'hook_warning' | 'phase_timing'
   data: Record<string, unknown>
 }

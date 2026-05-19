@@ -2,6 +2,7 @@
  * 写作 Agent - 生成章节正文
  */
 import { AIService } from '@/lib/ai/service'
+import type { AIProvider } from '@/lib/ai/types'
 import { buildWriterPrompt as buildWriterPromptV1 } from '../prompts/chapter/writing'
 import { buildWriterPrompt as buildWriterPromptV2 } from '../prompts/chapter/writing-v2'
 import type { ChapterOutline, CharacterProfile, AgentContext } from '../engine/types'
@@ -12,6 +13,7 @@ interface WriterInput extends AgentContext {
   recentSummaries: { chapterNo: number; summary: string }[]
   targetWordCount: number
   useEnhancedPrompt?: boolean
+  provider?: AIProvider
 }
 
 // 默认使用增强版提示词
@@ -24,7 +26,7 @@ export async function writerAgent(
   const { projectId, chapterNo, outline, characterProfiles, recentSummaries, ...context } = input
 
   // 获取可追踪的 AI Provider
-  const provider = await AIService.createProvider({
+  const provider = input.provider || await AIService.createProvider({
     projectId,
     usageType: 'WRITER',
   })
