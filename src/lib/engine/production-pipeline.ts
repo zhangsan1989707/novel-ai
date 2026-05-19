@@ -7,7 +7,7 @@ import { completeJob, failJob, saveCheckpoint, updateJobStep } from './generatio
 import { validateAndWarn } from './long-novel-controller'
 import { toInternalArcStage, toInternalPlatform, toPrismaArcStage } from './production-mapping'
 import { runChapterGenerationPipeline } from './orchestrator'
-import { parseAiJsonObject } from './ai-json'
+import { parseAiJsonArray, parseAiJsonObject } from './ai-json'
 import { buildChapterListPrompt } from '../prompts/novel/chapter-list'
 
 type ChapterOutline = {
