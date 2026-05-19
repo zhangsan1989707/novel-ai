@@ -69,8 +69,8 @@ export function InspirationPanel({ onSelect, compact = false, limit = 6 }: Inspi
       <div className="flex items-center justify-between">
         <div className="flex min-w-0 items-center gap-2">
           <Sparkles className={compact ? 'h-4 w-4 text-amber-500' : 'h-5 w-5 text-amber-500'} />
-          <h3 className={compact ? 'text-sm font-semibold text-gray-900 dark:text-white' : 'font-medium text-lg'}>创作灵感</h3>
-          {!compact && <span className="text-xs text-gray-500">基于近期热门趋势推荐</span>}
+          <h3 className={compact ? 'text-sm font-semibold text-gray-900 dark:text-white' : 'font-medium text-lg'}>热门灵感</h3>
+          {!compact && <span className="text-xs text-gray-500">从热榜中挑一个开写</span>}
         </div>
         <Button
           variant="ghost"

@@ -1,13 +1,15 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { Button, Input, Select, Textarea, toast, CollapsibleSection } from '@/components/ui'
 import { ArrowLeft, Sparkles, Settings } from 'lucide-react'
 import { genreOptions, writingStyleOptions } from '@/components/project'
+import { InspirationPanel } from '@/components/inspiration'
 import type { Platform, LengthType } from '@/types'
 import { PLATFORM_LABELS, LENGTH_TYPE_LABELS } from '@/types'
+import type { HotInspiration } from '@/lib/inspiration/data'
 
 interface AIConfig {
   id: number
@@ -77,6 +79,16 @@ export default function NewProjectPage() {
 
   const platform = watch('platform')
   const lengthType = watch('lengthType')
+
+  const handleInspirationSelect = useCallback((inspiration: HotInspiration) => {
+    setValue('title', '', { shouldDirty: true, shouldValidate: true })
+    setValue('corePitch', `${inspiration.title}：${inspiration.description}`, { shouldDirty: true, shouldValidate: true })
+    setValue('description', inspiration.sampleSummary, { shouldDirty: true, shouldValidate: true })
+    setValue('genre', inspiration.sampleGenre, { shouldDirty: true, shouldValidate: true })
+    setValue('writingStyle', inspiration.sampleWritingStyle, { shouldDirty: true, shouldValidate: true })
+    setValue('targetAudience', inspiration.category === 'male' ? 'MALE' : inspiration.category === 'female' ? 'FEMALE' : undefined, { shouldDirty: true, shouldValidate: true })
+    toast.success(`已应用灵感「${inspiration.title}」`)
+  }, [setValue])
 
   useEffect(() => {
     fetch('/api/novel/ai-configs')
@@ -148,6 +160,18 @@ export default function NewProjectPage() {
 
       <main className="mx-auto max-w-2xl px-4 py-6 sm:px-6">
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+          <section className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-base font-semibold text-gray-900 dark:text-white">灵感选择</h2>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                  先选一个热门灵感，系统会自动补充题材、风格和灵感摘要，不需要你先想好完整一句话。
+                </p>
+              </div>
+            </div>
+            <InspirationPanel onSelect={handleInspirationSelect} />
+          </section>
+
           <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
             <div className="space-y-5">
               <div>
@@ -183,14 +207,17 @@ export default function NewProjectPage() {
 
               <div>
                 <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  一句话卖点 <span className="text-red-500">*</span>
+                  灵感 <span className="text-red-500">*</span>
                 </label>
                 <Textarea
-                  placeholder="例：社畜穿越成赘婿，靠996卷死修仙界"
+                  placeholder="例：社畜穿越成赘婿，靠996卷死修仙界；也可以直接从上面的热门灵感里选"
                   rows={3}
                   error={errors.corePitch?.message}
-                  {...register('corePitch', { required: '请输入一句话卖点' })}
+                  {...register('corePitch', { required: '请输入灵感' })}
                 />
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  这里是给 AI 看的灵感摘要，后续会用于自动生成标题、蓝图和阶段规划。
+                </p>
               </div>
 
               <Select
@@ -230,12 +257,12 @@ export default function NewProjectPage() {
             <div className="space-y-4 pt-1">
               <Input
                 label="项目标题"
-                placeholder="留空则自动生成，不会用卖点代替"
+                placeholder="留空则自动生成，不会用灵感代替"
                 maxLength={200}
                 {...register('title')}
               />
               <p className="text-xs text-gray-500 dark:text-gray-400">
-                标题和一句话卖点是两个字段；留空时系统会自动补一个标题。
+                标题和灵感是两个字段；留空时系统会自动补一个标题。
               </p>
 
               <Textarea
@@ -298,7 +325,7 @@ export default function NewProjectPage() {
           <div className="sticky bottom-0 -mx-4 border-t border-gray-200 bg-white/95 px-4 py-4 backdrop-blur dark:border-gray-700 dark:bg-gray-900/95 sm:mx-0 sm:rounded-lg sm:border sm:shadow-sm">
             <div className="flex items-center justify-between">
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                填写核心设定即可快速创建项目
+                先选灵感，再补少量设定即可快速创建项目
               </p>
               <div className="flex gap-3">
                 <Button type="button" variant="outline" onClick={() => router.back()}>
