@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { logError } from '@/lib/logger'
+import { countChineseWords } from '@/lib/utils'
 
 // ============================================
 // Schema 验证
@@ -102,8 +103,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
 
     // 计算字数变化
-    const oldWordCount = oldChapter.content?.length || 0
-    const newWordCount = validatedData.content?.length || oldWordCount
+    const oldWordCount = oldChapter.content ? countChineseWords(oldChapter.content) : 0
+    const newContent = validatedData.content !== undefined ? validatedData.content : oldChapter.content
+    const newWordCount = newContent ? countChineseWords(newContent) : 0
     const wordCountDiff = newWordCount - oldWordCount
 
     // 保存版本记录（如果内容有变化）

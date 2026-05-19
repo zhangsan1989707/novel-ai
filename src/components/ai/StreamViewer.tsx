@@ -194,23 +194,24 @@ export function StreamViewer({
             } else if (evt.event === 'done') {
               try {
                 const data = JSON.parse(evt.data)
-                let finalContent = ''
+                const cleanedContent = data.content || ''
+                const cleanedTitle = data.title || ''
                 setState((prev) => {
-                  finalContent = prev.content
                   return {
                     ...prev,
-                    status: 'complete',
-                    wordCount: data.wordCount,
+                    content: cleanedContent || prev.content,
+                    wordCount: data.wordCount || countChineseWords(cleanedContent),
                     progress: 100,
+                    status: 'complete',
                   }
                 })
 
-                if (settings.autoOptimizeAfterGenerate && finalContent.length > 100) {
+                if (settings.autoOptimizeAfterGenerate && cleanedContent.length > 100) {
                   setShowQualityPanel(true)
-                  setOptimizedContent(finalContent)
+                  setOptimizedContent(cleanedContent)
                 }
 
-                onComplete?.(finalContent, data.wordCount)
+                onComplete?.(cleanedContent, data.wordCount || countChineseWords(cleanedContent))
               } catch {}
             } else if (evt.event === 'error') {
               let errorMessage = '生成失败'

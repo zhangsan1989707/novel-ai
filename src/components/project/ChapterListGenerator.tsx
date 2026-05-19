@@ -373,7 +373,7 @@ export function ChapterListGenerator({
                     {chapters.map((chapter, index) => (
                       <tr
                         key={index}
-                        className="border-t border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                        className="group border-t border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
                       >
                         <td className="px-4 py-3 text-gray-400 w-12">
                           <span className="flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 dark:bg-gray-700 text-xs font-medium">

@@ -223,7 +223,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           }
 
           // 保存生成内容
-          const oldWordCount = chapter.content?.length || 0
+          const oldWordCount = chapter.content ? countChineseWords(chapter.content) : 0
           const wordCountDiff = wordCount - oldWordCount
 
           const updateData: Record<string, unknown> = {
@@ -253,6 +253,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           // 发送完成事件
           sendEvent('done', {
             chapterId,
+            content: extractedContent,
+            title: extractedTitle || undefined,
             wordCount,
             status: 'completed',
           })

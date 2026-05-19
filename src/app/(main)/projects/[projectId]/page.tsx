@@ -59,10 +59,10 @@ interface Project {
 }
 
 const chapterStatusMap: Record<string, { label: string; variant: 'default' | 'primary' | 'secondary' | 'success' | 'warning' | 'danger' }> = {
-  DRAFT: { label: '草稿', variant: 'default' },
+  DRAFT: { label: '未写作', variant: 'default' },
   GENERATING: { label: '生成中', variant: 'primary' },
   COMPLETED: { label: '已完成', variant: 'success' },
-  REVIEWING: { label: '审核中', variant: 'warning' },
+  REVIEWING: { label: '待审稿', variant: 'warning' },
 }
 
 const projectStatusMap: Record<ProjectStatus, { label: string; variant: 'default' | 'primary' | 'secondary' | 'success' | 'warning' | 'danger' }> = {
@@ -220,6 +220,7 @@ export default function ProjectDetailPage() {
   const [showShortStoryModal, setShowShortStoryModal] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [reviewSubTab, setReviewSubTab] = useState<'review' | 'deslop'>('review')
+  const [pendingChapters, setPendingChapters] = useState<{ chapterNumber: number; title: string; summary: string }[] | null>(null)
 
   const fetchProject = useCallback(async () => {
     try {
@@ -304,19 +305,43 @@ export default function ProjectDetailPage() {
     try {
       const existCheck = await fetch(`/api/novel/projects/${projectId}/chapters`)
       const existData = await existCheck.json()
-      const existingMap = new Map<number, number>()
+      const existingMap = new Map<number, { id: number; hasContent: boolean; title: string }>()
       if (existData.success) {
-        for (const c of existData.data as { id: number; chapterNumber: number }[]) {
-          existingMap.set(c.chapterNumber, c.id)
+        for (const c of existData.data as { id: number; chapterNumber: number; wordCount: number; title: string; content?: string }[]) {
+          existingMap.set(c.chapterNumber, { id: c.id, hasContent: (c.wordCount || 0) > 0, title: c.title })
         }
       }
 
       const chapterNumbers = new Set(chapters.map((ch) => ch.chapterNumber))
+      const chaptersToDelete: Array<{ chapterNumber: number; title: string; hasContent: boolean }> = []
+      for (const [chapterNumber, info] of existingMap) {
+        if (!chapterNumbers.has(chapterNumber)) {
+          chaptersToDelete.push({ chapterNumber, title: info.title, hasContent: info.hasContent })
+        }
+      }
 
+      if (chaptersToDelete.length > 0) {
+        setPendingChapters(chapters)
+        return
+      }
+
+      await doApplyChapters(chapters, existingMap, chapterNumbers)
+    } catch (err) {
+      console.error('创建章节失败:', err)
+      toast.error('应用章节失败')
+    }
+  }
+
+  const doApplyChapters = async (
+    chapters: { chapterNumber: number; title: string; summary: string }[],
+    existingMap: Map<number, { id: number; hasContent: boolean; title: string }>,
+    chapterNumbers: Set<number>
+  ) => {
+    try {
       for (const ch of chapters) {
-        const existingId = existingMap.get(ch.chapterNumber)
-        if (existingId) {
-          await fetch(`/api/novel/projects/${projectId}/chapters/${existingId}`, {
+        const existing = existingMap.get(ch.chapterNumber)
+        if (existing) {
+          await fetch(`/api/novel/projects/${projectId}/chapters/${existing.id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -339,10 +364,10 @@ export default function ProjectDetailPage() {
       }
 
       const deletePromises: Promise<Response>[] = []
-      for (const [chapterNumber, existingId] of existingMap) {
+      for (const [chapterNumber, info] of existingMap) {
         if (!chapterNumbers.has(chapterNumber)) {
           deletePromises.push(
-            fetch(`/api/novel/projects/${projectId}/chapters/${existingId}`, {
+            fetch(`/api/novel/projects/${projectId}/chapters/${info.id}`, {
               method: 'DELETE',
             })
           )
@@ -423,7 +448,7 @@ export default function ProjectDetailPage() {
       case 'write':
         if (project.chapters.length > 0) {
           const nextChapter = project.chapters.find((chapter) => chapter.status !== 'COMPLETED') ?? project.chapters[0]
-          router.push(`/projects/${projectId}/chapters/${nextChapter.id}/generate`)
+          router.push(`/projects/${projectId}/chapters/${nextChapter.id}`)
         } else {
           openChapterListGenerator()
         }
@@ -453,7 +478,7 @@ export default function ProjectDetailPage() {
         setActiveTab('write')
         if (project.chapters.length > 0) {
           const nextChapter = project.chapters.find((chapter) => chapter.status !== 'COMPLETED') ?? project.chapters[0]
-          router.push(`/projects/${projectId}/chapters/${nextChapter.id}/generate`)
+          router.push(`/projects/${projectId}/chapters/${nextChapter.id}`)
         }
         break
       case 'review':
@@ -869,9 +894,14 @@ export default function ProjectDetailPage() {
                           章节目录
                           <Badge variant="secondary">{project.chapters.length} 章</Badge>
                         </CardTitle>
-                        <Button variant="outline" size="sm" onClick={openChapterListGenerator}>
-                          重新生成
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <Button variant="outline" size="sm" onClick={openChapterListGenerator}>
+                            追加章节
+                          </Button>
+                          <Button variant="outline" size="sm" onClick={openChapterListGenerator}>
+                            重新生成
+                          </Button>
+                        </div>
                       </div>
                     </CardHeader>
                     <CardContent>
@@ -879,8 +909,7 @@ export default function ProjectDetailPage() {
                         {project.chapters.map((chapter) => (
                           <div
                             key={chapter.id}
-                            className="flex items-center justify-between p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer transition-all"
-                            onClick={() => router.push(`/projects/${projectId}/chapters/${chapter.id}`)}
+                            className="flex items-center justify-between p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-all"
                           >
                             <div className="flex items-center gap-3 flex-1">
                               <span className="text-gray-400 text-sm">第{chapter.chapterNumber}章</span>
@@ -889,11 +918,27 @@ export default function ProjectDetailPage() {
                                 <span className="text-sm text-gray-400 hidden sm:inline truncate max-w-xs">{chapter.summary}</span>
                               )}
                             </div>
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2">
                               <span className="text-sm text-gray-500">{(chapter.wordCount || 0).toLocaleString()} 字</span>
                               <Badge variant={chapterStatusMap[chapter.status].variant} className="text-xs">
                                 {chapterStatusMap[chapter.status].label}
                               </Badge>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => router.push(`/projects/${projectId}/chapters/${chapter.id}`)}
+                                className="text-xs text-gray-500 hover:text-blue-600"
+                              >
+                                编辑概要
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => router.push(`/projects/${projectId}/chapters/${chapter.id}`)}
+                                className="text-xs"
+                              >
+                                写正文
+                              </Button>
                             </div>
                           </div>
                         ))}
@@ -1019,67 +1064,47 @@ export default function ProjectDetailPage() {
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-2">
-                        {project.chapters.map((chapter) => (
-                          <div
-                            key={chapter.id}
-                            className={`flex items-center justify-between p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-all ${
-                              isSelectMode ? 'cursor-pointer' : 'cursor-pointer'
-                            }`}
-                            onClick={() => {
-                              if (isSelectMode) {
-                                toggleChapterSelection(chapter.id)
-                              } else {
-                                router.push(`/projects/${projectId}/chapters/${chapter.id}`)
-                              }
-                            }}
-                          >
-                            {isSelectMode && (
-                              <input
-                                type="checkbox"
-                                checked={selectedChapterIds.includes(chapter.id)}
-                                onChange={() => toggleChapterSelection(chapter.id)}
-                                className="w-4 h-4 mr-3 accent-blue-600"
-                              />
-                            )}
-                            <div className="flex items-center gap-3 flex-1">
-                              <span className="text-gray-400">第{chapter.chapterNumber}章</span>
-                              <span className="font-medium">{chapter.title || '无标题'}</span>
-                              {chapter.status === 'GENERATING' && (
-                                <Badge variant="primary" className="text-xs">生成中</Badge>
+                        {project.chapters.map((chapter) => {
+                          const statusLabel = chapter.status === 'DRAFT' && !chapter.wordCount
+                            ? '未写作'
+                            : chapter.status === 'DRAFT'
+                              ? '已有草稿'
+                              : chapterStatusMap[chapter.status].label
+                          return (
+                            <div
+                              key={chapter.id}
+                              className={`flex items-center justify-between p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-all ${
+                                isSelectMode ? 'cursor-pointer' : 'cursor-pointer'
+                              }`}
+                              onClick={() => {
+                                if (isSelectMode) {
+                                  toggleChapterSelection(chapter.id)
+                                } else {
+                                  router.push(`/projects/${projectId}/chapters/${chapter.id}`)
+                                }
+                              }}
+                            >
+                              {isSelectMode && (
+                                <input
+                                  type="checkbox"
+                                  checked={selectedChapterIds.includes(chapter.id)}
+                                  onChange={() => toggleChapterSelection(chapter.id)}
+                                  className="w-4 h-4 mr-3 accent-blue-600"
+                                />
                               )}
+                              <div className="flex items-center gap-3 flex-1">
+                                <span className="text-gray-400">第{chapter.chapterNumber}章</span>
+                                <span className="font-medium">{chapter.title || '无标题'}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm text-gray-500">{(chapter.wordCount || 0).toLocaleString()} 字</span>
+                                <Badge variant={chapterStatusMap[chapter.status].variant} className="text-xs">
+                                  {statusLabel}
+                                </Badge>
+                              </div>
                             </div>
-                            <div className="flex items-center gap-3">
-                              <span className="text-sm text-gray-500">{(chapter.wordCount || 0).toLocaleString()} 字</span>
-                              <Badge variant={chapterStatusMap[chapter.status].variant} className="text-xs">
-                                {chapterStatusMap[chapter.status].label}
-                              </Badge>
-                              {chapter.status === 'DRAFT' && (
-                                <Button
-                                  variant="primary"
-                                  size="sm"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    router.push(`/projects/${projectId}/chapters/${chapter.id}/generate`)
-                                  }}
-                                >
-                                  开始写作
-                                </Button>
-                              )}
-                              {chapter.id === nextUncompletedChapter?.id && chapter.status !== 'DRAFT' && chapter.status !== 'COMPLETED' && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    router.push(`/projects/${projectId}/chapters/${chapter.id}/generate`)
-                                  }}
-                                >
-                                  继续写作
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     </CardContent>
                   </Card>
@@ -1598,6 +1623,60 @@ export default function ProjectDetailPage() {
           </Modal>
         </>
       )}
+
+      <Modal
+        open={pendingChapters !== null}
+        onClose={() => setPendingChapters(null)}
+        title="⚠️ 目录变更确认"
+        className="max-w-lg"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600 dark:text-gray-300">
+            新目录与现有目录不一致，以下章节将被删除：
+          </p>
+          <div className="max-h-40 overflow-y-auto space-y-1">
+            {project.chapters
+              .filter(ch => !new Set(pendingChapters?.map(c => c.chapterNumber)).has(ch.chapterNumber))
+              .map(ch => (
+                <div key={ch.id} className="flex items-center gap-2 text-sm p-2 rounded bg-red-50 dark:bg-red-900/20">
+                  <span className="text-red-600 dark:text-red-400">第{ch.chapterNumber}章</span>
+                  <span className="text-red-700 dark:text-red-300 font-medium">{ch.title}</span>
+                  {ch.wordCount > 0 && (
+                    <span className="text-red-500 text-xs">({ch.wordCount.toLocaleString()}字)</span>
+                  )}
+                </div>
+              ))
+            }
+          </div>
+          <p className="text-xs text-red-500">
+            已有正文的章节删除后无法恢复，请确认是否继续。
+          </p>
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={() => setPendingChapters(null)}>
+              取消
+            </Button>
+            <Button
+              variant="danger"
+              onClick={async () => {
+                const chapters = pendingChapters!
+                setPendingChapters(null)
+                const existCheck = await fetch(`/api/novel/projects/${projectId}/chapters`)
+                const existData = await existCheck.json()
+                const existingMap = new Map<number, { id: number; hasContent: boolean; title: string }>()
+                if (existData.success) {
+                  for (const c of existData.data as { id: number; chapterNumber: number; wordCount: number; title: string; content?: string }[]) {
+                    existingMap.set(c.chapterNumber, { id: c.id, hasContent: (c.wordCount || 0) > 0, title: c.title })
+                  }
+                }
+                const chapterNumbers = new Set(chapters.map(ch => ch.chapterNumber))
+                await doApplyChapters(chapters, existingMap, chapterNumbers)
+              }}
+            >
+              确认应用（删除旧章节）
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </>
   )
 }
