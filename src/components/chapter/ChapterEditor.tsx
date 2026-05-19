@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Button, Input, Textarea, Modal } from '@/components/ui'
 import { ArrowLeft, Save, Sparkles, Trash2, Maximize, Minimize, FileText, Settings, Wand2, Square, RefreshCw, Loader2 } from 'lucide-react'
 import { ChapterStatus } from '@/types'
@@ -19,6 +19,7 @@ type GenerateStatus = 'idle' | 'connecting' | 'streaming' | 'complete' | 'error'
 
 export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: ChapterEditorProps) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const contentRef = useRef<HTMLTextAreaElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const [chapter, setChapter] = useState<Record<string, any>>(initialChapter || {
@@ -347,7 +348,10 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
         <div className="mx-auto max-w-[1440px] px-5 py-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-3">
-              <Button variant="ghost" size="sm" onClick={() => router.push(`/projects/${projectId}`)} className="shrink-0 gap-1.5">
+              <Button variant="ghost" size="sm" onClick={() => {
+                const tab = searchParams.get('tab') || 'outline'
+                router.push(`/projects/${projectId}?tab=${tab}`)
+              }} className="shrink-0 gap-1.5">
                 <ArrowLeft className="h-4 w-4" />
                 返回
               </Button>

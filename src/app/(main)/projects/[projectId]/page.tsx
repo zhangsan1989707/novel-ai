@@ -1,12 +1,13 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { Button, Card, CardContent, CardHeader, CardTitle, Badge, Progress, Modal, ChaptersEmptyState, toast, MoreActionsMenu, DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui'
 import { ProjectForm, ProjectFormData, ChapterListGenerator, BatchGenerator } from '@/components/project'
 import { BatchProgress } from '@/components/ai/BatchProgress'
 import { PlotAnalyzer, ContinuationPanel, ResearchPanel, ReviewPanel, DeslopPanel, CoverGenerator, ShortStoryPanel } from '@/components/ai'
 import { OutlineGenerator } from '@/components/ai/OutlineGenerator'
+import { ChapterSummaryEditor } from '@/components/chapter/ChapterSummaryEditor'
 import { BookOpen, Clock, Target, Users, Layers, Plus, ListChecks, FileText, Search, CheckCircle2, Circle, AlertCircle, ArrowRight, ClipboardList, PenLine, FileCheck2, Rocket, ChevronRight, ChevronDown, Wrench, Sparkles, Shield } from 'lucide-react'
 import type { ProjectStatus } from '@/types'
 
@@ -187,8 +188,10 @@ function getNextTab(project: Project): WorkbenchTab {
 export default function ProjectDetailPage() {
   const params = useParams()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const projectId = parseInt(params.projectId as string)
 
+  const initialTab = searchParams.get('tab') as WorkbenchTab | 'chapters' | 'outline' | 'settings' | null || 'outline'
   const [project, setProject] = useState<Project | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -210,7 +213,7 @@ export default function ProjectDetailPage() {
     targetWordCount: number
   } | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const [activeTab, setActiveTab] = useState<WorkbenchTab | 'chapters' | 'outline' | 'settings'>('outline')
+  const [activeTab, setActiveTab] = useState<WorkbenchTab | 'chapters' | 'outline' | 'settings'>(initialTab)
   const [showGenerator, setShowGenerator] = useState(false)
   const [showOutlineGenerator, setShowOutlineGenerator] = useState(false)
   const [showResearchModal, setShowResearchModal] = useState(false)
@@ -222,6 +225,8 @@ export default function ProjectDetailPage() {
   const [reviewSubTab, setReviewSubTab] = useState<'review' | 'deslop'>('review')
   const [pendingChapters, setPendingChapters] = useState<{ chapterNumber: number; title: string; summary: string }[] | null>(null)
   const [expandedChapterId, setExpandedChapterId] = useState<number | null>(null)
+  const [showSummaryEditor, setShowSummaryEditor] = useState(false)
+  const [editingChapter, setEditingChapter] = useState<{ id: number; chapterNumber: number; title: string; summary: string } | null>(null)
 
   const fetchProject = useCallback(async () => {
     try {
@@ -285,6 +290,35 @@ export default function ProjectDetailPage() {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  const handleSaveSummary = async (chapterId: number, summary: string) => {
+    try {
+      const res = await fetch(`/api/novel/projects/${projectId}/chapters/${chapterId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ summary }),
+      })
+      const result = await res.json()
+      if (result.success) {
+        toast.success('概要已更新')
+        fetchProject()
+      } else {
+        toast.error(result.error?.message || '更新失败')
+      }
+    } catch (err) {
+      toast.error('更新失败')
+    }
+  }
+
+  const openSummaryEditor = (chapter: Chapter) => {
+    setEditingChapter({
+      id: chapter.id,
+      chapterNumber: chapter.chapterNumber,
+      title: chapter.title || '',
+      summary: chapter.summary || '',
+    })
+    setShowSummaryEditor(true)
   }
 
   const toggleChapterSelection = (id: number) => {
@@ -449,7 +483,7 @@ export default function ProjectDetailPage() {
       case 'write':
         if (project.chapters.length > 0) {
           const nextChapter = project.chapters.find((chapter) => chapter.status !== 'COMPLETED') ?? project.chapters[0]
-          router.push(`/projects/${projectId}/chapters/${nextChapter.id}`)
+          router.push(`/projects/${projectId}/chapters/${nextChapter.id}?tab=${activeTab}`)
         } else {
           openChapterListGenerator()
         }
@@ -479,7 +513,7 @@ export default function ProjectDetailPage() {
         setActiveTab('write')
         if (project.chapters.length > 0) {
           const nextChapter = project.chapters.find((chapter) => chapter.status !== 'COMPLETED') ?? project.chapters[0]
-          router.push(`/projects/${projectId}/chapters/${nextChapter.id}`)
+          router.push(`/projects/${projectId}/chapters/${nextChapter.id}?tab=${activeTab}`)
         }
         break
       case 'review':
@@ -711,7 +745,7 @@ export default function ProjectDetailPage() {
                   <div
                     key={chapter.id}
                     className="flex items-center justify-between p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer transition-all"
-                    onClick={() => router.push(`/projects/${projectId}/chapters/${chapter.id}`)}
+                    onClick={() => router.push(`/projects/${projectId}/chapters/${chapter.id}?tab=${activeTab}`)}
                   >
                     <div className="flex items-center gap-3 flex-1">
                       <span className="text-gray-400">第{chapter.chapterNumber}章</span>
@@ -933,22 +967,11 @@ export default function ProjectDetailPage() {
                                     size="sm"
                                     onClick={(e) => {
                                       e.stopPropagation()
-                                      router.push(`/projects/${projectId}/chapters/${chapter.id}`)
+                                      openSummaryEditor(chapter)
                                     }}
                                     className="text-xs text-gray-500 hover:text-blue-600"
                                   >
                                     编辑概要
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      router.push(`/projects/${projectId}/chapters/${chapter.id}`)
-                                    }}
-                                    className="text-xs"
-                                  >
-                                    写正文
                                   </Button>
                                 </div>
                               </div>
@@ -1100,7 +1123,7 @@ export default function ProjectDetailPage() {
                                 if (isSelectMode) {
                                   toggleChapterSelection(chapter.id)
                                 } else {
-                                  router.push(`/projects/${projectId}/chapters/${chapter.id}`)
+                                  router.push(`/projects/${projectId}/chapters/${chapter.id}?tab=${activeTab}`)
                                 }
                               }}
                             >
@@ -1697,6 +1720,19 @@ export default function ProjectDetailPage() {
           </div>
         </div>
       </Modal>
+
+      {showSummaryEditor && editingChapter && (
+        <ChapterSummaryEditor
+          open={showSummaryEditor}
+          onOpenChange={setShowSummaryEditor}
+          chapterId={editingChapter.id}
+          chapterNumber={editingChapter.chapterNumber}
+          title={editingChapter.title}
+          summary={editingChapter.summary}
+          projectId={projectId}
+          onSave={handleSaveSummary}
+        />
+      )}
     </>
   )
 }
