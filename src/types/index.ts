@@ -356,3 +356,199 @@ export interface StreamEvent {
   type: 'start' | 'token' | 'wordCount' | 'done' | 'error'
   data: Record<string, unknown>
 }
+
+// ============================================
+// 平台 & 长度 & Arc 阶段枚举
+// ============================================
+
+export type Platform = 'qidian' | 'fanqie' | 'feilu' | 'jinjiang' | 'qimao'
+
+export const PLATFORM_LABELS: Record<Platform, string> = {
+  qidian: '起点',
+  fanqie: '番茄',
+  feilu: '飞卢',
+  jinjiang: '晋江',
+  qimao: '七猫',
+}
+
+export type LengthType = 'short' | 'medium' | 'long' | 'ultra_long'
+
+export const LENGTH_TYPE_LABELS: Record<LengthType, string> = {
+  short: '短篇 (30-50章)',
+  medium: '中篇 (100-300章)',
+  long: '长篇 (500-1000章)',
+  ultra_long: '超长篇 (1000+章)',
+}
+
+export type ArcStage = 'opening' | 'growth' | 'expansion' | 'mid_conflict' | 'pre_finale' | 'finale'
+
+export const ARC_STAGE_LABELS: Record<ArcStage, string> = {
+  opening: '开局',
+  growth: '成长',
+  expansion: '扩张',
+  mid_conflict: '中期冲突',
+  pre_finale: '大战前夕',
+  finale: '终局',
+}
+
+// ============================================
+// 故事方向控制 (Story Steering)
+// ============================================
+
+export interface StorySteering {
+  pace: number
+  darkness: number
+  humor: number
+  romance: number
+  powerGrowth: number
+  conflictIntensity: number
+  mysteryDensity: number
+}
+
+export const DEFAULT_STORY_STEERING: StorySteering = {
+  pace: 0.5,
+  darkness: 0.3,
+  humor: 0.3,
+  romance: 0.2,
+  powerGrowth: 0.5,
+  conflictIntensity: 0.5,
+  mysteryDensity: 0.3,
+}
+
+export interface SteeringAction {
+  label: string
+  description: string
+  apply: (steering: StorySteering) => StorySteering
+}
+
+export const STEERING_ACTIONS: SteeringAction[] = [
+  {
+    label: '更快',
+    description: '加快故事节奏',
+    apply: (s) => ({ ...s, pace: Math.min(1, s.pace + 0.1) }),
+  },
+  {
+    label: '更爽',
+    description: '增加爽点密度',
+    apply: (s) => ({ ...s, conflictIntensity: Math.min(1, s.conflictIntensity + 0.1), pace: Math.min(1, s.pace + 0.05) }),
+  },
+  {
+    label: '更黑暗',
+    description: '增加黑暗氛围',
+    apply: (s) => ({ ...s, darkness: Math.min(1, s.darkness + 0.1), humor: Math.max(0, s.humor - 0.1) }),
+  },
+  {
+    label: '增加感情线',
+    description: '增加恋爱戏份',
+    apply: (s) => ({ ...s, romance: Math.min(1, s.romance + 0.1), conflictIntensity: Math.min(1, s.conflictIntensity + 0.05) }),
+  },
+  {
+    label: '增加打脸',
+    description: '增加打脸/反转桥段',
+    apply: (s) => ({ ...s, conflictIntensity: Math.min(1, s.conflictIntensity + 0.15), pace: Math.min(1, s.pace + 0.05) }),
+  },
+  {
+    label: '减少系统感',
+    description: '弱化系统描写',
+    apply: (s) => ({ ...s, pace: Math.max(0, s.pace - 0.1), powerGrowth: Math.max(0, s.powerGrowth - 0.1) }),
+  },
+]
+
+// ============================================
+// 生成流水线 (Generation Pipeline)
+// ============================================
+
+export type PipelineStep = 'blueprint' | 'arc_plan' | 'chapter_list' | 'write' | 'validate' | 'polish' | 'deslop' | 'summarize'
+
+export const PIPELINE_STEP_LABELS: Record<PipelineStep, string> = {
+  blueprint: '生成蓝图',
+  arc_plan: 'Arc 规划',
+  chapter_list: '章节目录',
+  write: '逐章写作',
+  validate: '内容校验',
+  polish: '润色优化',
+  deslop: '去 AI 味',
+  summarize: '生成摘要',
+}
+
+export type JobStatus = 'pending' | 'running' | 'completed' | 'failed' | 'paused'
+
+export interface GenerationJobInfo {
+  id: number
+  projectId: number
+  type: string
+  status: JobStatus
+  currentStep: PipelineStep | null
+  stepIndex: number
+  totalChapters: number
+  currentChapter: number
+  retryCount: number
+  progress: number
+  errorMessage?: string
+}
+
+// ============================================
+// 平台模板 (Platform Template)
+// ============================================
+
+export interface PlatformTemplate {
+  platform: Platform
+  pace: 'slow' | 'medium' | 'fast' | 'ultra_fast'
+  cliffhangerDensity: 'low' | 'medium' | 'high' | 'very_high'
+  slapFaceDensity: 'low' | 'medium' | 'high' | 'very_high'
+  foreshadowDensity: 'low' | 'medium' | 'high' | 'very_high'
+  growthDensity: 'low' | 'medium' | 'high' | 'very_high'
+  chapterWordTarget: number
+  batchSizeBaseline: number
+}
+
+// ============================================
+// Arc 计划 & 蓝图 (Arc Plan & Blueprint)
+// ============================================
+
+export interface ArcPlanInfo {
+  id: string
+  arcNumber: number
+  name: string
+  stage: ArcStage
+  description?: string
+  batchSize: number
+  startChapter: number
+  endChapter?: number
+  goals: string[]
+  keyEvents: string[]
+  isCompleted: boolean
+}
+
+export interface BookBlueprintInfo {
+  corePitch: string
+  worldDirection?: string
+  mainlineDirection?: string
+  growthDirection?: string
+  endingDirection?: string
+  constraints: string[]
+}
+
+export interface VillainInfo {
+  id: string
+  name: string
+  tier: 'stage' | 'arc' | 'final'
+  isFinalBoss: boolean
+  arcNumber?: number
+  description?: string
+  motivation?: string
+  abilities: string[]
+  introducedAt?: number
+  defeatedAt?: number
+  lifecycle: 'active' | 'defeated' | 'escaped' | 'transformed'
+}
+
+export interface WorldStateInfo {
+  mapLevel: number
+  factionCount: number
+  powerLevel: number
+  civilizationLevel: number
+  classStructure: string[]
+  regions: string[]
+  currentExpansion?: string
+}
