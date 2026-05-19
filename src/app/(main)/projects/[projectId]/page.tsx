@@ -221,6 +221,7 @@ export default function ProjectDetailPage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [reviewSubTab, setReviewSubTab] = useState<'review' | 'deslop'>('review')
   const [pendingChapters, setPendingChapters] = useState<{ chapterNumber: number; title: string; summary: string }[] | null>(null)
+  const [expandedChapterId, setExpandedChapterId] = useState<number | null>(null)
 
   const fetchProject = useCallback(async () => {
     try {
@@ -906,42 +907,61 @@ export default function ProjectDetailPage() {
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-2">
-                        {project.chapters.map((chapter) => (
-                          <div
-                            key={chapter.id}
-                            className="flex items-center justify-between p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-all"
-                          >
-                            <div className="flex items-center gap-3 flex-1">
-                              <span className="text-gray-400 text-sm">第{chapter.chapterNumber}章</span>
-                              <span className="font-medium">{chapter.title || '无标题'}</span>
-                              {chapter.summary && (
-                                <span className="text-sm text-gray-400 hidden sm:inline truncate max-w-xs">{chapter.summary}</span>
+                        {project.chapters.map((chapter) => {
+                          const isExpanded = expandedChapterId === chapter.id
+                          return (
+                            <div
+                              key={chapter.id}
+                              className="rounded-lg border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-all overflow-hidden"
+                            >
+                              <div
+                                className="flex items-center justify-between p-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer transition-all"
+                                onClick={() => setExpandedChapterId(isExpanded ? null : chapter.id)}
+                              >
+                                <div className="flex items-center gap-3 flex-1 min-w-0">
+                                  <ChevronDown className={`h-4 w-4 text-gray-400 shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                                  <span className="text-gray-400 text-sm shrink-0">第{chapter.chapterNumber}章</span>
+                                  <span className="font-medium truncate">{chapter.title || '无标题'}</span>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <span className="text-sm text-gray-500">{(chapter.wordCount || 0).toLocaleString()} 字</span>
+                                  <Badge variant={chapterStatusMap[chapter.status].variant} className="text-xs">
+                                    {chapterStatusMap[chapter.status].label}
+                                  </Badge>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      router.push(`/projects/${projectId}/chapters/${chapter.id}`)
+                                    }}
+                                    className="text-xs text-gray-500 hover:text-blue-600"
+                                  >
+                                    编辑概要
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      router.push(`/projects/${projectId}/chapters/${chapter.id}`)
+                                    }}
+                                    className="text-xs"
+                                  >
+                                    写正文
+                                  </Button>
+                                </div>
+                              </div>
+                              {isExpanded && (
+                                <div className="px-3 pb-3 pt-0 ml-7">
+                                  <div className="text-sm text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 leading-relaxed">
+                                    {chapter.summary || '暂无章节概要'}
+                                  </div>
+                                </div>
                               )}
                             </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm text-gray-500">{(chapter.wordCount || 0).toLocaleString()} 字</span>
-                              <Badge variant={chapterStatusMap[chapter.status].variant} className="text-xs">
-                                {chapterStatusMap[chapter.status].label}
-                              </Badge>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => router.push(`/projects/${projectId}/chapters/${chapter.id}`)}
-                                className="text-xs text-gray-500 hover:text-blue-600"
-                              >
-                                编辑概要
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => router.push(`/projects/${projectId}/chapters/${chapter.id}`)}
-                                className="text-xs"
-                              >
-                                写正文
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     </CardContent>
                   </Card>

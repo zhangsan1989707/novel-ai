@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button, Input, Textarea, Modal } from '@/components/ui'
-import { ArrowLeft, Save, Sparkles, Trash2, Maximize, Minimize, FileText, Settings, Wand2, BookOpen, Square, RefreshCw, Loader2 } from 'lucide-react'
+import { ArrowLeft, Save, Sparkles, Trash2, Maximize, Minimize, FileText, Settings, Wand2, Square, RefreshCw, Loader2 } from 'lucide-react'
 import { ChapterStatus } from '@/types'
 import { ChapterQualityPanel } from '@/components/ai/ChapterQualityPanel'
 import { countChineseWords } from '@/lib/utils'
@@ -330,6 +330,7 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
   ]
 
   const currentStatus = chapter.status || status
+  const currentStatusLabel = statusMap.find((s) => s.value === currentStatus)?.label || '草稿'
   const isGenerating = generateStatus === 'connecting' || generateStatus === 'streaming'
 
   if (loading) {
@@ -341,62 +342,68 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
   }
 
   return (
-    <div className={`min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 ${isFullscreen ? 'fixed inset-0 z-50' : ''}`}>
-      <header className="sticky top-0 z-10 bg-white/80 dark:bg-gray-800/80 backdrop-blur-md border-b border-gray-200/50 dark:border-gray-700/50">
-        <div className="max-w-7xl mx-auto px-4 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Button variant="ghost" size="sm" onClick={() => router.push(`/projects/${projectId}`)} className="gap-1.5">
+    <div className={`min-h-screen bg-slate-50 dark:bg-gray-950 ${isFullscreen ? 'fixed inset-0 z-50 overflow-auto' : ''}`}>
+      <header className="sticky top-0 z-20 border-b border-gray-200 bg-white/95 backdrop-blur dark:border-gray-800 dark:bg-gray-900/95">
+        <div className="mx-auto max-w-[1440px] px-5 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <Button variant="ghost" size="sm" onClick={() => router.push(`/projects/${projectId}`)} className="shrink-0 gap-1.5">
                 <ArrowLeft className="h-4 w-4" />
-                返回项目
+                返回
               </Button>
-              <div className="h-6 w-px bg-gray-200 dark:bg-gray-700" />
-              <div className="flex items-center gap-3">
-                <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 text-white font-bold text-sm shadow-lg">
-                  {chapterId ? (chapter.chapterNumber || '?') : nextChapterNumber}
-                </div>
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-sm font-semibold text-white shadow-sm">
+                {chapterId ? (chapter.chapterNumber || '?') : nextChapterNumber}
+              </div>
+              <div className="min-w-0">
                 <Input
-                  className="text-lg font-semibold w-72 border-0 bg-transparent focus:bg-white dark:focus:bg-gray-700 px-3 py-2 rounded-lg"
+                  className="h-9 w-[min(52vw,520px)] border-0 bg-transparent px-0 text-lg font-semibold text-gray-950 shadow-none focus:bg-transparent dark:text-white"
                   placeholder="输入章节标题"
                   value={chapter.title || ''}
                   onChange={(e) => setChapter({ ...chapter, title: e.target.value })}
                 />
+                <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                  <span>第 {chapterId ? (chapter.chapterNumber || '?') : nextChapterNumber} 章</span>
+                  <span>/</span>
+                  <span>{currentStatusLabel}</span>
+                  <span>/</span>
+                  <span>{wordCount.toLocaleString()} 字</span>
+                </div>
               </div>
             </div>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg p-1 gap-1">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <div className="flex items-center rounded-lg bg-gray-100 p-1 dark:bg-gray-800">
                 {statusMap.map((s) => (
                   <button
                     key={s.value}
                     onClick={() => handleStatusChange(s.value as ChapterStatus)}
                     disabled={isGenerating}
-                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                    className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                       currentStatus === s.value
-                        ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                        : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                        ? 'bg-white text-gray-950 shadow-sm dark:bg-gray-700 dark:text-white'
+                        : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'
                     } ${isGenerating ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     {s.label}
                   </button>
                 ))}
               </div>
-              <Button variant="outline" size="sm" onClick={() => setIsFullscreen(!isFullscreen)} className="w-9 h-9 p-0">
+              <Button variant="outline" size="sm" onClick={() => setIsFullscreen(!isFullscreen)} className="h-9 w-9 p-0" title={isFullscreen ? '退出全屏' : '全屏'}>
                 {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
               </Button>
               {chapterId && !isGenerating && (
-                <Button variant="outline" size="sm" onClick={handleStartGenerate} className="gap-1.5">
+                <Button variant="outline" size="sm" onClick={handleStartGenerate} className="gap-1.5 whitespace-nowrap">
                   <Sparkles className="h-4 w-4" />
                   AI起草
                 </Button>
               )}
               {isGenerating && (
-                <Button variant="danger" size="sm" onClick={handleStopGenerate} className="gap-1.5">
+                <Button variant="danger" size="sm" onClick={handleStopGenerate} className="gap-1.5 whitespace-nowrap">
                   <Square className="h-4 w-4" />
                   停止
                 </Button>
               )}
               {generateStatus === 'complete' && chapterId && (
-                <Button variant="outline" size="sm" onClick={handleStartGenerate} className="gap-1.5">
+                <Button variant="outline" size="sm" onClick={handleStartGenerate} className="gap-1.5 whitespace-nowrap">
                   <RefreshCw className="h-4 w-4" />
                   重新生成
                 </Button>
@@ -406,13 +413,13 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
                   variant="outline"
                   size="sm"
                   onClick={() => setShowQualityPanel(!showQualityPanel)}
-                  className={`gap-1.5 ${showQualityPanel ? 'bg-purple-50 border-purple-500 text-purple-700' : ''}`}
+                  className={`gap-1.5 whitespace-nowrap ${showQualityPanel ? 'bg-purple-50 border-purple-500 text-purple-700 dark:bg-purple-950/30 dark:text-purple-300' : ''}`}
                 >
                   <Wand2 className="h-4 w-4" />
                   {showQualityPanel ? '隐藏优化' : '去AI味'}
                 </Button>
               )}
-              <Button variant="primary" size="sm" onClick={handleSave} loading={saving} disabled={isGenerating} className="gap-1.5">
+              <Button variant="primary" size="sm" onClick={handleSave} loading={saving} disabled={isGenerating} className="gap-1.5 whitespace-nowrap">
                 <Save className="h-4 w-4" />
                 保存草稿
               </Button>
@@ -426,9 +433,9 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-6">
+      <main className="mx-auto max-w-[1440px] px-5 py-5">
         {showQualityPanel && chapterId && chapter.content && (
-          <div className="mb-6">
+          <div className="mb-5">
             <ChapterQualityPanel
               projectId={projectId}
               chapterId={chapterId}
@@ -440,105 +447,29 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-          <div className="lg:col-span-1 space-y-4">
-            <div className="bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm rounded-2xl border border-gray-200/50 dark:border-gray-700/50 p-5 space-y-5 shadow-sm">
-              <div className="flex items-center gap-2 text-gray-500">
-                <Settings className="h-4 w-4" />
-                <span className="text-sm font-medium">章节设置</span>
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_280px]">
+          <section className="min-w-0 space-y-4">
+            <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Settings className="h-4 w-4 text-gray-400" />
+                  <h2 className="text-sm font-semibold text-gray-900 dark:text-white">章节概要</h2>
+                </div>
+                <span className="text-xs text-gray-400">用于 AI 起草和后续审稿上下文</span>
               </div>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-400 dark:text-gray-500 mb-2 uppercase tracking-wider">
-                    章节概要
-                  </label>
-                  <Textarea
-                    placeholder="描述本章主要内容..."
-                    rows={5}
-                    className="text-sm resize-none border-gray-200 dark:border-gray-700 focus:border-blue-500 dark:focus:border-blue-500"
-                    value={chapter.summary || ''}
-                    onChange={(e) => setChapter({ ...chapter, summary: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              {chapterId && (
-                <div className="pt-4 border-t border-gray-100 dark:border-gray-700/50">
-                  <div className="grid grid-cols-2 gap-3 text-xs">
-                    <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-3">
-                      <p className="text-gray-400 mb-1">生成次数</p>
-                      <p className="font-semibold text-gray-700 dark:text-gray-200">{chapter.generationCount ?? 0}</p>
-                    </div>
-                    <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-3">
-                      <p className="text-gray-400 mb-1">章节字数</p>
-                      <p className="font-semibold text-gray-700 dark:text-gray-200">{wordCount.toLocaleString()}</p>
-                    </div>
-                  </div>
-                  {chapter.lastGeneratedTime && (
-                    <p className="text-xs text-gray-400 mt-3">
-                      最后生成: {new Date(chapter.lastGeneratedTime).toLocaleDateString()}
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {chapterId && (
-                <div className="pt-4 border-t border-gray-100 dark:border-gray-700/50">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">AI 生成设置</span>
-                    <button
-                      onClick={() => setShowGenerateSettings(!showGenerateSettings)}
-                      className="text-xs text-blue-500 hover:text-blue-600"
-                    >
-                      {showGenerateSettings ? '收起' : '展开'}
-                    </button>
-                  </div>
-                  {showGenerateSettings && (
-                    <div className="space-y-3">
-                      <div>
-                        <label className="block text-xs text-gray-400 mb-1">目标字数</label>
-                        <input
-                          type="number"
-                          className="w-full h-8 px-3 rounded-lg border border-gray-200 dark:border-gray-700 text-sm bg-white dark:bg-gray-800"
-                          value={generateSettings.targetWordCount}
-                          onChange={(e) => setGenerateSettings(s => ({ ...s, targetWordCount: parseInt(e.target.value) || 3000 }))}
-                          min={1000}
-                          max={10000}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-400 mb-1">温度: {generateSettings.temperature}</label>
-                        <input
-                          type="range"
-                          className="w-full"
-                          min={0}
-                          max={2}
-                          step={0.1}
-                          value={generateSettings.temperature}
-                          onChange={(e) => setGenerateSettings(s => ({ ...s, temperature: parseFloat(e.target.value) }))}
-                        />
-                      </div>
-                      <label className="flex items-center gap-2 text-xs text-gray-500">
-                        <input
-                          type="checkbox"
-                          checked={generateSettings.useContext}
-                          onChange={(e) => setGenerateSettings(s => ({ ...s, useContext: e.target.checked }))}
-                        />
-                        使用上下文
-                      </label>
-                    </div>
-                  )}
-                </div>
-              )}
+              <Textarea
+                placeholder="写清本章核心事件、人物目标、冲突和结尾钩子..."
+                rows={4}
+                className="min-h-[112px] resize-none rounded-md border-gray-200 bg-gray-50 text-[15px] leading-7 text-gray-800 focus-visible:ring-1 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100"
+                value={chapter.summary || ''}
+                onChange={(e) => setChapter({ ...chapter, summary: e.target.value })}
+              />
             </div>
-          </div>
 
-          <div className="lg:col-span-4 space-y-4">
-            <div className="bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm rounded-2xl border border-gray-200/50 dark:border-gray-700/50 overflow-hidden shadow-sm">
-              <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700/50 flex items-center gap-3">
+            <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
+              <div className="flex flex-wrap items-center gap-3 border-b border-gray-100 px-5 py-3 dark:border-gray-800">
                 <FileText className="h-4 w-4 text-gray-400" />
-                <h3 className="font-medium text-gray-700 dark:text-gray-200">正文内容</h3>
+                <h2 className="font-medium text-gray-900 dark:text-white">正文内容</h2>
                 {isGenerating && (
                   <span className="flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400">
                     <Loader2 className="h-3 w-3 animate-spin" />
@@ -554,9 +485,9 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
                 <span className="ml-auto text-xs text-gray-400">{wordCount.toLocaleString()} 字</span>
               </div>
               {!chapter.content && showEmptyHint && !isGenerating && (
-                <div className="mx-5 mt-4 flex items-center gap-3 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 px-4 py-3">
-                  <BookOpen className="h-4 w-4 text-blue-500 shrink-0" />
-                  <span className="text-sm text-blue-700 dark:text-blue-300">还没有正文内容，可以直接在下方编辑器中手动创作，或点击「AI起草」生成正文</span>
+                <div className="mx-5 mt-4 flex items-center gap-3 rounded-md border border-blue-200 bg-blue-50 px-4 py-3 dark:border-blue-900 dark:bg-blue-950/30">
+                  <Sparkles className="h-4 w-4 shrink-0 text-blue-500" />
+                  <span className="text-sm text-blue-700 dark:text-blue-300">还没有正文，可以直接写，也可以点击「AI起草」。</span>
                   <button
                     onClick={() => setShowEmptyHint(false)}
                     className="ml-auto text-blue-400 hover:text-blue-600 dark:hover:text-blue-200 shrink-0"
@@ -567,7 +498,7 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
               )}
               <Textarea
                 ref={contentRef}
-                className="min-h-[550px] border-0 rounded-none focus:ring-0 resize-none bg-transparent text-base leading-relaxed p-6"
+                className="min-h-[620px] rounded-none border-0 bg-transparent px-9 py-8 text-[18px] leading-[2.05] text-gray-900 focus-visible:ring-0 dark:text-gray-100"
                 placeholder="开始创作..."
                 value={chapter.content || ''}
                 onChange={(e) => handleContentChange(e.target.value)}
@@ -575,11 +506,91 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
               />
             </div>
 
-            <div className="flex items-center justify-between text-sm text-gray-500 px-1">
+            <div className="flex items-center justify-between px-1 text-sm text-gray-500">
               <span>字数: {wordCount.toLocaleString()}</span>
               <span>最后更新: {chapter.updatedAt ? new Date(chapter.updatedAt).toLocaleString() : '-'}</span>
             </div>
-          </div>
+          </section>
+
+          <aside className="space-y-4 xl:sticky xl:top-24 xl:self-start">
+            <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+              <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-white">
+                <Settings className="h-4 w-4 text-gray-400" />
+                章节状态
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-md bg-gray-50 p-3 dark:bg-gray-950">
+                  <p className="mb-1 text-xs text-gray-400">生成次数</p>
+                  <p className="text-lg font-semibold text-gray-900 dark:text-white">{chapter.generationCount ?? 0}</p>
+                </div>
+                <div className="rounded-md bg-gray-50 p-3 dark:bg-gray-950">
+                  <p className="mb-1 text-xs text-gray-400">章节字数</p>
+                  <p className="text-lg font-semibold text-gray-900 dark:text-white">{wordCount.toLocaleString()}</p>
+                </div>
+              </div>
+              {chapter.lastGeneratedTime && (
+                <p className="mt-3 text-xs text-gray-500">
+                  最后生成: {new Date(chapter.lastGeneratedTime).toLocaleString()}
+                </p>
+              )}
+            </div>
+
+            {chapterId && (
+              <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+                <div className="mb-3 flex items-center justify-between">
+                  <span className="text-sm font-semibold text-gray-900 dark:text-white">AI 起草设置</span>
+                  <button
+                    onClick={() => setShowGenerateSettings(!showGenerateSettings)}
+                    className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400"
+                  >
+                    {showGenerateSettings ? '收起' : '展开'}
+                  </button>
+                </div>
+                <div className={showGenerateSettings ? 'space-y-4' : 'space-y-2 text-sm text-gray-500'}>
+                  {showGenerateSettings ? (
+                    <>
+                      <div>
+                        <label className="mb-1 block text-xs text-gray-500">目标字数</label>
+                        <input
+                          type="number"
+                          className="h-9 w-full rounded-md border border-gray-200 bg-white px-3 text-sm dark:border-gray-700 dark:bg-gray-950"
+                          value={generateSettings.targetWordCount}
+                          onChange={(e) => setGenerateSettings(s => ({ ...s, targetWordCount: parseInt(e.target.value) || 3000 }))}
+                          min={1000}
+                          max={10000}
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs text-gray-500">温度: {generateSettings.temperature}</label>
+                        <input
+                          type="range"
+                          className="w-full"
+                          min={0}
+                          max={2}
+                          step={0.1}
+                          value={generateSettings.temperature}
+                          onChange={(e) => setGenerateSettings(s => ({ ...s, temperature: parseFloat(e.target.value) }))}
+                        />
+                      </div>
+                      <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                        <input
+                          type="checkbox"
+                          checked={generateSettings.useContext}
+                          onChange={(e) => setGenerateSettings(s => ({ ...s, useContext: e.target.checked }))}
+                        />
+                        使用上下文
+                      </label>
+                    </>
+                  ) : (
+                    <>
+                      <p>目标 {generateSettings.targetWordCount.toLocaleString()} 字</p>
+                      <p>温度 {generateSettings.temperature} / {generateSettings.useContext ? `参考前 ${generateSettings.contextChapterCount} 章` : '不使用上下文'}</p>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+          </aside>
         </div>
       </main>
 
