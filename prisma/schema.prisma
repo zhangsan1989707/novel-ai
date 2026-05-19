@@ -57,6 +57,49 @@ enum AIVendor {
   ZHIPU      // 智谱 AI (GLM)
 }
 
+enum PipelineStep {
+  BLUEPRINT    // Book Blueprint
+  ARC_PLAN     // Arc Plan
+  CHAPTER_LIST // Chapter Batch
+  WRITE        // 逐章写作
+  VALIDATE     // 校验
+  POLISH       // 润色
+  DESLOP       // 去AI味
+  SUMMARIZE    // 摘要
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  PAUSED
+}
+
+enum ArcStage {
+  OPENING       // 开局
+  GROWTH        // 成长
+  EXPANSION     // 扩张
+  MID_CONFLICT  // 中期冲突
+  PRE_FINALE    // 大战前夕
+  FINALE        // 终局
+}
+
+enum Platform {
+  QIDIAN    // 起点
+  FANQIE    // 番茄
+  FEILU     // 飞卢
+  JINJIANG  // 晋江
+  QIMAO     // 七猫
+}
+
+enum LengthType {
+  SHORT       // 短篇 30-50章
+  MEDIUM      // 中篇 100-300章
+  LONG        // 长篇 500-1000章
+  ULTRA_LONG  // 超长篇 1000+章
+}
+
 // ============================================
 // 数据模型
 // ============================================
@@ -176,6 +219,18 @@ model NovelProject {
 
   storyType           String          @default("LONG")
 
+  platform        Platform?       // 平台
+  lengthType      LengthType?     // 长度类型
+  corePitch       String?         @db.Text  // 一句话卖点
+  pace            Float           @default(0.5)
+  darkness        Float           @default(0.3)
+  humor           Float           @default(0.3)
+  romance         Float           @default(0.2)
+  powerGrowth      Float           @default(0.5)
+  conflictIntensity Float         @default(0.5)
+  mysteryDensity  Float           @default(0.3)
+  pipelineJobId   Int?            // 当前运行中的流水线任务ID
+
   // 外键
   aiModelId           Int?
   aiModelConfig       AIModelConfig?  @relation(fields: [aiModelId], references: [id])
@@ -200,6 +255,12 @@ model NovelProject {
   coverDesigns        CoverDesign[]
   reviewReports       ReviewReport[]
   shortStory          ShortStory?
+
+  pipelineJobs        GenerationJob[]
+  bookBlueprint       BookBlueprint?
+  arcPlans            ArcPlan[]
+  villains            Villain[]
+  worldState          WorldState?
 
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
@@ -876,4 +937,122 @@ model ShortStorySection {
   @@unique([storyId, sectionNumber])
   @@index([storyId])
   @@map("short_story_sections")
+}
+
+model GenerationJob {
+  id            Int         @id @default(autoincrement())
+  projectId     Int
+  project       NovelProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  type          String      @default("FULL_PIPELINE")
+  status        JobStatus   @default(PENDING)
+  currentStep   PipelineStep?
+  stepIndex     Int         @default(0)
+  totalChapters Int         @default(0)
+  currentChapter Int        @default(0)
+  retryCount    Int         @default(0)
+  maxRetries    Int         @default(3)
+  payload       Json?       @default("{}")
+  result        Json?       @default("{}")
+  errorMessage  String?
+  checkpoints   PipelineCheckpoint[]
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  completedAt   DateTime?
+
+  @@index([projectId])
+  @@index([status])
+  @@map("generation_jobs")
+}
+
+model PipelineCheckpoint {
+  id         String       @id @default(cuid())
+  jobId      Int
+  job        GenerationJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  step       PipelineStep
+  input      Json?        @default("{}")
+  output     Json?        @default("{}")
+  error      String?
+  status     String       @default("COMPLETED")
+  createdAt  DateTime     @default(now())
+
+  @@index([jobId])
+  @@index([jobId, step])
+  @@map("pipeline_checkpoints")
+}
+
+model BookBlueprint {
+  id                String       @id @default(cuid())
+  projectId         Int          @unique
+  project           NovelProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  corePitch         String       @db.Text
+  worldDirection    String?      @db.Text
+  mainlineDirection String?      @db.Text
+  growthDirection   String?      @db.Text
+  endingDirection   String?      @db.Text
+  constraints       String[]     @default([])
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  @@map("book_blueprints")
+}
+
+model ArcPlan {
+  id            String       @id @default(cuid())
+  projectId     Int
+  project       NovelProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  arcNumber     Int
+  name          String
+  stage         ArcStage
+  description   String?      @db.Text
+  batchSize     Int          @default(15)
+  startChapter  Int
+  endChapter    Int?
+  goals         String[]     @default([])
+  keyEvents     String[]     @default([])
+  isCompleted   Boolean      @default(false)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@unique([projectId, arcNumber])
+  @@index([projectId])
+  @@map("arc_plans")
+}
+
+model Villain {
+  id            String       @id @default(cuid())
+  projectId     Int
+  project       NovelProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name          String
+  tier          String       @default("stage")
+  isFinalBoss   Boolean      @default(false)
+  arcNumber     Int?
+  description   String?      @db.Text
+  motivation    String?      @db.Text
+  abilities     String[]     @default([])
+  introducedAt  Int?
+  defeatedAt    Int?
+  lifecycle     String?      @default("active")
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@index([projectId])
+  @@map("villains")
+}
+
+model WorldState {
+  id               String       @id @default(cuid())
+  projectId        Int          @unique
+  project          NovelProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  mapLevel         Int          @default(1)
+  factionCount     Int          @default(1)
+  powerLevel       Int          @default(1)
+  civilizationLevel Int         @default(1)
+  classStructure   String[]     @default([])
+  regions          String[]     @default([])
+  currentExpansion String?       @db.Text
+  lastExpandedAt   DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@map("world_states")
 }
