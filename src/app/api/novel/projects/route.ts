@@ -12,7 +12,7 @@ const PLATFORM_ENUM = z.enum(['QIDIAN', 'FANQIE', 'FEILU', 'JINJIANG', 'QIMAO'])
 const LENGTH_TYPE_ENUM = z.enum(['SHORT', 'MEDIUM', 'LONG', 'ULTRA_LONG'])
 
 const createProjectSchema = z.object({
-  title: z.string().min(1, '标题不能为空').max(200),
+  title: z.string().max(200).optional(),
   description: z.string().optional(),
   genre: z.string().optional(),
   writingStyle: z.string().optional(),
@@ -155,6 +155,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const validatedData = createProjectSchema.parse(body)
 
+    const title = validatedData.title || validatedData.corePitch?.slice(0, 50) || `新项目 ${new Date().toLocaleDateString('zh-CN')}`
+
     let creatorId = getCurrentUserId()
 
     // 确保用户存在
@@ -173,6 +175,7 @@ export async function POST(request: NextRequest) {
     const project = await prisma.novelProject.create({
       data: {
         ...validatedData,
+        title,
         creatorId,
       },
       include: {
