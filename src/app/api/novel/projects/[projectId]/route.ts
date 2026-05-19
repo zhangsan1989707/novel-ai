@@ -33,6 +33,13 @@ const updateProjectSchema = z.object({
   totalVolumes: z.number().int().min(1).max(10).optional(),
   status: z.enum(['DRAFT', 'WRITING', 'COMPLETED', 'PAUSED']).optional(),
   aiModelId: z.number().int().positive().nullable().optional(),
+  pace: z.number().min(0).max(1).optional(),
+  darkness: z.number().min(0).max(1).optional(),
+  humor: z.number().min(0).max(1).optional(),
+  romance: z.number().min(0).max(1).optional(),
+  powerGrowth: z.number().min(0).max(1).optional(),
+  conflictIntensity: z.number().min(0).max(1).optional(),
+  mysteryDensity: z.number().min(0).max(1).optional(),
 })
 
 // ============================================
@@ -73,7 +80,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             wordCount: true,
             status: true,
             sortOrder: true,
+            summary: true,
+            content: true,
           },
+        },
+        arcPlans: {
+          orderBy: { arcNumber: 'asc' },
         },
       },
     })

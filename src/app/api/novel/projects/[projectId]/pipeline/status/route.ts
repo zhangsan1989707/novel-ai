@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { getJobProgress } from '@/lib/engine/generation-job'
 
 export async function GET(
   request: NextRequest,
@@ -28,13 +27,48 @@ export async function GET(
     if (!project.pipelineJobId) {
       return NextResponse.json({
         success: true,
-        data: { status: 'idle', message: '没有运行中的流水线任务' },
+        data: {
+          status: 'IDLE',
+          currentStep: '',
+          progress: 0,
+          currentChapter: 0,
+          totalChapters: 0,
+        },
       })
     }
 
-    const progress = await getJobProgress(project.pipelineJobId)
+    const job = await prisma.generationJob.findUnique({
+      where: { id: project.pipelineJobId },
+    })
 
-    return NextResponse.json({ success: true, data: progress })
+    if (!job) {
+      return NextResponse.json({
+        success: true,
+        data: {
+          status: 'IDLE',
+          currentStep: '',
+          progress: 0,
+          currentChapter: 0,
+          totalChapters: 0,
+        },
+      })
+    }
+
+    const totalSteps = 8
+    const stepProgress = totalSteps > 0 ? (job.stepIndex / totalSteps) * 100 : 0
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        status: job.status,
+        currentStep: job.currentStep || '',
+        progress: Math.round(stepProgress),
+        currentChapter: job.currentChapter,
+        totalChapters: job.totalChapters,
+        error: job.errorMessage || undefined,
+        pipelineJobId: job.id,
+      },
+    })
   } catch (error) {
     console.error('Pipeline status error:', error)
     return NextResponse.json(

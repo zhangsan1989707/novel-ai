@@ -56,6 +56,13 @@ interface Project {
   aiModelConfig?: { id: number; name: string; vendor: string } | null
   projectMode: 'CREATE' | 'ANALYZE'
   storyType?: string
+  pace?: number
+  darkness?: number
+  humor?: number
+  romance?: number
+  powerGrowth?: number
+  conflictIntensity?: number
+  mysteryDensity?: number
   chapters: Chapter[]
   arcPlans?: ArcPlan[]
   createdAt: string
@@ -63,13 +70,13 @@ interface Project {
 }
 
 interface PipelineStatus {
-  status: 'IDLE' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+  status: 'IDLE' | 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'PAUSED'
   currentStep: string
   progress: number
   currentChapter: number
   totalChapters: number
   error?: string
-  pipelineJobId?: string
+  pipelineJobId?: number
 }
 
 const chapterStatusMap: Record<string, { label: string; variant: 'default' | 'primary' | 'secondary' | 'success' | 'warning' | 'danger' }> = {
@@ -331,13 +338,13 @@ export default function ProjectDetailPage() {
       </div>
 
       {/* Pipeline Progress Panel */}
-      {pipeline && pipeline.status === 'RUNNING' && (
+      {pipeline && (pipeline.status === 'RUNNING' || pipeline.status === 'PENDING') && (
         <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 dark:border-blue-900/60 dark:bg-blue-900/20">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
-              <Loader2 className="h-4 w-4 text-blue-600 animate-spin" />
+              <Loader2 className={`h-4 w-4 text-blue-600 ${pipeline.status === 'RUNNING' ? 'animate-spin' : ''}`} />
               <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
-                流水线运行中
+                {pipeline.status === 'PENDING' ? '流水线准备中' : '流水线运行中'}
               </span>
             </div>
             <span className="text-xs text-blue-500">{pipeline.progress}%</span>
@@ -345,7 +352,7 @@ export default function ProjectDetailPage() {
           <Progress value={pipeline.progress} max={100} size="sm" />
           <div className="flex items-center justify-between mt-2 text-xs text-blue-600 dark:text-blue-400">
             <span>
-              <span className="font-medium">{pipeline.currentStep}</span>
+              <span className="font-medium">{pipeline.currentStep || '初始化'}</span>
             </span>
             <span>
               第 {pipeline.currentChapter} / {pipeline.totalChapters} 章
@@ -541,6 +548,15 @@ export default function ProjectDetailPage() {
               {/* StorySteering Panel */}
               <StorySteeringPanel
                 projectId={projectId}
+                initialValues={{
+                  pace: project.pace ?? 0.5,
+                  darkness: project.darkness ?? 0.3,
+                  humor: project.humor ?? 0.3,
+                  romance: project.romance ?? 0.2,
+                  powerGrowth: project.powerGrowth ?? 0.5,
+                  conflictIntensity: project.conflictIntensity ?? 0.5,
+                  mysteryDensity: project.mysteryDensity ?? 0.3,
+                }}
                 onSave={() => fetchProject()}
               />
             </>
