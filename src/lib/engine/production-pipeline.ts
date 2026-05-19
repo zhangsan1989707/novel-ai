@@ -7,7 +7,8 @@ import { completeJob, failJob, saveCheckpoint, updateJobStep } from './generatio
 import { validateAndWarn } from './long-novel-controller'
 import { toInternalArcStage, toInternalPlatform, toPrismaArcStage } from './production-mapping'
 import { runChapterGenerationPipeline } from './orchestrator'
-import { parseAiJsonArray, parseAiJsonObject } from './ai-json'
+import { parseAiJsonObject } from './ai-json'
+import { buildChapterListPrompt } from '../prompts/novel/chapter-list'
 
 type ChapterOutline = {
   chapterNumber: number
@@ -225,71 +226,82 @@ async function planChapterBatch(projectId: number, provider: AIProvider): Promis
   })
   if (!project || !project.bookBlueprint) throw new Error('项目 Blueprint 不完整')
 
-  const currentArc = project.arcPlans.find(arc => !arc.isCompleted) || project.arcPlans[0]
+  const existingMaxChapter = project.chapters.reduce((max, chapter) => Math.max(max, chapter.chapterNumber), 0)
+  const nextChapterNumber = existingMaxChapter + 1
+  const currentArc =
+    project.arcPlans.find(arc => {
+      const arcEnd = arc.endChapter || Number.MAX_SAFE_INTEGER
+      return nextChapterNumber >= arc.startChapter && nextChapterNumber <= arcEnd
+    }) ||
+    project.arcPlans.find(arc => !arc.isCompleted) ||
+    project.arcPlans[0]
   if (!currentArc) throw new Error('Arc Plan 不存在')
 
-  const existingMaxChapter = project.chapters.reduce((max, chapter) => Math.max(max, chapter.chapterNumber), 0)
-  const startChapter = Math.max(existingMaxChapter + 1, currentArc.startChapter)
+  const startChapter = Math.max(nextChapterNumber, currentArc.startChapter)
   const endLimit = currentArc.endChapter || startChapter + currentArc.batchSize - 1
   const endChapter = Math.min(endLimit, startChapter + currentArc.batchSize - 1)
   if (startChapter > endLimit) return []
 
   const totalChapters = Math.max(1, Math.ceil((project.targetWordCount || 300000) / (project.chapterWordCount || 3000)))
   const progressRatio = startChapter / totalChapters
-  const platform = toInternalPlatform(project.platform)
   const arcStage = toInternalArcStage(currentArc.stage)
   const worldState = project.worldState
     ? `地图层级 ${project.worldState.mapLevel}/10，势力 ${project.worldState.factionCount}，力量上限 ${project.worldState.powerLevel}/10，文明层级 ${project.worldState.civilizationLevel}/10`
     : '世界状态未初始化，需要在当前批次逐步扩张'
 
-  const prompt = `你是 AI 网文导演系统的当前批次目录 Agent。请只生成当前批次章节目录。
+  const existingChapters = project.chapters
+    .filter(chapter => chapter.chapterNumber < startChapter)
+    .map(chapter => ({
+      chapterNumber: chapter.chapterNumber,
+      title: chapter.title,
+      summary: chapter.summary || chapter.title || `第${chapter.chapterNumber}章`,
+    }))
 
-硬性规则：
-- 只生成第 ${startChapter} 章到第 ${endChapter} 章
-- 这是阶段目录，不是全书目录
-- 当前全书进度约 ${Math.round(progressRatio * 100)}%
-- 如果进度低于 85%，禁止出现终局、大结局、最终决战、天下太平、一切结束、终焉、全部伏笔回收
-- 每章必须留下后续推进空间
-
-项目信息：
-- 标题：${project.title}
-- 平台：${platform}
-- 题材：${project.genre || '未知'}
-- 风格：${project.writingStyle || '默认'}
-- 当前 Arc：${currentArc.name} / ${arcStage}
-- Arc 目标：${currentArc.goals.join('、') || '推进阶段目标'}
-- 关键事件：${currentArc.keyEvents.join('、') || '由 AI 决定'}
-- 世界状态：${worldState}
-
-Book Blueprint：
-- 核心卖点：${project.bookBlueprint.corePitch}
-- 世界方向：${project.bookBlueprint.worldDirection || ''}
-- 主线方向：${project.bookBlueprint.mainlineDirection || ''}
-
-输出 JSON 数组，不要 markdown：
-[
-  { "chapterNumber": ${startChapter}, "title": "章节标题", "summary": "本章剧情概要，强调阶段推进和下一章钩子" }
-]`
+  const prompt = buildChapterListPrompt({
+    projectTitle: project.title,
+    genre: project.genre || undefined,
+    writingStyle: project.writingStyle || undefined,
+    worldSetting: [
+      project.worldSetting || '',
+      `【当前 Arc】${currentArc.name} / ${arcStage}`,
+      `【Arc 目标】${currentArc.goals.join('、') || '推进阶段目标'}`,
+      `【关键事件】${currentArc.keyEvents.join('、') || '由 AI 决定'}`,
+      `【世界状态】${worldState}`,
+      `【当前全书进度】${Math.round(progressRatio * 100)}%`,
+      `【Book Blueprint】核心卖点：${project.bookBlueprint.corePitch}\n世界方向：${project.bookBlueprint.worldDirection || ''}\n主线方向：${project.bookBlueprint.mainlineDirection || ''}`,
+    ].filter(Boolean).join('\n\n'),
+    protagonistProfile: project.protagonistProfile || undefined,
+    protagonistGoal: project.protagonistGoal || undefined,
+    antagonistSetting: project.antagonistSetting || undefined,
+    endingPlan: project.endingPlan || undefined,
+    totalChapters: endChapter,
+    titleStyle: 'webnovel',
+    outline: undefined,
+    outlineStages: undefined,
+    existingChapters,
+  })
 
   const result = await provider.generate(prompt, {
     temperature: 0.2,
-    maxTokens: 6000,
+    maxTokens: 8000,
     timeoutMs: 120000,
     responseFormat: { type: 'json_object' },
   })
   let outlines: ChapterOutline[]
   try {
-    outlines = parseAiJsonArray<ChapterOutline>(result.content)
+    const chapterList = parseAiJsonObject<{ chapters?: ChapterOutline[] }>(result.content)
+    outlines = Array.isArray(chapterList.chapters) ? chapterList.chapters : []
   } catch (error) {
-    const retryPrompt = `${prompt}\n\n上一次输出未严格符合 JSON 数组。请只输出一个合法 JSON 数组，不要解释，不要代码块，不要多余文本。`
+    const retryPrompt = `${prompt}\n\n上一次输出未严格符合 JSON 结构。请只输出一个合法 JSON 对象，且其中的 chapters 数组必须严格包含 ${endChapter - startChapter + 1} 章，从第 ${startChapter} 章到第 ${endChapter} 章连续编号，不要解释，不要代码块，不要多余文本。`
     const retry = await provider.generate(retryPrompt, {
       temperature: 0.1,
-      maxTokens: 3000,
+      maxTokens: 8000,
       timeoutMs: 120000,
       responseFormat: { type: 'json_object' },
     })
     try {
-      outlines = parseAiJsonArray<ChapterOutline>(retry.content)
+      const chapterList = parseAiJsonObject<{ chapters?: ChapterOutline[] }>(retry.content)
+      outlines = Array.isArray(chapterList.chapters) ? chapterList.chapters : []
     } catch {
       throw new Error(`章节目录生成失败：${error instanceof Error ? error.message : 'JSON 解析失败'}`)
     }
@@ -301,6 +313,33 @@ Book Blueprint：
       title: item.title || `第${item.chapterNumber}章`,
       summary: item.summary || item.title || `第${item.chapterNumber}章剧情推进`,
     }))
+
+  const expectedCount = endChapter - startChapter + 1
+  if (outlines.length !== expectedCount) {
+    const retryPrompt = `${prompt}\n\n上一次输出章数不匹配。你必须严格输出从第 ${startChapter} 章到第 ${endChapter} 章的连续章节，共 ${expectedCount} 章，且每章都必须有 title 和 summary。`
+    const retry = await provider.generate(retryPrompt, {
+      temperature: 0.1,
+      maxTokens: 8000,
+      timeoutMs: 120000,
+      responseFormat: { type: 'json_object' },
+    })
+    try {
+      const chapterList = parseAiJsonObject<{ chapters?: ChapterOutline[] }>(retry.content)
+      const repaired = Array.isArray(chapterList.chapters) ? chapterList.chapters : []
+      const normalized = repaired
+        .filter(item => item.chapterNumber >= startChapter && item.chapterNumber <= endChapter)
+        .map(item => ({
+          chapterNumber: item.chapterNumber,
+          title: item.title || `第${item.chapterNumber}章`,
+          summary: item.summary || item.title || `第${item.chapterNumber}章剧情推进`,
+        }))
+      if (normalized.length === expectedCount) {
+        outlines = normalized
+      }
+    } catch {
+      // 保留第一次结果，交由后续校验兜底
+    }
+  }
 
   const validation = validateAndWarn(outlines, progressRatio)
   if (!validation.passed) {

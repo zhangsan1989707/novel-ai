@@ -338,7 +338,8 @@ export async function runChapterGenerationPipeline(
     if (Object.keys(validationReport.characterUpdates).length > 0) {
       await memory.batchUpdateCharacterProfiles(
         projectId,
-        validationReport.characterUpdates
+        validationReport.characterUpdates,
+        chapterNo
       )
     }
 

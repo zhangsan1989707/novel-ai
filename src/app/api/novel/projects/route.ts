@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { logError } from '@/lib/logger'
 import { getCurrentUserId } from '@/lib/auth'
+import { createProviderFromConfigId, createProviderFromDefaultConfig } from '@/lib/ai/factory'
 
 // ============================================
 // Schema 验证
@@ -42,6 +43,75 @@ const createProjectSchema = z.object({
 })
 
 const updateProjectSchema = createProjectSchema.partial()
+
+function normalizeGeneratedTitle(text: string): string {
+  return text
+    .trim()
+    .replace(/^["'`【】《》\[\]\s]+/, '')
+    .replace(/["'`【】《》\[\]\s]+$/, '')
+    .replace(/\s+/g, ' ')
+    .slice(0, 50)
+}
+
+async function generateNovelTitle(input: {
+  corePitch?: string
+  description?: string
+  genre?: string
+  writingStyle?: string
+  platform?: string
+  lengthType?: string
+  aiModelId?: number
+}): Promise<string | null> {
+  const pitch = input.corePitch || input.description || '暂无'
+  const textPrompt = `请根据一句话卖点生成一个中文小说标题，只输出标题，不要解释。
+
+卖点：${pitch}`
+
+  try {
+    const provider = input.aiModelId
+      ? await createProviderFromConfigId(input.aiModelId)
+      : await createProviderFromDefaultConfig()
+
+    if (!provider) return null
+
+    const attempts = [
+      {
+        prompt: textPrompt,
+        params: {
+          temperature: 0.2,
+          maxTokens: 192,
+          timeoutMs: 20000,
+        },
+      },
+      {
+        prompt: `请直接给出最适合这个卖点的中文小说标题，只输出标题：${pitch}`,
+        params: {
+          temperature: 0.2,
+          maxTokens: 96,
+          timeoutMs: 20000,
+        },
+      },
+    ] as const
+
+    for (const attempt of attempts) {
+      try {
+        const result = await provider.generate(attempt.prompt, attempt.params)
+        if (!result.content?.trim()) continue
+
+        const title = normalizeGeneratedTitle(result.content)
+        if (title) return title
+      } catch (error) {
+        logError(error instanceof Error ? error : new Error(String(error)), {
+          type: 'generate_project_title_attempt',
+        })
+      }
+    }
+  } catch (error) {
+    logError(error instanceof Error ? error : new Error(String(error)), { type: 'generate_project_title' })
+  }
+
+  return null
+}
 
 // ============================================
 // API Handlers
@@ -155,9 +225,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const validatedData = createProjectSchema.parse(body)
 
-    const title = validatedData.title?.trim()
-      || '未命名小说项目'
-
     let creatorId = getCurrentUserId()
 
     // 确保用户存在：优先使用当前 ID，否则回退到开发用户（按邮箱查找或创建）
@@ -176,6 +243,18 @@ export async function POST(request: NextRequest) {
       }
       creatorId = devUser.id
     }
+
+    const title = validatedData.title?.trim()
+      || await generateNovelTitle({
+        corePitch: validatedData.corePitch,
+        description: validatedData.description,
+        genre: validatedData.genre,
+        writingStyle: validatedData.writingStyle,
+        platform: validatedData.platform,
+        lengthType: validatedData.lengthType,
+        aiModelId: validatedData.aiModelId,
+      })
+      || '未命名小说项目'
 
     const project = await prisma.novelProject.create({
       data: {

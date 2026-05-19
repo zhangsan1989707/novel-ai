@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Button, Card, CardContent, CardHeader, CardTitle, Badge, Progress, Modal, toast, MoreActionsMenu } from '@/components/ui'
 import { ProjectForm, ProjectFormData } from '@/components/project'
@@ -93,6 +93,38 @@ const projectStatusMap: Record<ProjectStatus, { label: string; variant: 'default
   PAUSED: { label: '已暂停', variant: 'warning' },
 }
 
+const pipelineStatusMap: Record<PipelineStatus['status'], string> = {
+  IDLE: '空闲',
+  PENDING: '准备中',
+  RUNNING: '运行中',
+  COMPLETED: '已完成',
+  FAILED: '失败',
+  PAUSED: '已暂停',
+}
+
+const pipelineStepMap: Record<string, string> = {
+  BLUEPRINT: '蓝图生成',
+  ARC_PLAN: '阶段规划',
+  CHAPTER_LIST: '章节目录',
+  WRITE: '章节写作',
+  SUMMARIZE: '总结收尾',
+  PLAN: '策划',
+  REVIEW: '审稿',
+  POLISH: '润色',
+  DRAFT: '草稿生成',
+  VALIDATE: '校验',
+  INITIALIZE: '初始化',
+}
+
+function getPipelineStatusLabel(status: PipelineStatus['status']) {
+  return pipelineStatusMap[status] || status
+}
+
+function getPipelineStepLabel(step: string) {
+  if (!step) return '初始化'
+  return pipelineStepMap[step.toUpperCase()] || step
+}
+
 type DashboardTab = 'dashboard' | 'settings'
 
 function groupChaptersByArc(project: Project): { arcName: string; arcNumber: number; chapters: Chapter[] }[] {
@@ -142,6 +174,7 @@ export default function ProjectDetailPage() {
   const [activeTab, setActiveTab] = useState<DashboardTab>('dashboard')
 
   const [pipeline, setPipeline] = useState<PipelineStatus | null>(null)
+  const lastPipelineStatusRef = useRef<PipelineStatus['status'] | null>(null)
 
   const fetchProject = useCallback(async () => {
     try {
@@ -174,9 +207,16 @@ export default function ProjectDetailPage() {
         const res = await fetch(`/api/novel/projects/${projectId}/pipeline/status`)
         const data = await res.json()
         if (data.success) {
+          const nextStatus = data.data.status as PipelineStatus['status']
+          const prevStatus = lastPipelineStatusRef.current
           setPipeline(data.data)
+          lastPipelineStatusRef.current = nextStatus
 
-          if (data.data.status === 'COMPLETED' || data.data.status === 'FAILED') {
+          if (nextStatus === 'COMPLETED' && prevStatus !== 'COMPLETED') {
+            toast.success(`流水线执行完成 — 共生成 ${data.data.totalChapters} 章`)
+            fetchProject()
+          } else if (nextStatus === 'FAILED' && prevStatus !== 'FAILED') {
+            toast.error(data.data.error || '流水线执行失败')
             fetchProject()
           }
         }
@@ -372,7 +412,7 @@ export default function ProjectDetailPage() {
             <div className="flex items-center gap-2">
               <Loader2 className={`h-4 w-4 text-blue-600 ${pipeline.status === 'RUNNING' ? 'animate-spin' : ''}`} />
               <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
-                {pipeline.status === 'PENDING' ? '流水线准备中' : '流水线运行中'}
+                {pipeline.status === 'PENDING' ? '流水线准备中' : `流水线${getPipelineStatusLabel(pipeline.status)}`}
               </span>
             </div>
             <span className="text-xs text-blue-500">{pipeline.progress}%</span>
@@ -380,7 +420,7 @@ export default function ProjectDetailPage() {
           <Progress value={pipeline.progress} max={100} size="sm" />
           <div className="flex items-center justify-between mt-2 text-xs text-blue-600 dark:text-blue-400">
             <span>
-              <span className="font-medium">{pipeline.currentStep || '初始化'}</span>
+              <span className="font-medium">{getPipelineStepLabel(pipeline.currentStep)}</span>
             </span>
             <span>
               第 {pipeline.currentChapter} / {pipeline.totalChapters} 章

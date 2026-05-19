@@ -15,8 +15,8 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="zh-CN">
-      <body className="min-h-full antialiased">
+    <html lang="zh-CN" suppressHydrationWarning>
+      <body className="min-h-full antialiased" suppressHydrationWarning>
         {children}
         <ToastContainer />
         <VersionInfo />

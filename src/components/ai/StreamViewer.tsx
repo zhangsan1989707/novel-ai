@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Button, Progress } from '@/components/ui'
-import { Sparkles, Square, RefreshCw, Wand2, Loader2 } from 'lucide-react'
+import { Sparkles, Square, RefreshCw, Wand2 } from 'lucide-react'
 import { countChineseWords } from '@/lib/utils'
 import { ChapterQualityPanel } from './ChapterQualityPanel'
 
@@ -195,7 +195,6 @@ export function StreamViewer({
               try {
                 const data = JSON.parse(evt.data)
                 const cleanedContent = data.content || ''
-                const cleanedTitle = data.title || ''
                 setState((prev) => {
                   return {
                     ...prev,
