@@ -33,3 +33,7 @@ export { ShortStoryPanel } from './ShortStoryPanel'
 export { AgentManager } from './AgentManager'
 // Hooks
 export { WorkflowHooksPanel } from './WorkflowHooksPanel'
+// Story Steering
+export { StorySteeringPanel } from './StorySteeringPanel'
+// Toolbox
+export { Toolbox } from './Toolbox'
