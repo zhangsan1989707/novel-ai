@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { exportNovel } from '@/lib/export/service'
+import { exportNovel, exportForPlatform } from '@/lib/export/service'
 import { ExportFormat } from '@/lib/export/types'
+import type { PlatformKey } from '@/lib/export/adapters/index'
 import AdmZip from 'adm-zip'
 import { logError } from '@/lib/logger'
 
@@ -34,6 +35,38 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const body = await request.json()
+
+    const validPlatforms = ['qidian', 'fanqie', 'feilu', 'jinjiang', 'qimao', 'epub', 'generic'] as const
+    const platform = body.platform
+    if (platform && !validPlatforms.includes(platform)) {
+      return NextResponse.json(
+        { success: false, error: { code: 'INVALID_PLATFORM', message: `不支持的平台: ${platform}` } },
+        { status: 400 }
+      )
+    }
+
+    if (platform && platform !== 'generic') {
+      const result = await exportForPlatform(projectIdNum, platform as PlatformKey, {
+        includeMetadata: body.includeMetadata !== false,
+      })
+
+      if (!result.success) {
+        return NextResponse.json(
+          { success: false, error: { code: 'EXPORT_FAILED', message: result.error } },
+          { status: 400 }
+        )
+      }
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          fileName: result.fileName,
+          content: result.content,
+          contentType: result.contentType,
+        },
+      })
+    }
+
     const { format, includeMetadata, includeChapterTitles } = exportSchema.parse(body)
 
     // 如果是 EPUB，使用原有逻辑

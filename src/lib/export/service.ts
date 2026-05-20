@@ -1,6 +1,8 @@
 import { prisma } from '@/lib/prisma'
 import type { ExportOptions, ExportResult, ExportedNovel } from './types'
 import { logError } from '@/lib/logger'
+import { getPlatformConfig, formatChapterTitle, type PlatformKey } from './adapters/index'
+import { generateEpub } from './adapters/epub'
 
 /**
  * 导出小说为指定格式
@@ -274,5 +276,91 @@ export async function exportChapters(
       fileName: '',
       error: error instanceof Error ? error.message : '导出失败',
     }
+  }
+}
+
+export async function exportForPlatform(
+  projectId: number,
+  platform: PlatformKey,
+  options?: { includeMetadata?: boolean }
+): Promise<ExportResult> {
+  try {
+    const project = await prisma.novelProject.findUnique({
+      where: { id: projectId },
+      include: {
+        chapters: {
+          where: {
+            status: { in: ['COMPLETED', 'REVIEWING'] },
+            content: { not: null },
+          },
+          orderBy: { chapterNumber: 'asc' },
+        },
+      },
+    })
+
+    if (!project) return { success: false, fileName: '', error: '项目不存在' }
+    if (project.chapters.length === 0) return { success: false, fileName: '', error: '没有可导出的章节' }
+
+    const config = getPlatformConfig(platform)
+    const sanitizedTitle = project.title.replace(/[^a-zA-Z0-9一-龥]/g, '_')
+    const timestamp = new Date().toISOString().slice(0, 10)
+
+    if (platform === 'epub') {
+      const epubData = generateEpub({
+        metadata: {
+          title: project.title,
+          description: project.description || undefined,
+        },
+        chapters: project.chapters.map(ch => ({
+          title: formatChapterTitle(ch.chapterNumber, ch.title, platform),
+          content: ch.content || '',
+          chapterNumber: ch.chapterNumber,
+        })),
+        includeStyles: true,
+      })
+
+      return {
+        success: true,
+        fileName: `${sanitizedTitle}_${timestamp}.epub.json`,
+        content: epubData,
+        contentType: 'application/json',
+      }
+    }
+
+    const lines: string[] = []
+
+    if (options?.includeMetadata !== false) {
+      lines.push(project.title)
+      lines.push('='.repeat(40))
+      if (project.genre) lines.push(`类型：${project.genre}`)
+      if (project.description) lines.push(`简介：${project.description}`)
+      lines.push('')
+      lines.push('')
+    }
+
+    for (const chapter of project.chapters) {
+      lines.push('')
+      const chapterTitle = formatChapterTitle(chapter.chapterNumber, chapter.title, platform)
+      lines.push(chapterTitle)
+      lines.push('')
+      if (chapter.content) {
+        lines.push(chapter.content)
+      }
+      lines.push('')
+    }
+
+    const content = lines.join('\n')
+    const ext = config.formats[0]
+    const fileName = `${sanitizedTitle}_${platform}_${timestamp}.${ext}`
+
+    return {
+      success: true,
+      fileName,
+      content,
+      contentType: 'text/plain; charset=utf-8',
+    }
+  } catch (error) {
+    logError(error instanceof Error ? error : new Error(String(error)), { type: 'export_platform', projectId })
+    return { success: false, fileName: '', error: error instanceof Error ? error.message : '导出失败' }
   }
 }
