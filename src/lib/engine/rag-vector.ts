@@ -73,6 +73,18 @@ const embeddingVectorCache = new Map<string, number[]>()
 let embeddingFallbackWarned = false
 let ragDocumentsMissingWarned = false
 
+async function hasRagDocumentsTable(): Promise<boolean> {
+  const existenceRows = await prisma.$queryRaw<Array<{ table_name: string | null }>>`
+    SELECT to_regclass('public.rag_documents')::text AS table_name
+  `
+  const exists = Boolean(existenceRows[0]?.table_name)
+  if (!exists && !ragDocumentsMissingWarned) {
+    logger.warn('rag_documents table is missing, fallback RAG operations to no-op')
+    ragDocumentsMissingWarned = true
+  }
+  return exists
+}
+
 function normalizeText(text: string): string {
   return text
     .toLowerCase()
@@ -260,6 +272,10 @@ async function upsertRagDocuments(
     embeddingModel?: string
   }>
 ): Promise<void> {
+  if (!(await hasRagDocumentsTable())) {
+    return
+  }
+
   for (const doc of docs) {
     await prisma.$executeRaw`
       INSERT INTO rag_documents (
@@ -305,6 +321,10 @@ async function upsertRagDocuments(
 }
 
 async function deleteRagDocumentsByProject(projectId: number): Promise<void> {
+  if (!(await hasRagDocumentsTable())) {
+    return
+  }
+
   await prisma.$executeRaw`
     DELETE FROM rag_documents
     WHERE project_id = ${projectId}
@@ -312,16 +332,9 @@ async function deleteRagDocumentsByProject(projectId: number): Promise<void> {
 }
 
 async function countRagDocuments(projectId: number): Promise<number> {
-  const existenceRows = await prisma.$queryRaw<Array<{ table_name: string | null }>>`
-    SELECT to_regclass('public.rag_documents')::text AS table_name
-  `
-  if (!existenceRows[0]?.table_name) {
-    if (!ragDocumentsMissingWarned) {
-      logger.warn({ projectId }, 'rag_documents table is missing, fallback rag count to 0')
-      ragDocumentsMissingWarned = true
-    }
+  if (!(await hasRagDocumentsTable())) {
     return 0
-  }
+  }  
 
   const rows = await prisma.$queryRaw<Array<{ count: bigint }>>`
     SELECT COUNT(*)::bigint AS count
@@ -463,6 +476,10 @@ async function searchIndexedRagDocuments(
     maxChapterNo?: number
   }
 ): Promise<Array<SearchResult & { document: RagDocumentRow }>> {
+  if (!(await hasRagDocumentsTable())) {
+    return []
+  }
+
   const { topK, filter, maxChapterNo } = options
   const candidateLimit = Math.max(topK * 6, 20)
   const vectorLiteral = serializeVector(queryEmbedding)
