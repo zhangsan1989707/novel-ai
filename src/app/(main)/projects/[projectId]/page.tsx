@@ -4,9 +4,9 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Button, Card, CardContent, CardHeader, CardTitle, Badge, Progress, Modal, toast, MoreActionsMenu } from '@/components/ui'
 import { ProjectForm, ProjectFormData } from '@/components/project'
-import { StorySteeringPanel, Toolbox } from '@/components/ai'
-import { CoverGenerator, PlotAnalyzer, ResearchPanel, ReviewPanel, DeslopPanel } from '@/components/ai'
-import { BookOpen, Clock, Target, Users, Layers, Search, ClipboardList, Rocket, Shield, Sparkles, ChevronRight, ChevronDown, Wrench, Eye, Play, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react'
+import { StorySteeringPanel, Toolbox, AutoPipelinePanel } from '@/components/ai'
+import { CoverGenerator, PlotAnalyzer, ResearchPanel, ReviewPanel, DeslopPanel, ExportPanel } from '@/components/ai'
+import { BookOpen, Clock, Target, Users, Layers, Search, ClipboardList, Rocket, Shield, Sparkles, ChevronRight, ChevronDown, Wrench, Eye, Play, AlertCircle, CheckCircle2, Loader2, Download } from 'lucide-react'
 import type { ProjectStatus } from '@/types'
 import type { PipelineRuntimeState } from '@/lib/engine/pipeline-runtime'
 
@@ -78,10 +78,15 @@ interface Project {
   }>
   preflight?: {
     ready: boolean
+    healthScore: number
+    healthLevel: 'critical' | 'warning' | 'healthy'
+    primaryAction: string
+    recommendations: string[]
     hasModel: boolean
     hasBlueprint: boolean
     hasArcPlans: boolean
     hasStoryState: boolean
+    hasWorldState: boolean
     totalChapters: number
     completedChapters: number
     reviewingChapters: number
@@ -101,6 +106,10 @@ interface Project {
     volumeSummaryCoverage: number
     memoryCoverageScore: number
     strandScore: number
+    wordCountComplianceRate: number
+    overduePlotlineCount: number
+    activeVillainCount: number
+    finalBossCount: number
     issues: Array<{
       severity: 'error' | 'warning' | 'info'
       code: string
@@ -167,6 +176,12 @@ const pipelineStepMap: Record<string, string> = {
   INITIALIZE: '初始化',
 }
 
+const healthLevelMap: Record<NonNullable<Project['preflight']>['healthLevel'], { label: string; variant: 'success' | 'warning' | 'danger' }> = {
+  healthy: { label: '健康', variant: 'success' },
+  warning: { label: '告警', variant: 'warning' },
+  critical: { label: '严重', variant: 'danger' },
+}
+
 function getPipelineStatusLabel(status: PipelineStatus['status']) {
   return pipelineStatusMap[status] || status
 }
@@ -227,6 +242,8 @@ export default function ProjectDetailPage() {
   const [showPlotAnalysisModal, setShowPlotAnalysisModal] = useState(false)
   const [showReviewModal, setShowReviewModal] = useState(false)
   const [showDeslopModal, setShowDeslopModal] = useState(false)
+  const [showExportModal, setShowExportModal] = useState(false)
+  const [showAutoPipelineModal, setShowAutoPipelineModal] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [pipelineStarting, setPipelineStarting] = useState(false)
@@ -616,6 +633,24 @@ export default function ProjectDetailPage() {
             <Wrench className="h-4 w-4" />
             工具箱
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowExportModal(true)}
+            className="gap-1.5"
+          >
+            <Download className="h-4 w-4" />
+            导出
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowAutoPipelineModal(true)}
+            className="gap-1.5"
+          >
+            <Rocket className="h-4 w-4" />
+            全自动流水线
+          </Button>
           <MoreActionsMenu
             onEdit={() => setShowEditModal(true)}
             onDelete={() => setShowDeleteModal(true)}
@@ -875,6 +910,28 @@ export default function ProjectDetailPage() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4 text-sm">
+                    <div className={`rounded-md border px-3 py-3 ${
+                      project.preflight.healthLevel === 'critical'
+                        ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300'
+                        : project.preflight.healthLevel === 'warning'
+                          ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300'
+                          : 'border-green-200 bg-green-50 text-green-700 dark:border-green-900/40 dark:bg-green-950/20 dark:text-green-300'
+                    }`}>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="font-medium">项目健康分</div>
+                        <Badge variant={healthLevelMap[project.preflight.healthLevel].variant}>
+                          {healthLevelMap[project.preflight.healthLevel].label}
+                        </Badge>
+                      </div>
+                      <div className="mt-2 flex items-baseline justify-between gap-3">
+                        <span className="text-2xl font-semibold">{project.preflight.healthScore}</span>
+                        <span className="text-xs opacity-80">/100</span>
+                      </div>
+                      <div className="mt-2 text-xs leading-5 opacity-90">
+                        {project.preflight.primaryAction}
+                      </div>
+                    </div>
+
                     {!project.preflight.hasModel && (
                       <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">
                         <div className="font-medium">先绑定 AI 模型，再启动主链路</div>
@@ -896,7 +953,7 @@ export default function ProjectDetailPage() {
                       <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-blue-800 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-200">
                         <div className="font-medium">可以先一键初始化创作系统</div>
                         <div className="mt-1 text-xs leading-5 text-blue-700 dark:text-blue-300">
-                          这会自动生成 Book Blueprint、Arc Plan，并初始化故事状态。完成后再启动主流水线，长篇生产会更稳定。
+                          这会自动生成 Book Blueprint、Arc Plan、世界状态与故事状态。完成后再启动主流水线，长篇生产会更稳定。
                         </div>
                         <div className="mt-3 flex flex-wrap gap-2">
                           <Button size="sm" variant="primary" onClick={handleBootstrapProject} disabled={bootstrapping}>
@@ -911,6 +968,7 @@ export default function ProjectDetailPage() {
                       <div>蓝图：{project.preflight.hasBlueprint ? '已生成' : '未生成'}</div>
                       <div>阶段规划：{project.preflight.hasArcPlans ? '已生成' : '未生成'}</div>
                       <div>故事状态：{project.preflight.hasStoryState ? '已初始化' : '未初始化'}</div>
+                      <div>世界状态：{project.preflight.hasWorldState ? '已初始化' : '未初始化'}</div>
                       <div>已完成：{project.preflight.completedChapters} 章</div>
                       <div>待审稿：{project.preflight.reviewingChapters} 章</div>
                       <div>未写作：{project.preflight.draftChapters} 章</div>
@@ -942,6 +1000,12 @@ export default function ProjectDetailPage() {
                           {project.preflight.strandScore}/100
                         </div>
                       </div>
+                      <div className="rounded-md border border-gray-200 px-3 py-2 dark:border-gray-800">
+                        <div className="text-gray-500 dark:text-gray-400">字数合规率</div>
+                        <div className="mt-1 text-base font-semibold text-gray-900 dark:text-gray-100">
+                          {project.preflight.wordCountComplianceRate}%
+                        </div>
+                      </div>
                     </div>
 
                     <div className="flex items-center justify-between rounded-md border border-gray-200 px-3 py-2 dark:border-gray-800">
@@ -949,6 +1013,31 @@ export default function ProjectDetailPage() {
                       <Badge variant={project.preflight.ready ? 'success' : 'warning'}>
                         {project.preflight.ready ? '可继续生产' : '存在风险'}
                       </Badge>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 text-xs text-gray-600 dark:text-gray-400">
+                      <div className="rounded-md border border-gray-200 px-3 py-2 dark:border-gray-800">
+                        <div className="text-gray-500 dark:text-gray-400">伏笔</div>
+                        <div className="mt-1 text-base font-semibold text-gray-900 dark:text-gray-100">
+                          {project.preflight.plotlineCount} / {project.preflight.overduePlotlineCount}
+                        </div>
+                        <div className="mt-1 text-[11px] text-gray-500">总数 / 超期</div>
+                      </div>
+                      <div className="rounded-md border border-gray-200 px-3 py-2 dark:border-gray-800">
+                        <div className="text-gray-500 dark:text-gray-400">反派</div>
+                        <div className="mt-1 text-base font-semibold text-gray-900 dark:text-gray-100">
+                          {project.preflight.activeVillainCount}
+                        </div>
+                        <div className="mt-1 text-[11px] text-gray-500">
+                          {project.preflight.finalBossCount > 0 ? '已配置终局 Boss' : '缺少终局 Boss'}
+                        </div>
+                      </div>
+                      <div className="rounded-md border border-gray-200 px-3 py-2 dark:border-gray-800">
+                        <div className="text-gray-500 dark:text-gray-400">建议动作</div>
+                        <div className="mt-1 text-sm font-medium text-gray-900 dark:text-gray-100">
+                          {project.preflight.primaryAction}
+                        </div>
+                      </div>
                     </div>
 
                     {project.preflight.issues.length > 0 ? (
@@ -971,6 +1060,17 @@ export default function ProjectDetailPage() {
                     ) : (
                       <div className="rounded-md border border-green-200 bg-green-50 px-3 py-2 text-green-700 dark:border-green-900/40 dark:bg-green-950/20 dark:text-green-300">
                         预检未发现阻断项
+                      </div>
+                    )}
+
+                    {project.preflight.recommendations.length > 0 && (
+                      <div className="rounded-md border border-gray-200 px-3 py-2 text-xs text-gray-600 dark:border-gray-800 dark:text-gray-400">
+                        <div className="mb-1 font-medium text-gray-900 dark:text-gray-100">推荐动作</div>
+                        <ul className="space-y-1">
+                          {project.preflight.recommendations.slice(0, 3).map((item, index) => (
+                            <li key={index}>- {item}</li>
+                          ))}
+                        </ul>
                       </div>
                     )}
                   </CardContent>
@@ -1314,6 +1414,34 @@ export default function ProjectDetailPage() {
         className="max-w-4xl"
       >
         <DeslopPanel projectId={projectId} />
+      </Modal>
+
+      {/* Export Modal */}
+      <Modal
+        open={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        title="多平台导出"
+        className="max-w-2xl"
+      >
+        <ExportPanel
+          projectId={projectId}
+          projectTitle={project.title}
+          chapterCount={project.chapters.length}
+        />
+      </Modal>
+
+      {/* Auto Pipeline Modal */}
+      <Modal
+        open={showAutoPipelineModal}
+        onClose={() => setShowAutoPipelineModal(false)}
+        title="全自动流水线"
+        className="max-w-2xl"
+      >
+        <AutoPipelinePanel
+          projectId={projectId}
+          maxChapter={project.chapters.length}
+          onClose={() => setShowAutoPipelineModal(false)}
+        />
       </Modal>
     </>
   )

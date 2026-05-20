@@ -37,3 +37,7 @@ export { WorkflowHooksPanel } from './WorkflowHooksPanel'
 export { StorySteeringPanel } from './StorySteeringPanel'
 // Toolbox
 export { Toolbox } from './Toolbox'
+// Auto Pipeline
+export { AutoPipelinePanel } from './AutoPipelinePanel'
+// Export
+export { ExportPanel } from './ExportPanel'
