@@ -316,11 +316,16 @@ export async function exportForPlatform(
 
       fs.mkdirSync(workDir, { recursive: true })
 
+      const epubGenDir = path.resolve(process.cwd(), 'node_modules/epub-gen')
+
       const epubOptions = {
         title: project.title,
         author: 'AI Novel Generator',
         description: project.description || undefined,
         tempDir: workDir,
+        customOpfTemplatePath: path.join(epubGenDir, 'templates/epub3/content.opf.ejs'),
+        customNcxTocTemplatePath: path.join(epubGenDir, 'templates/toc.ncx.ejs'),
+        customHtmlTocTemplatePath: path.join(epubGenDir, 'templates/epub3/toc.xhtml.ejs'),
         content: project.chapters
           .filter(ch => ch.content && ch.content.trim().length > 0)
           .map(ch => ({
