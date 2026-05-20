@@ -318,6 +318,10 @@ function buildDocumentText(title: string | null | undefined, content: string): s
   return [title || '', content || ''].filter(Boolean).join('\n')
 }
 
+function toStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.map(item => String(item)).filter(Boolean) : []
+}
+
 async function upsertRagDocuments(
   docs: Array<{
     projectId: number
@@ -855,12 +859,15 @@ export async function rebuildProjectRAGIndex(projectId: number): Promise<{ index
   }
 
   for (const summary of chapterSummaries) {
+    const keyEvents = toStringArray(summary.keyEvents)
+    const plantedPlotlines = toStringArray(summary.plantedPlotlines)
+    const resolvedPlotlines = toStringArray(summary.resolvedPlotlines)
     const content = [
       `第${summary.chapterNo}章摘要：${summary.summary}`,
-      summary.keyEvents.length > 0 ? `关键事件：${summary.keyEvents.join('；')}` : '',
+      keyEvents.length > 0 ? `关键事件：${keyEvents.join('；')}` : '',
       summary.emotionalTone ? `情绪：${summary.emotionalTone}` : '',
-      summary.plantedPlotlines.length > 0 ? `埋设伏笔：${summary.plantedPlotlines.join('；')}` : '',
-      summary.resolvedPlotlines.length > 0 ? `回收伏笔：${summary.resolvedPlotlines.join('；')}` : '',
+      plantedPlotlines.length > 0 ? `埋设伏笔：${plantedPlotlines.join('；')}` : '',
+      resolvedPlotlines.length > 0 ? `回收伏笔：${resolvedPlotlines.join('；')}` : '',
     ].filter(Boolean).join('\n')
 
     docs.push({
@@ -877,11 +884,14 @@ export async function rebuildProjectRAGIndex(projectId: number): Promise<{ index
   }
 
   for (const volume of volumeSummaries) {
+    const keyEvents = toStringArray(volume.keyEvents)
+    const plantedPlotlines = toStringArray(volume.plantedPlotlines)
+    const resolvedPlotlines = toStringArray(volume.resolvedPlotlines)
     const content = [
       `第${volume.volumeNumber}卷摘要：${volume.summary}`,
-      volume.keyEvents.length > 0 ? `关键事件：${volume.keyEvents.join('；')}` : '',
-      volume.plantedPlotlines.length > 0 ? `埋设伏笔：${volume.plantedPlotlines.join('；')}` : '',
-      volume.resolvedPlotlines.length > 0 ? `回收伏笔：${volume.resolvedPlotlines.join('；')}` : '',
+      keyEvents.length > 0 ? `关键事件：${keyEvents.join('；')}` : '',
+      plantedPlotlines.length > 0 ? `埋设伏笔：${plantedPlotlines.join('；')}` : '',
+      resolvedPlotlines.length > 0 ? `回收伏笔：${resolvedPlotlines.join('；')}` : '',
     ].filter(Boolean).join('\n')
 
     docs.push({
@@ -931,14 +941,16 @@ export async function rebuildProjectRAGIndex(projectId: number): Promise<{ index
   }
 
   for (const character of characters) {
+    const aliases = toStringArray(character.aliases)
+    const catchphrases = toStringArray(character.catchphrases)
     const content = [
       `角色：${character.name}`,
       `角色定位：${character.role}`,
       character.appearance ? `外貌：${character.appearance}` : '',
       character.personality ? `性格：${character.personality}` : '',
       character.background ? `背景：${character.background}` : '',
-      character.aliases.length > 0 ? `别名：${character.aliases.join('；')}` : '',
-      character.catchphrases.length > 0 ? `口头禅：${character.catchphrases.join('；')}` : '',
+      aliases.length > 0 ? `别名：${aliases.join('；')}` : '',
+      catchphrases.length > 0 ? `口头禅：${catchphrases.join('；')}` : '',
       character.currentState ? `状态：${JSON.stringify(character.currentState)}` : '',
       character.lastUpdated ? `最近更新：第${character.lastUpdated}章` : '',
     ].filter(Boolean).join('\n')
@@ -989,11 +1001,13 @@ export async function rebuildProjectRAGIndex(projectId: number): Promise<{ index
   }
 
   for (const ref of researchRefs) {
+    const keyFacts = toStringArray(ref.keyFacts)
+    const creativeMaterials = toStringArray(ref.creativeMaterials)
     const content = [
       `研究主题：${ref.topic}`,
       ref.summary,
-      ref.keyFacts.length > 0 ? `关键事实：${ref.keyFacts.join('；')}` : '',
-      ref.creativeMaterials.length > 0 ? `创作素材：${ref.creativeMaterials.join('；')}` : '',
+      keyFacts.length > 0 ? `关键事实：${keyFacts.join('；')}` : '',
+      creativeMaterials.length > 0 ? `创作素材：${creativeMaterials.join('；')}` : '',
     ].filter(Boolean).join('\n')
 
     docs.push({
