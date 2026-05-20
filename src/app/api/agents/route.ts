@@ -1,4 +1,4 @@
-import { tryCatch, success } from '@/lib/api-response'
+import { tryCatch } from '@/lib/api-response'
 import { agentRegistry } from '@/lib/agents/registry'
 import '@/lib/agents/adapters'
 import { getAvailableModels } from '@/lib/agents/model-strategy'
@@ -15,6 +15,6 @@ export async function GET() {
 
     const models = getAvailableModels()
 
-    return success({ agents, models })
+    return { agents, models }
   })
 }

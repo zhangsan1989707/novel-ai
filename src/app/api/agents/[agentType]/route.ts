@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { tryCatch, success, error } from '@/lib/api-response'
+import { tryCatch, error } from '@/lib/api-response'
 import { agentRegistry } from '@/lib/agents/registry'
 import '@/lib/agents/adapters'
 import { AgentTypeEnum } from '@/lib/engine/types'
@@ -23,14 +23,14 @@ export async function GET(
       return error('NOT_FOUND', `Agent "${agentType}" 未注册`)
     }
 
-    return success({
+    return {
       type: agent.type,
       name: agent.name,
       description: agent.description,
       modelTier: agent.modelTier,
       supportsStreaming: agent.supportsStreaming,
       hasValidation: typeof agent.validate === 'function',
-    })
+    }
   })
 }
 
@@ -62,10 +62,10 @@ export async function POST(
       const result = await agent.executeStream(input, (chunk) => {
         chunks.push(chunk)
       })
-      return success({ result, streamed: true, chunkCount: chunks.length })
+      return { result, streamed: true, chunkCount: chunks.length }
     }
 
     const result = await agent.execute(input)
-    return success({ result, streamed: false })
+    return { result, streamed: false }
   })
 }
