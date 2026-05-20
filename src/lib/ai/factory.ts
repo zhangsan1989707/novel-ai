@@ -3,6 +3,7 @@ import type { AIProvider, AIConfig } from './types'
 import { AIVendor } from '@/types'
 import { logger } from '@/lib/logger'
 import { TraceableAIProvider } from './traceable-provider'
+import type { AIModelConfig as DBAIModelConfig } from '@prisma/client'
 
 // 导入所有 Provider
 import {
@@ -79,15 +80,28 @@ export function createProviderFromEnv(vendor: AIVendor): AIProvider {
 }
 
 /**
+ * 获取数据库默认 AI 配置记录
+ */
+export async function getDefaultAIConfigRecord(): Promise<DBAIModelConfig | null> {
+  try {
+    const { prisma } = await import('@/lib/prisma')
+    return prisma.aIModelConfig.findFirst({
+      where: { isDefault: true },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
+    })
+  } catch (error) {
+    logger.warn({ error }, 'Failed to get default config record from database')
+    return null
+  }
+}
+
+/**
  * 从数据库获取默认 AI Provider
  * 优先从数据库中查找 isDefault=true 的配置，如果没有则回退到环境变量
  */
 export async function createProviderFromDefaultConfig(): Promise<AIProvider> {
   try {
-    const { prisma } = await import('@/lib/prisma')
-    const defaultConfig = await prisma.aIModelConfig.findFirst({
-      where: { isDefault: true },
-    })
+    const defaultConfig = await getDefaultAIConfigRecord()
 
     if (defaultConfig) {
       return getAIProvider(defaultConfig.vendor as AIVendor, {

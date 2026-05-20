@@ -6,6 +6,7 @@ import { logError } from '@/lib/logger'
 import { getRAGDocumentCount } from '@/lib/engine/rag-vector'
 import { buildProjectHealthReport } from '@/lib/engine/project-health'
 import { buildBlueprintConsoleSnapshot } from '@/lib/engine/blueprint-console'
+import { getDefaultAIConfigRecord } from '@/lib/ai/factory'
 
 type PreflightIssueSeverity = 'error' | 'warning' | 'info'
 
@@ -109,7 +110,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       )
     }
 
-    const project = await prisma.novelProject.findUnique({
+    let project = await prisma.novelProject.findUnique({
       where: { id },
       include: {
         aiModelConfig: true,
@@ -152,6 +153,59 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         },
       },
     })
+
+    if (project && !project.aiModelId) {
+      const defaultConfig = await getDefaultAIConfigRecord()
+      if (defaultConfig) {
+        await prisma.novelProject.update({
+          where: { id },
+          data: { aiModelId: defaultConfig.id },
+        })
+        project = await prisma.novelProject.findUnique({
+          where: { id },
+          include: {
+            aiModelConfig: true,
+            bookBlueprint: true,
+            storyState: true,
+            worldState: true,
+            chapters: {
+              orderBy: { chapterNumber: 'asc' },
+              select: {
+                id: true,
+                chapterNumber: true,
+                title: true,
+                wordCount: true,
+                status: true,
+                sortOrder: true,
+                summary: true,
+                content: true,
+              },
+            },
+            plotlines: {
+              orderBy: { plantedAt: 'asc' },
+              select: {
+                status: true,
+                plantedAt: true,
+                plannedAt: true,
+                resolvedAt: true,
+              },
+            },
+            villains: {
+              select: {
+                isFinalBoss: true,
+                lifecycle: true,
+                tier: true,
+                defeatedAt: true,
+                introducedAt: true,
+              },
+            },
+            arcPlans: {
+              orderBy: { arcNumber: 'asc' },
+            },
+          },
+        })
+      }
+    }
 
     const recentCommits = await prisma.chapterCommit.findMany({
       where: { projectId: id },

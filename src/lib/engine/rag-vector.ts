@@ -71,6 +71,7 @@ const EMBEDDING_CACHE_LIMIT = 2000
 const embeddingProviderCache = new Map<number, Promise<Awaited<ReturnType<typeof createEmbeddingProviderPromise>>>>()
 const embeddingVectorCache = new Map<string, number[]>()
 let embeddingFallbackWarned = false
+let ragDocumentsMissingWarned = false
 
 function normalizeText(text: string): string {
   return text
@@ -315,7 +316,10 @@ async function countRagDocuments(projectId: number): Promise<number> {
     SELECT to_regclass('public.rag_documents')::text AS table_name
   `
   if (!existenceRows[0]?.table_name) {
-    logger.warn({ projectId }, 'rag_documents table is missing, fallback rag count to 0')
+    if (!ragDocumentsMissingWarned) {
+      logger.warn({ projectId }, 'rag_documents table is missing, fallback rag count to 0')
+      ragDocumentsMissingWarned = true
+    }
     return 0
   }
 

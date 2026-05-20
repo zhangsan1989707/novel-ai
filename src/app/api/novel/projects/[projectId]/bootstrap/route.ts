@@ -5,6 +5,7 @@ import { initStoryState, initWorldState } from '@/lib/engine/story-state'
 import { loadProjectHealthReport } from '@/lib/engine/project-health'
 import { syncProjectHealthNotification } from '@/lib/notifications/project-health'
 import { refreshBlueprintConsole } from '@/lib/engine/blueprint-console'
+import { getDefaultAIConfigRecord } from '@/lib/ai/factory'
 
 export async function POST(
   _request: NextRequest,
@@ -41,10 +42,18 @@ export async function POST(
     }
 
     if (!project.aiModelId) {
-      return NextResponse.json(
-        { success: false, error: { code: 'MODEL_NOT_BOUND', message: '请先绑定 AI 模型' } },
-        { status: 400 }
-      )
+      const defaultConfig = await getDefaultAIConfigRecord()
+      if (!defaultConfig) {
+        return NextResponse.json(
+          { success: false, error: { code: 'MODEL_NOT_BOUND', message: '请先绑定 AI 模型' } },
+          { status: 400 }
+        )
+      }
+
+      await prisma.novelProject.update({
+        where: { id: projectId },
+        data: { aiModelId: defaultConfig.id },
+      })
     }
 
     const provider = await createProjectProvider(projectId)

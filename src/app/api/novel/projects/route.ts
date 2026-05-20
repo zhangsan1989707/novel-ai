@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { logError } from '@/lib/logger'
 import { getCurrentUserId } from '@/lib/auth'
-import { createProviderFromConfigId, createProviderFromDefaultConfig } from '@/lib/ai/factory'
+import { createProviderFromConfigId, createProviderFromDefaultConfig, getDefaultAIConfigRecord } from '@/lib/ai/factory'
 import { refreshBlueprintConsole } from '@/lib/engine/blueprint-console'
 
 // ============================================
@@ -279,9 +279,12 @@ export async function POST(request: NextRequest) {
         genre: validatedData.genre,
       })
 
+    const aiModelId = validatedData.aiModelId ?? (await getDefaultAIConfigRecord())?.id
+
     const project = await prisma.novelProject.create({
       data: {
         ...validatedData,
+        aiModelId,
         title,
         creatorId,
       },
