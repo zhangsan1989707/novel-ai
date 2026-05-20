@@ -4,6 +4,7 @@
  */
 import { CharacterRole, PlotlineStatus, Prisma } from '@prisma/client'
 import { AIService } from '@/lib/ai/service'
+import { logger } from '@/lib/logger'
 import { prisma } from '@/lib/prisma'
 import { parseAiJsonObject } from './ai-json'
 
@@ -66,6 +67,10 @@ const DEFAULT_CONFIG: VectorConfig = {
 }
 
 const VECTOR_DIMENSION = 256
+const EMBEDDING_CACHE_LIMIT = 2000
+const embeddingProviderCache = new Map<number, Promise<Awaited<ReturnType<typeof createEmbeddingProviderPromise>>>>()
+const embeddingVectorCache = new Map<string, number[]>()
+let embeddingFallbackWarned = false
 
 function normalizeText(text: string): string {
   return text
@@ -182,6 +187,60 @@ function serializeVector(vector: number[]): string {
   return `[${vector.map(v => Number.isFinite(v) ? v.toFixed(8) : '0').join(',')}]`
 }
 
+function normalizeEmbeddingDimensions(embedding: number[], targetDimensions: number): number[] {
+  if (!Number.isFinite(targetDimensions) || targetDimensions <= 0) {
+    return embedding
+  }
+  if (embedding.length === targetDimensions) {
+    return embedding
+  }
+  if (embedding.length === 0) {
+    return new Array(targetDimensions).fill(0)
+  }
+
+  if (embedding.length > targetDimensions) {
+    const resized = new Array(targetDimensions).fill(0)
+    for (let i = 0; i < targetDimensions; i++) {
+      const start = Math.floor((i * embedding.length) / targetDimensions)
+      const end = Math.max(start + 1, Math.floor(((i + 1) * embedding.length) / targetDimensions))
+      let sum = 0
+      let count = 0
+      for (let j = start; j < end && j < embedding.length; j++) {
+        sum += embedding[j]
+        count++
+      }
+      resized[i] = count > 0 ? sum / count : embedding[start] || 0
+    }
+    const magnitude = Math.sqrt(resized.reduce((sum, val) => sum + val * val, 0))
+    return magnitude > 0 ? resized.map(val => val / magnitude) : resized
+  }
+
+  const padded = embedding.slice()
+  while (padded.length < targetDimensions) {
+    padded.push(0)
+  }
+  const magnitude = Math.sqrt(padded.reduce((sum, val) => sum + val * val, 0))
+  return magnitude > 0 ? padded.map(val => val / magnitude) : padded
+}
+
+function getEmbeddingCacheKey(projectId: number, text: string): string {
+  return `${projectId}:${text.slice(0, 512)}:${text.length}`
+}
+
+async function createEmbeddingProviderPromise(projectId: number) {
+  return AIService.createEmbeddingProvider({
+    projectId,
+    usageType: 'RAG_EMBEDDING',
+  })
+}
+
+async function getEmbeddingProvider(projectId: number) {
+  if (!embeddingProviderCache.has(projectId)) {
+    embeddingProviderCache.set(projectId, createEmbeddingProviderPromise(projectId))
+  }
+  return embeddingProviderCache.get(projectId)!
+}
+
 function buildDocumentText(title: string | null | undefined, content: string): string {
   return [title || '', content || ''].filter(Boolean).join('\n')
 }
@@ -267,8 +326,49 @@ async function generateEmbedding(
   text: string,
   projectId: number = 0
 ): Promise<number[]> {
-  void projectId
-  return buildVector(text, VECTOR_DIMENSION)
+  const normalizedText = text.trim()
+  if (!normalizedText) {
+    return new Array(VECTOR_DIMENSION).fill(0)
+  }
+
+  const cacheKey = getEmbeddingCacheKey(projectId, normalizedText)
+  const cached = embeddingVectorCache.get(cacheKey)
+  if (cached) {
+    return cached.slice()
+  }
+
+  try {
+    const provider = await getEmbeddingProvider(projectId)
+    if (!provider.embedText) {
+      throw new Error(`Provider ${provider.name} does not support embeddings`)
+    }
+
+    const embedding = await provider.embedText(normalizedText, {
+      dimensions: VECTOR_DIMENSION,
+      timeoutMs: 15000,
+      user: projectId > 0 ? String(projectId) : undefined,
+    })
+    const normalizedEmbedding = normalizeEmbeddingDimensions(embedding, VECTOR_DIMENSION)
+    embeddingVectorCache.set(cacheKey, normalizedEmbedding)
+    if (embeddingVectorCache.size > EMBEDDING_CACHE_LIMIT) {
+      const firstKey = embeddingVectorCache.keys().next().value
+      if (firstKey) {
+        embeddingVectorCache.delete(firstKey)
+      }
+    }
+    return normalizedEmbedding.slice()
+  } catch (error) {
+    if (!embeddingFallbackWarned) {
+      embeddingFallbackWarned = true
+      logger.warn(
+        { error, projectId },
+        'Embedding provider unavailable, falling back to local deterministic vectorization'
+      )
+    }
+    const fallbackEmbedding = buildVector(normalizedText, VECTOR_DIMENSION)
+    embeddingVectorCache.set(cacheKey, fallbackEmbedding)
+    return fallbackEmbedding.slice()
+  }
 }
 
 /**

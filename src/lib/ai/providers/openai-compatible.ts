@@ -1,7 +1,8 @@
 import { BaseAIProvider } from '../base'
-import type { GenerationParams, GenerationResult } from '../types'
+import type { EmbeddingParams, GenerationParams, GenerationResult } from '../types'
 
 const DEFAULT_REQUEST_TIMEOUT_MS = Number(process.env.AI_REQUEST_TIMEOUT_MS || 120000)
+const DEFAULT_EMBEDDING_DIMENSIONS = Number(process.env.AI_EMBEDDING_DIMENSIONS || 256)
 
 /**
  * OpenAI 兼容 Provider 基类
@@ -78,6 +79,106 @@ export abstract class OpenAICompatibleProvider extends BaseAIProvider {
       totalTokens: data.usage?.total_tokens,
       finishReason: data.choices?.[0]?.finish_reason,
     }
+  }
+
+  private normalizeEmbeddingDimensions(embedding: number[], targetDimensions: number): number[] {
+    if (!Number.isFinite(targetDimensions) || targetDimensions <= 0) {
+      return embedding
+    }
+    if (embedding.length === targetDimensions) {
+      return embedding
+    }
+    if (embedding.length === 0) {
+      return new Array(targetDimensions).fill(0)
+    }
+    if (embedding.length > targetDimensions) {
+      const resized = new Array(targetDimensions).fill(0)
+      for (let i = 0; i < targetDimensions; i++) {
+        const start = Math.floor((i * embedding.length) / targetDimensions)
+        const end = Math.max(start + 1, Math.floor(((i + 1) * embedding.length) / targetDimensions))
+        let sum = 0
+        let count = 0
+        for (let j = start; j < end && j < embedding.length; j++) {
+          sum += embedding[j]
+          count++
+        }
+        resized[i] = count > 0 ? sum / count : embedding[start] || 0
+      }
+      const magnitude = Math.sqrt(resized.reduce((sum, val) => sum + val * val, 0))
+      return magnitude > 0 ? resized.map(val => val / magnitude) : resized
+    }
+
+    const padded = embedding.slice()
+    while (padded.length < targetDimensions) {
+      padded.push(0)
+    }
+    const magnitude = Math.sqrt(padded.reduce((sum, val) => sum + val * val, 0))
+    return magnitude > 0 ? padded.map(val => val / magnitude) : padded
+  }
+
+  private resolveEmbeddingModelId(params?: EmbeddingParams): string {
+    if (params?.modelId) return params.modelId
+    if (this.config?.embeddingModelId) return this.config.embeddingModelId
+
+    const vendorKey = `${String(this.vendor).toUpperCase()}_EMBEDDING_MODEL_ID`
+    const vendorModel = process.env[vendorKey]
+    if (vendorModel) return vendorModel
+
+    const genericModel = process.env.EMBEDDING_MODEL_ID
+    if (genericModel) return genericModel
+
+    if (String(this.vendor).toUpperCase() === 'OPENAI') {
+      return 'text-embedding-3-small'
+    }
+
+    if (this.config?.modelId && this.config.modelId.toLowerCase().includes('embedding')) {
+      return this.config.modelId
+    }
+
+    throw new Error(`${this.name} embedding model is not configured. Set EMBEDDING_MODEL_ID or ${vendorKey}.`)
+  }
+
+  async embedText(text: string, params?: EmbeddingParams): Promise<number[]> {
+    if (!this.config) {
+      throw new Error('Provider not configured')
+    }
+    if (!text.trim()) {
+      return new Array(this.config.embeddingDimensions || DEFAULT_EMBEDDING_DIMENSIONS).fill(0)
+    }
+
+    const model = this.resolveEmbeddingModelId(params)
+    const dimensions = params?.dimensions || this.config.embeddingDimensions || DEFAULT_EMBEDDING_DIMENSIONS
+
+    const response = await this.fetchWithTimeout(`${this.getBaseURL()}/embeddings`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.config.apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        input: text,
+        encoding_format: 'float',
+        ...(dimensions > 0 ? { dimensions } : {}),
+        ...(params?.user ? { user: params.user } : {}),
+      }),
+    }, params?.timeoutMs)
+
+    if (!response.ok) {
+      const error = await response.text()
+      throw new Error(`${this.name} embedding API error: ${response.status} - ${error}`)
+    }
+
+    const data = await response.json()
+    const embedding = data.data?.[0]?.embedding
+    if (!Array.isArray(embedding) || embedding.length === 0) {
+      throw new Error(`${this.name} embedding API returned empty vector`)
+    }
+
+    return this.normalizeEmbeddingDimensions(
+      embedding.map((value: unknown) => Number(value) || 0),
+      dimensions
+    )
   }
 
   async *generateStream(prompt: string, params?: GenerationParams): AsyncGenerator<string> {

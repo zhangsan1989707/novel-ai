@@ -1,7 +1,15 @@
 import { BaseAIProvider, estimateTokens } from '@/lib/ai/base'
 import { recordUsage, canProceedWithGeneration } from '@/lib/cost-tracker'
 import { logger } from '@/lib/logger'
-import type { AIProvider, AIConfig, GenerationParams, GenerationResult, ImageGenerationParams, ImageGenerationResult } from '@/lib/ai/types'
+import type {
+  AIProvider,
+  AIConfig,
+  EmbeddingParams,
+  GenerationParams,
+  GenerationResult,
+  ImageGenerationParams,
+  ImageGenerationResult,
+} from '@/lib/ai/types'
 
 // 临时用户 ID（在完整用户系统之前）
 const DEFAULT_USER_ID = 1
@@ -184,6 +192,14 @@ export class TraceableAIProvider implements AIProvider {
       )
       throw error
     }
+  }
+
+  async embedText(text: string, params?: EmbeddingParams): Promise<number[]> {
+    if (!this.provider.embedText) {
+      throw new Error(`Provider ${this.provider.name} does not support embeddings`)
+    }
+
+    return this.provider.embedText(text, params)
   }
 
   private async recordUsage(

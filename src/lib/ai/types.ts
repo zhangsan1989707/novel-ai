@@ -9,6 +9,8 @@ export interface AIConfig {
   modelId: string
   apiKey: string
   apiEndpoint?: string
+  embeddingModelId?: string
+  embeddingDimensions?: number
 }
 
 // ============================================
@@ -24,6 +26,13 @@ export interface GenerationParams {
   stop?: string[]
   timeoutMs?: number
   responseFormat?: Record<string, unknown>
+}
+
+export interface EmbeddingParams {
+  modelId?: string
+  dimensions?: number
+  timeoutMs?: number
+  user?: string
 }
 
 // ============================================
@@ -62,6 +71,11 @@ export interface AIProvider {
    * 流式生成（返回 AsyncGenerator）
    */
   generateStream(prompt: string, params?: GenerationParams): AsyncGenerator<string>
+
+  /**
+   * 文本向量化
+   */
+  embedText?(text: string, params?: EmbeddingParams): Promise<number[]>
 
   /**
    * 验证配置是否有效
