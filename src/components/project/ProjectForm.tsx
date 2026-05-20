@@ -100,6 +100,7 @@ export function ProjectForm({ defaultValues, onSubmit, onCancel, loading, submit
   )
   const [generatingSynopsis, setGeneratingSynopsis] = useState(false)
   const [generatingSettings, setGeneratingSettings] = useState(false)
+  const [generatingTitle, setGeneratingTitle] = useState(false)
   const [showInspiration, setShowInspiration] = useState(true)
 
   useEffect(() => {
@@ -151,14 +152,42 @@ export function ProjectForm({ defaultValues, onSubmit, onCancel, loading, submit
   // 使用 watch 获取表单值，避免直接操作 DOM
   const formValues = watch()
 
-  const handleInspirationSelect = (inspiration: HotInspiration) => {
-    setValue('title', inspiration.sampleTitle)
+  const handleInspirationSelect = async (inspiration: HotInspiration) => {
     setValue('description', inspiration.sampleSummary)
     setValue('genre', inspiration.sampleGenre)
     setValue('writingStyle', inspiration.sampleWritingStyle)
     setValue('targetAudience', inspiration.category === 'male' ? 'MALE' : inspiration.category === 'female' ? 'FEMALE' : undefined)
     setShowInspiration(false)
-    toast.success(`已应用「${inspiration.title}」灵感`)
+
+    setGeneratingTitle(true)
+    setValue('title', '正在生成书名...')
+    try {
+      const res = await fetch('/api/novel/ai/generate-title', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inspirationTitle: inspiration.title,
+          inspirationDescription: inspiration.description,
+          genre: inspiration.sampleGenre || undefined,
+          writingStyle: inspiration.sampleWritingStyle || undefined,
+          targetAudience: inspiration.category === 'male' ? 'MALE' : inspiration.category === 'female' ? 'FEMALE' : undefined,
+          aiModelId: formValues.aiModelId || undefined,
+        }),
+      })
+      const data = await res.json()
+      if (data.success && data.data.title) {
+        setValue('title', data.data.title)
+        toast.success(`已应用「${inspiration.title}」灵感，AI 已生成书名`)
+      } else {
+        setValue('title', inspiration.sampleTitle)
+        toast.success(`已应用「${inspiration.title}」灵感`)
+      }
+    } catch {
+      setValue('title', inspiration.sampleTitle)
+      toast.success(`已应用「${inspiration.title}」灵感`)
+    } finally {
+      setGeneratingTitle(false)
+    }
   }
 
   const handleGenerateSynopsis = async () => {
@@ -289,8 +318,15 @@ export function ProjectForm({ defaultValues, onSubmit, onCancel, loading, submit
           placeholder="请输入小说标题"
           error={errors.title?.message}
           maxLength={200}
+          disabled={generatingTitle}
           {...register('title', { required: '请输入标题', maxLength: { value: 200, message: '标题不能超过200字' } })}
         />
+        {generatingTitle && (
+          <p className="text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1.5 -mt-2">
+            <span className="inline-block h-3 w-3 animate-spin rounded-full border border-blue-600 border-t-transparent" />
+            AI 正在为你的小说生成书名...
+          </p>
+        )}
 
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
