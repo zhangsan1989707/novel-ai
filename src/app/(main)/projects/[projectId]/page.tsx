@@ -8,6 +8,7 @@ import { StorySteeringPanel, Toolbox } from '@/components/ai'
 import { CoverGenerator, PlotAnalyzer, ResearchPanel, ReviewPanel, DeslopPanel } from '@/components/ai'
 import { BookOpen, Clock, Target, Users, Layers, Search, ClipboardList, Rocket, Shield, Sparkles, ChevronRight, ChevronDown, Wrench, Eye, Play, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react'
 import type { ProjectStatus } from '@/types'
+import type { PipelineRuntimeState } from '@/lib/engine/pipeline-runtime'
 
 interface Chapter {
   id: number
@@ -77,6 +78,8 @@ interface PipelineStatus {
   totalChapters: number
   error?: string
   pipelineJobId?: number
+  runtime?: PipelineRuntimeState
+  updatedAt?: string
 }
 
 const chapterStatusMap: Record<string, { label: string; variant: 'default' | 'primary' | 'secondary' | 'success' | 'warning' | 'danger' }> = {
@@ -108,6 +111,13 @@ const pipelineStepMap: Record<string, string> = {
   CHAPTER_LIST: '章节目录',
   WRITE: '章节写作',
   SUMMARIZE: '总结收尾',
+  PLANNER: '章节策划',
+  WRITER: '正文写作',
+  SUMMARIZER: '摘要整理',
+  DB_WRITE: '结果回写',
+  RESEARCH: '资料整理',
+  DESLOPPER: '去AI味',
+  VALIDATOR: '一致性校验',
   PLAN: '策划',
   REVIEW: '审稿',
   POLISH: '润色',
@@ -123,6 +133,14 @@ function getPipelineStatusLabel(status: PipelineStatus['status']) {
 function getPipelineStepLabel(step: string) {
   if (!step) return '初始化'
   return pipelineStepMap[step.toUpperCase()] || step
+}
+
+function formatDuration(durationMs?: number) {
+  if (!durationMs || durationMs <= 0) return '-'
+  if (durationMs < 1000) return `${durationMs}ms`
+  const seconds = durationMs / 1000
+  if (seconds < 60) return `${seconds.toFixed(1)}s`
+  return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`
 }
 
 type DashboardTab = 'dashboard' | 'settings'
@@ -175,6 +193,7 @@ export default function ProjectDetailPage() {
 
   const [pipeline, setPipeline] = useState<PipelineStatus | null>(null)
   const lastPipelineStatusRef = useRef<PipelineStatus['status'] | null>(null)
+  const pipelineStreamRef = useRef<EventSource | null>(null)
 
   const fetchProject = useCallback(async () => {
     try {
@@ -192,6 +211,21 @@ export default function ProjectDetailPage() {
     }
   }, [projectId])
 
+  const applyPipelineSnapshot = useCallback((nextPipeline: PipelineStatus) => {
+    const nextStatus = nextPipeline.status
+    const prevStatus = lastPipelineStatusRef.current
+    setPipeline(nextPipeline)
+    lastPipelineStatusRef.current = nextStatus
+
+    if (nextStatus === 'COMPLETED' && prevStatus !== 'COMPLETED') {
+      toast.success(`流水线执行完成 — 共生成 ${nextPipeline.totalChapters} 章`)
+      fetchProject()
+    } else if (nextStatus === 'FAILED' && prevStatus !== 'FAILED') {
+      toast.error(nextPipeline.error || '流水线执行失败')
+      fetchProject()
+    }
+  }, [fetchProject])
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void fetchProject()
@@ -207,18 +241,7 @@ export default function ProjectDetailPage() {
         const res = await fetch(`/api/novel/projects/${projectId}/pipeline/status`)
         const data = await res.json()
         if (data.success) {
-          const nextStatus = data.data.status as PipelineStatus['status']
-          const prevStatus = lastPipelineStatusRef.current
-          setPipeline(data.data)
-          lastPipelineStatusRef.current = nextStatus
-
-          if (nextStatus === 'COMPLETED' && prevStatus !== 'COMPLETED') {
-            toast.success(`流水线执行完成 — 共生成 ${data.data.totalChapters} 章`)
-            fetchProject()
-          } else if (nextStatus === 'FAILED' && prevStatus !== 'FAILED') {
-            toast.error(data.data.error || '流水线执行失败')
-            fetchProject()
-          }
+          applyPipelineSnapshot(data.data)
         }
       } catch {
         // silent fail on polling errors
@@ -231,7 +254,31 @@ export default function ProjectDetailPage() {
     return () => {
       if (timer) clearInterval(timer)
     }
-  }, [projectId, fetchProject])
+  }, [projectId, applyPipelineSnapshot])
+
+  useEffect(() => {
+    const eventSource = new EventSource(`/api/novel/projects/${projectId}/pipeline/stream`)
+    pipelineStreamRef.current = eventSource
+
+    eventSource.addEventListener('pipeline', (event) => {
+      try {
+        const payload = JSON.parse((event as MessageEvent).data) as PipelineStatus
+        applyPipelineSnapshot(payload)
+      } catch {
+        // ignore parse errors
+      }
+    })
+
+    eventSource.onerror = () => {
+      eventSource.close()
+      pipelineStreamRef.current = null
+    }
+
+    return () => {
+      eventSource.close()
+      pipelineStreamRef.current = null
+    }
+  }, [projectId, applyPipelineSnapshot])
 
   const handleUpdate = async (formData: ProjectFormData) => {
     setSubmitting(true)
@@ -391,6 +438,8 @@ export default function ProjectDetailPage() {
   const completedChapters = project.chapters.filter(c => c.status === 'COMPLETED').length
   const reviewingChapters = project.chapters.filter(c => c.status === 'REVIEWING').length
   const arcGroups = groupChaptersByArc(project)
+  const liveChapter = pipeline?.runtime?.currentChapter || null
+  const recentChapterRuns = pipeline?.runtime?.recentChapters || []
 
   return (
     <>
@@ -427,6 +476,21 @@ export default function ProjectDetailPage() {
               第 {pipeline.currentChapter} / {pipeline.totalChapters} 章
             </span>
           </div>
+          {liveChapter && (
+            <div className="mt-3 rounded-md bg-blue-50/80 px-3 py-2 text-xs text-blue-700 dark:bg-blue-950/30 dark:text-blue-300">
+              <div className="flex items-center justify-between gap-3">
+                <span>当前章节：第 {liveChapter.chapterNumber} 章 {liveChapter.title || ''}</span>
+                <span>{getPipelineStepLabel(liveChapter.currentPhase || liveChapter.currentAgent || 'WRITE')}</span>
+              </div>
+              <div className="mt-1 flex items-center justify-between gap-3">
+                <span>已写 {liveChapter.currentWordCount} / {liveChapter.targetWordCount} 字</span>
+                <span>最近阶段耗时：{formatDuration(pipeline.runtime?.lastPhaseDurationMs)}</span>
+              </div>
+              {liveChapter.lastMessage && (
+                <div className="mt-1 truncate">{liveChapter.lastMessage}</div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -640,6 +704,68 @@ export default function ProjectDetailPage() {
                   )}
                 </CardContent>
               </Card>
+
+              {pipeline && (liveChapter || recentChapterRuns.length > 0) && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <Clock className="h-5 w-5 text-blue-600" />
+                      流水线进度
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {liveChapter && (
+                      <div className="rounded-md border border-blue-100 bg-blue-50/70 px-3 py-3 dark:border-blue-900/40 dark:bg-blue-950/20">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                            第 {liveChapter.chapterNumber} 章 {liveChapter.title || ''}
+                          </div>
+                          <Badge variant="primary">
+                            {getPipelineStepLabel(liveChapter.currentPhase || liveChapter.currentAgent || 'WRITE')}
+                          </Badge>
+                        </div>
+                        <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-600 dark:text-gray-400">
+                          <div>当前字数：{liveChapter.currentWordCount}</div>
+                          <div>目标字数：{liveChapter.targetWordCount}</div>
+                          <div>Planner：{formatDuration(liveChapter.phaseTimings.planner)}</div>
+                          <div>Writer：{formatDuration(liveChapter.phaseTimings.writer)}</div>
+                          <div>Summarizer：{formatDuration(liveChapter.phaseTimings.summarizer)}</div>
+                          <div>DB 回写：{formatDuration(liveChapter.phaseTimings.db_write)}</div>
+                        </div>
+                        {liveChapter.lastMessage && (
+                          <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{liveChapter.lastMessage}</p>
+                        )}
+                      </div>
+                    )}
+
+                    {recentChapterRuns.length > 0 && (
+                      <div className="space-y-2">
+                        {recentChapterRuns.slice(0, 4).map((chapterRun) => (
+                          <div
+                            key={`${chapterRun.chapterNumber}-${chapterRun.startedAt}`}
+                            className="rounded-md border border-gray-200 px-3 py-2 text-xs dark:border-gray-800"
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="font-medium text-gray-900 dark:text-gray-100">
+                                第 {chapterRun.chapterNumber} 章 {chapterRun.title || ''}
+                              </span>
+                              <span className={chapterRun.status === 'FAILED' ? 'text-red-500' : 'text-green-600 dark:text-green-400'}>
+                                {chapterRun.status === 'FAILED' ? '失败' : chapterRun.qualityStatus === 'reviewing' ? '待审稿' : '完成'}
+                              </span>
+                            </div>
+                            <div className="mt-1 grid grid-cols-2 gap-2 text-gray-500 dark:text-gray-400">
+                              <div>Planner：{formatDuration(chapterRun.phaseTimings.planner)}</div>
+                              <div>Writer：{formatDuration(chapterRun.phaseTimings.writer)}</div>
+                              <div>Summarizer：{formatDuration(chapterRun.phaseTimings.summarizer)}</div>
+                              <div>DB 回写：{formatDuration(chapterRun.phaseTimings.db_write)}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
 
               {/* StorySteering Panel */}
               <StorySteeringPanel

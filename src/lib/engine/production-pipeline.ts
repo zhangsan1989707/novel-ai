@@ -3,12 +3,14 @@ import { createProviderFromConfigId, createProviderFromDefaultConfig } from '@/l
 import type { AIProvider } from '@/lib/ai/types'
 import type { PipelineStep } from '@/types'
 import { calculateBatchSize } from './batch-planner'
-import { completeJob, failJob, saveCheckpoint, updateJobStep } from './generation-job'
+import { completeJob, failJob, saveCheckpoint, updateJobRuntime, updateJobStep } from './generation-job'
 import { validateAndWarn } from './long-novel-controller'
 import { toInternalArcStage, toInternalPlatform, toPrismaArcStage } from './production-mapping'
 import { runChapterGenerationPipeline } from './orchestrator'
 import { parseAiJsonArray, parseAiJsonObject } from './ai-json'
 import { buildChapterListPrompt } from '../prompts/novel/chapter-list'
+import { archiveChapterRuntime, createPipelineRuntimeState, sanitizePipelineRuntime } from './pipeline-runtime'
+import type { SSEEvent } from './types'
 
 type ChapterOutline = {
   chapterNumber: number
@@ -392,6 +394,145 @@ export async function runProductionPipeline(jobId: number): Promise<void> {
   if (!job) return
 
   const projectId = job.projectId
+  const project = await prisma.novelProject.findUnique({
+    where: { id: projectId },
+    select: { chapterWordCount: true },
+  })
+  const targetWordCount = project?.chapterWordCount || 3000
+  let runtime = sanitizePipelineRuntime(
+    job.payload && typeof job.payload === 'object'
+      ? (job.payload as Record<string, unknown>).runtime
+      : undefined
+  )
+  if (runtime.streamRevision === 0 && runtime.currentChapter === null && runtime.recentChapters.length === 0) {
+    runtime = createPipelineRuntimeState()
+  }
+  let lastPersistAt = 0
+  let persistChain = Promise.resolve()
+
+  const queuePersist = (force: boolean = false) => {
+    const now = Date.now()
+    if (!force && now - lastPersistAt < 900) return
+    runtime = {
+      ...runtime,
+      lastEventAt: new Date(now).toISOString(),
+      streamRevision: runtime.streamRevision + 1,
+    }
+    lastPersistAt = now
+    persistChain = persistChain
+      .then(() => updateJobRuntime(jobId, runtime))
+      .catch(() => undefined)
+  }
+
+  const setCurrentChapter = (chapterNumber: number, title?: string) => {
+    const now = new Date().toISOString()
+    runtime = {
+      ...runtime,
+      currentChapter: {
+        chapterNumber,
+        title,
+        status: 'RUNNING',
+        currentAgent: 'planner',
+        currentPhase: 'planner',
+        currentWordCount: 0,
+        targetWordCount,
+        startedAt: now,
+        updatedAt: now,
+        phaseTimings: {},
+      },
+    }
+    queuePersist(true)
+  }
+
+  const handlePipelineEvent = (event: SSEEvent) => {
+    if (!runtime.currentChapter) return
+
+    const now = new Date().toISOString()
+    const current = { ...runtime.currentChapter, updatedAt: now }
+
+    switch (event.type) {
+      case 'start': {
+        const agent = typeof event.data.agent === 'string' ? event.data.agent : current.currentAgent
+        current.currentAgent = agent
+        current.currentPhase = agent
+        break
+      }
+      case 'agent_switch': {
+        const agent = typeof event.data.agent === 'string' ? event.data.agent : current.currentAgent
+        current.currentAgent = agent
+        current.currentPhase = agent
+        break
+      }
+      case 'research': {
+        current.currentAgent = 'research'
+        current.currentPhase = 'research'
+        current.lastMessage = `已加载 ${Number(event.data.refsCount || 0)} 条研究资料`
+        break
+      }
+      case 'wordCount': {
+        const count = Number(event.data.count || 0)
+        if (Number.isFinite(count)) {
+          current.currentWordCount = count
+          current.lastTokenAt = now
+        }
+        break
+      }
+      case 'phase_timing': {
+        const phase = String(event.data.phase || '')
+        const durationMs = Number(event.data.durationMs || 0)
+        if (phase) {
+          current.phaseTimings = {
+            ...current.phaseTimings,
+            [phase]: durationMs,
+          }
+          runtime.lastPhase = phase
+          runtime.lastPhaseDurationMs = durationMs
+          current.currentPhase = phase
+          current.lastMessage = `${phase} 完成，用时 ${durationMs}ms`
+        }
+        break
+      }
+      case 'validation': {
+        current.currentAgent = 'validator'
+        current.currentPhase = 'validator'
+        current.lastMessage = `校验结果：${String(event.data.result || 'unknown')} / ${Number(event.data.score || 0)}分`
+        break
+      }
+      case 'hook_warning': {
+        const warnings = Array.isArray(event.data.warnings) ? event.data.warnings.filter(item => typeof item === 'string') : []
+        current.lastMessage = warnings.join('；')
+        break
+      }
+      case 'done': {
+        current.status = 'COMPLETED'
+        current.currentWordCount = Number(event.data.wordCount || current.currentWordCount || 0)
+        current.qualityStatus = typeof event.data.qualityStatus === 'string' ? event.data.qualityStatus : undefined
+        current.warning = typeof event.data.warning === 'string' ? event.data.warning : undefined
+        current.totalDurationMs = Number(event.data.duration || 0) || current.totalDurationMs
+        current.completedAt = now
+        current.currentPhase = 'completed'
+        current.lastMessage = current.warning || '章节生成完成'
+        break
+      }
+      case 'error': {
+        current.status = 'FAILED'
+        current.error = typeof event.data.message === 'string' ? event.data.message : '生成失败'
+        current.currentPhase = 'failed'
+        current.lastMessage = current.error
+        break
+      }
+      default:
+        break
+    }
+
+    runtime = {
+      ...runtime,
+      currentChapter: current,
+    }
+
+    const forcePersist = event.type === 'done' || event.type === 'error' || event.type === 'phase_timing'
+    queuePersist(forcePersist)
+  }
 
   try {
     const provider = await createProjectProvider(projectId)
@@ -415,9 +556,18 @@ export async function runProductionPipeline(jobId: number): Promise<void> {
     let completed = 0
     for (const outline of outlines) {
       await updateJobStep(jobId, 'write' as PipelineStep, 4, outlines.length, completed + 1)
-      const result = await runChapterGenerationPipeline(projectId, outline.chapterNumber, () => {})
+      setCurrentChapter(outline.chapterNumber, outline.title)
+      const result = await runChapterGenerationPipeline(projectId, outline.chapterNumber, handlePipelineEvent)
+      await persistChain
       if (!result.success) {
         throw new Error(result.error || `第 ${outline.chapterNumber} 章生成失败`)
+      }
+      if (runtime.currentChapter) {
+        runtime = archiveChapterRuntime(runtime, {
+          ...runtime.currentChapter,
+          title: runtime.currentChapter.title || outline.title,
+        })
+        queuePersist(true)
       }
       completed++
       await saveCheckpoint(
@@ -431,9 +581,11 @@ export async function runProductionPipeline(jobId: number): Promise<void> {
     await updateJobStep(jobId, 'summarize' as PipelineStep, 8, outlines.length, completed)
     await markCompletedArcIfNeeded(projectId)
     await saveCheckpoint(jobId, 'summarize' as PipelineStep, { projectId }, { completedChapters: completed })
+    await persistChain
     await completeJob(jobId)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
+    await persistChain
     await failJob(jobId, message)
   }
 }

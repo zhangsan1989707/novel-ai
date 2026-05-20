@@ -1,5 +1,7 @@
 import { prisma } from '@/lib/prisma'
+import type { Prisma } from '@prisma/client'
 import { PipelineStep } from '@/types'
+import { createPipelineRuntimeState, sanitizePipelineRuntime, type PipelineRuntimeState } from './pipeline-runtime'
 
 interface JobProgress {
   jobId: number
@@ -9,6 +11,8 @@ interface JobProgress {
   totalChapters: number
   currentChapter: number
   progress: number
+  runtime?: PipelineRuntimeState
+  error?: string
 }
 
 export async function createJob(projectId: number, type: string = 'FULL_PIPELINE'): Promise<number> {
@@ -17,7 +21,7 @@ export async function createJob(projectId: number, type: string = 'FULL_PIPELINE
       projectId,
       type,
       status: 'PENDING',
-      payload: {},
+      payload: ({ runtime: createPipelineRuntimeState() } as unknown) as Prisma.InputJsonValue,
     },
   })
 
@@ -68,16 +72,30 @@ export async function updateJobStep(
 }
 
 export async function completeJob(jobId: number): Promise<void> {
+  const job = await prisma.generationJob.findUnique({ where: { id: jobId } })
+  const payload = job?.payload && typeof job.payload === 'object'
+    ? job.payload as Record<string, unknown>
+    : {}
+  const runtime = sanitizePipelineRuntime(payload.runtime)
+
   await prisma.generationJob.update({
     where: { id: jobId },
     data: {
       status: 'COMPLETED',
       currentStep: null,
       completedAt: new Date(),
+      payload: {
+        ...payload,
+        runtime: {
+          ...runtime,
+          currentChapter: null,
+          lastEventAt: new Date().toISOString(),
+          streamRevision: runtime.streamRevision + 1,
+        },
+      } as any,
     },
   })
 
-  const job = await prisma.generationJob.findUnique({ where: { id: jobId } })
   if (job) {
     await prisma.novelProject.update({
       where: { id: job.projectId },
@@ -87,11 +105,54 @@ export async function completeJob(jobId: number): Promise<void> {
 }
 
 export async function failJob(jobId: number, errorMessage: string): Promise<void> {
+  const job = await prisma.generationJob.findUnique({ where: { id: jobId } })
+  const payload = job?.payload && typeof job.payload === 'object'
+    ? job.payload as Record<string, unknown>
+    : {}
+  const runtime = sanitizePipelineRuntime(payload.runtime)
+  const currentChapter = runtime.currentChapter
+    ? {
+      ...runtime.currentChapter,
+      status: 'FAILED' as const,
+      error: errorMessage,
+      updatedAt: new Date().toISOString(),
+    }
+    : null
+
   await prisma.generationJob.update({
     where: { id: jobId },
     data: {
       status: 'FAILED',
       errorMessage,
+      payload: {
+        ...payload,
+        runtime: {
+          ...runtime,
+          currentChapter,
+          lastEventAt: new Date().toISOString(),
+          streamRevision: runtime.streamRevision + 1,
+        },
+      } as any,
+    },
+  })
+}
+
+export async function updateJobRuntime(jobId: number, runtime: PipelineRuntimeState): Promise<void> {
+  const job = await prisma.generationJob.findUnique({
+    where: { id: jobId },
+    select: { payload: true },
+  })
+  const payload = job?.payload && typeof job.payload === 'object'
+    ? job.payload as Record<string, unknown>
+    : {}
+
+  await prisma.generationJob.update({
+    where: { id: jobId },
+    data: {
+      payload: {
+        ...payload,
+        runtime,
+      } as any,
     },
   })
 }
@@ -114,6 +175,12 @@ export async function getJobProgress(jobId: number): Promise<JobProgress | null>
     totalChapters: job.totalChapters,
     currentChapter: job.currentChapter,
     progress: Math.round(stepProgress),
+    runtime: sanitizePipelineRuntime(
+      job.payload && typeof job.payload === 'object'
+        ? (job.payload as Record<string, unknown>).runtime
+        : undefined
+    ),
+    error: job.errorMessage || undefined,
   }
 }
 

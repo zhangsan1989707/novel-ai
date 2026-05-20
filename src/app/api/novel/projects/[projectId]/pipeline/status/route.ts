@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { sanitizePipelineRuntime } from '@/lib/engine/pipeline-runtime'
 
 export async function GET(
   request: NextRequest,
@@ -42,6 +43,7 @@ export async function GET(
           progress: 0,
           currentChapter: 0,
           totalChapters: 0,
+          runtime: sanitizePipelineRuntime(undefined),
         },
       })
     }
@@ -59,6 +61,7 @@ export async function GET(
           progress: 0,
           currentChapter: 0,
           totalChapters: 0,
+          runtime: sanitizePipelineRuntime(undefined),
         },
       })
     }
@@ -76,6 +79,12 @@ export async function GET(
         totalChapters: job.totalChapters,
         error: job.errorMessage || undefined,
         pipelineJobId: job.id,
+        runtime: sanitizePipelineRuntime(
+          job.payload && typeof job.payload === 'object'
+            ? (job.payload as Record<string, unknown>).runtime
+            : undefined
+        ),
+        updatedAt: job.updatedAt.toISOString(),
       },
     })
   } catch (error) {

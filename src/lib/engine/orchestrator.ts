@@ -51,6 +51,7 @@ export async function runChapterGenerationPipeline(
 ): Promise<GenerationResult> {
   const speedMode = options?.speedMode || 'balanced'
   const startTime = Date.now()
+  let lastReportedWordCount = 0
 
   // 创建共享 AI Provider（避免每个 Agent 重复 DB 查询）
   const sharedProvider = await AIService.createProvider({
@@ -239,6 +240,11 @@ export async function runChapterGenerationPipeline(
         (token) => {
           draftContent += token
           emit({ type: 'token', data: { content: token } })
+          const currentWordCount = countChineseWords(draftContent)
+          if (currentWordCount >= lastReportedWordCount + 120) {
+            lastReportedWordCount = currentWordCount
+            emit({ type: 'wordCount', data: { count: currentWordCount } })
+          }
         }
       )
     })
@@ -453,47 +459,48 @@ export async function runChapterGenerationPipeline(
       await storyState.updateChapterProgress(projectId, chapterNo)
     }
 
-    // 记录完成事件
-    await storyState.recordStoryEvent(
-      projectId,
-      'CHAPTER_COMPLETED',
-      `第${chapterNo}章生成完成，字数${countChineseWords(finalContent)}`,
-      chapterNo
-    )
-
-    // ========== 保存最终结果 ==========
     const finalWordCount = countChineseWords(finalContent)
     const polishedWordCount = countChineseWords(polishedContent)
     const minimumWordCount = getMinimumChapterWordCount(project.chapterWordCount || 3000, chapterNo)
     const chapterReady = finalWordCount >= minimumWordCount
-    await prisma.novelChapter.update({
-      where: { id: chapter.id },
-      data: {
-        title: outline.chapterTitle,
+    emit({ type: 'wordCount', data: { count: finalWordCount } })
+
+    await runPhase('db_write', async () => {
+      await storyState.recordStoryEvent(
+        projectId,
+        'CHAPTER_COMPLETED',
+        `第${chapterNo}章生成完成，字数${finalWordCount}`,
+        chapterNo
+      )
+
+      await prisma.novelChapter.update({
+        where: { id: chapter.id },
+        data: {
+          title: outline.chapterTitle,
+          content: finalContent,
+          summary: summaryData.summary,
+          status: chapterReady ? ChapterStatus.COMPLETED : ChapterStatus.REVIEWING,
+          validationReport: validationReport as any,
+          wordCount: finalWordCount,
+          lastAgentType: speedMode === 'quality' ? 'POLISHER' : 'WRITER',
+        },
+      })
+
+      const totalWordCount = await prisma.novelChapter.aggregate({
+        where: { projectId, status: ChapterStatus.COMPLETED },
+        _sum: { wordCount: true },
+      })
+
+      await prisma.novelProject.update({
+        where: { id: projectId },
+        data: { currentWordCount: totalWordCount._sum.wordCount || 0 },
+      })
+
+      await hookRegistry.execute('chapter_generate_end', {
+        projectId,
+        chapterNo,
         content: finalContent,
-        summary: summaryData.summary,
-        status: chapterReady ? ChapterStatus.COMPLETED : ChapterStatus.REVIEWING,
-        validationReport: validationReport as any,
-        wordCount: finalWordCount,
-        lastAgentType: speedMode === 'quality' ? 'POLISHER' : 'WRITER',
-      },
-    })
-
-    // 更新项目总字数
-    const totalWordCount = await prisma.novelChapter.aggregate({
-      where: { projectId, status: ChapterStatus.COMPLETED },
-      _sum: { wordCount: true },
-    })
-
-    await prisma.novelProject.update({
-      where: { id: projectId },
-      data: { currentWordCount: totalWordCount._sum.wordCount || 0 },
-    })
-
-    await hookRegistry.execute('chapter_generate_end', {
-      projectId,
-      chapterNo,
-      content: finalContent,
+      })
     })
 
     emit({
