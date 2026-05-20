@@ -199,7 +199,41 @@ export class TraceableAIProvider implements AIProvider {
       throw new Error(`Provider ${this.provider.name} does not support embeddings`)
     }
 
-    return this.provider.embedText(text, params)
+    const startTime = Date.now()
+    try {
+      const embedding = await this.provider.embedText(text, params)
+
+      await recordUsage({
+        userId: this.userId,
+        projectId: this.projectId,
+        vendor: this.config.vendor,
+        modelId: params?.modelId || this.config.embeddingModelId || this.config.modelId,
+        usageType: this.usageType,
+        promptTokens: estimateTokens(text),
+        completionTokens: 0,
+      })
+
+      logger.info(
+        {
+          vendor: this.vendor,
+          modelId: params?.modelId || this.config.embeddingModelId || this.config.modelId,
+          duration: Date.now() - startTime,
+        },
+        'AI embedding completed with cost tracking'
+      )
+
+      return embedding
+    } catch (error) {
+      logger.error(
+        {
+          vendor: this.vendor,
+          modelId: params?.modelId || this.config.embeddingModelId || this.config.modelId,
+          error,
+        },
+        'AI embedding failed'
+      )
+      throw error
+    }
   }
 
   private async recordUsage(

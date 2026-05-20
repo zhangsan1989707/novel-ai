@@ -14,6 +14,8 @@ interface AIConfig {
   modelId: string
   apiKey: string | null
   apiEndpoint?: string | null
+  embeddingModelId?: string | null
+  embeddingDimensions?: number | null
   isDefault: boolean
   sortOrder: number
 }
@@ -55,6 +57,12 @@ const defaultApiEndpoints: Partial<Record<AIVendor, string>> = {
   [AIVendor.ZHIPU]: 'https://open.bigmodel.cn/api/paas/v4',
 }
 
+const defaultEmbeddingModelIds: Partial<Record<AIVendor, string>> = {
+  [AIVendor.OPENAI]: 'text-embedding-3-small',
+}
+
+const defaultEmbeddingDimensions = 256
+
 export default function SettingsPage() {
   const router = useRouter()
   const [configs, setConfigs] = useState<AIConfig[]>([])
@@ -71,6 +79,8 @@ export default function SettingsPage() {
     modelId: '',
     apiKey: '',
     apiEndpoint: '',
+    embeddingModelId: '',
+    embeddingDimensions: String(defaultEmbeddingDimensions),
     isDefault: false,
   })
   const [showApiKey, setShowApiKey] = useState(false)
@@ -113,6 +123,8 @@ export default function SettingsPage() {
         modelId: config.modelId,
         apiKey: '',
         apiEndpoint: config.apiEndpoint || '',
+        embeddingModelId: config.embeddingModelId || '',
+        embeddingDimensions: String(config.embeddingDimensions || defaultEmbeddingDimensions),
         isDefault: config.isDefault,
       })
     } else {
@@ -123,6 +135,8 @@ export default function SettingsPage() {
         modelId: defaultModelIds[AIVendor.DEEPSEEK],
         apiKey: '',
         apiEndpoint: defaultApiEndpoints[AIVendor.DEEPSEEK] || '',
+        embeddingModelId: defaultEmbeddingModelIds[AIVendor.DEEPSEEK] || '',
+        embeddingDimensions: String(defaultEmbeddingDimensions),
         isDefault: false,
       })
     }
@@ -196,9 +210,20 @@ export default function SettingsPage() {
         ? { 
             ...formData, 
             id: editingConfig.id,
-            apiKey: formData.apiKey.trim() || undefined 
+            apiKey: formData.apiKey.trim() || undefined,
+            embeddingModelId: formData.embeddingModelId.trim() || undefined,
+            embeddingDimensions: formData.embeddingDimensions.trim()
+              ? Number(formData.embeddingDimensions)
+              : undefined,
           }
-        : formData
+        : {
+            ...formData,
+            apiKey: formData.apiKey.trim(),
+            embeddingModelId: formData.embeddingModelId.trim() || undefined,
+            embeddingDimensions: formData.embeddingDimensions.trim()
+              ? Number(formData.embeddingDimensions)
+              : undefined,
+          }
 
       const res = await fetch(url, {
         method,
@@ -378,6 +403,8 @@ export default function SettingsPage() {
                             <p>模型: {config.modelId}</p>
                             <p>API Key: {config.apiKey ? '已配置' : '未设置'}</p>
                             {config.apiEndpoint && <p>端点: {config.apiEndpoint}</p>}
+                            {config.embeddingModelId && <p>Embedding: {config.embeddingModelId}</p>}
+                            {config.embeddingDimensions && <p>Embedding 维度: {config.embeddingDimensions}</p>}
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
@@ -479,13 +506,14 @@ export default function SettingsPage() {
             label="AI 提供商"
             options={vendorOptions}
             value={formData.vendor}
-            onChange={(e) => setFormData({
-              ...formData,
-              vendor: e.target.value as AIVendor,
-              modelId: defaultModelIds[e.target.value as AIVendor],
-              apiEndpoint: defaultApiEndpoints[e.target.value as AIVendor] || '',
-            })}
-          />
+              onChange={(e) => setFormData({
+                ...formData,
+                vendor: e.target.value as AIVendor,
+                modelId: defaultModelIds[e.target.value as AIVendor],
+                apiEndpoint: defaultApiEndpoints[e.target.value as AIVendor] || '',
+                embeddingModelId: defaultEmbeddingModelIds[e.target.value as AIVendor] || formData.embeddingModelId,
+              })}
+            />
 
           <Input
             label="模型 ID"
@@ -517,6 +545,30 @@ export default function SettingsPage() {
             value={formData.apiEndpoint}
             onChange={(e) => setFormData({ ...formData, apiEndpoint: e.target.value })}
           />
+
+          <div className="space-y-3 rounded-md border border-border p-3">
+            <div>
+              <p className="text-sm font-medium text-gray-900 dark:text-white">RAG 向量化设置</p>
+              <p className="text-xs text-gray-500 mt-1">
+                用于章节检索和记忆召回。若留空，系统会尝试使用默认 embedding 配置。
+              </p>
+            </div>
+            <Input
+              label="Embedding 模型 ID（可选）"
+              placeholder="如：text-embedding-3-small"
+              value={formData.embeddingModelId}
+              onChange={(e) => setFormData({ ...formData, embeddingModelId: e.target.value })}
+            />
+            <Input
+              label="Embedding 维度（可选）"
+              type="number"
+              min={64}
+              max={3072}
+              placeholder="256"
+              value={formData.embeddingDimensions}
+              onChange={(e) => setFormData({ ...formData, embeddingDimensions: e.target.value })}
+            />
+          </div>
 
           <div className="flex items-center gap-2">
             <input

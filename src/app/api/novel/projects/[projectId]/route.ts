@@ -17,6 +17,7 @@ function buildProjectPreflight(project: {
   aiModelConfig: unknown
   bookBlueprint: unknown
   arcPlans: Array<unknown>
+  storyState: unknown
   chapters: Array<{ status: string; wordCount: number; chapterNumber: number }>
   recentCommits: Array<{ projectionStatus: unknown; status: string }>
   chapterWordCount: number
@@ -34,6 +35,7 @@ function buildProjectPreflight(project: {
   const hasModel = Boolean(project.aiModelConfig)
   const hasBlueprint = Boolean(project.bookBlueprint)
   const hasArcPlans = project.arcPlans.length > 0
+  const hasStoryState = Boolean(project.storyState)
   const completedChapters = project.chapters.filter(chapter => chapter.status === 'COMPLETED')
   const reviewingChapters = project.chapters.filter(chapter => chapter.status === 'REVIEWING')
   const draftChapters = project.chapters.filter(chapter => chapter.status === 'DRAFT')
@@ -100,6 +102,14 @@ function buildProjectPreflight(project: {
     })
   }
 
+  if (!hasStoryState) {
+    issues.push({
+      severity: 'warning',
+      code: 'STORY_STATE_MISSING',
+      message: '尚未初始化故事状态，情绪曲线与主线冲突不会稳定回写',
+    })
+  }
+
   if (draftChapters.length > 0) {
     issues.push({
       severity: 'info',
@@ -157,10 +167,11 @@ function buildProjectPreflight(project: {
   }
 
   return {
-    ready: hasModel && hasBlueprint && hasArcPlans && emptyCompletedChapters.length === 0 && recentCommitFailures.length === 0,
+    ready: hasModel && hasBlueprint && hasArcPlans && hasStoryState && emptyCompletedChapters.length === 0 && recentCommitFailures.length === 0,
     hasModel,
     hasBlueprint,
     hasArcPlans,
+    hasStoryState,
     totalChapters: project.chapters.length,
     completedChapters: completedChapters.length,
     reviewingChapters: reviewingChapters.length,
@@ -170,6 +181,7 @@ function buildProjectPreflight(project: {
     chapterSummaryCount: project.chapterSummaryCount,
     volumeSummaryCount: project.volumeSummaryCount,
     bookSummaryCount: project.bookSummaryCount,
+    storyStateExists: hasStoryState,
     characterCount: project.characterCount,
     plotlineCount: project.plotlineCount,
     openPlotlineCount: project.openPlotlineCount,
@@ -253,6 +265,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       include: {
         aiModelConfig: true,
         bookBlueprint: true,
+        storyState: true,
         chapters: {
           orderBy: { chapterNumber: 'asc' },
           select: {
@@ -324,6 +337,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const preflight = buildProjectPreflight({
       aiModelConfig: project.aiModelConfig,
       bookBlueprint: project.bookBlueprint,
+      storyState: project.storyState,
       arcPlans: project.arcPlans,
       chapters: project.chapters,
       recentCommits,

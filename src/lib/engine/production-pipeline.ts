@@ -39,7 +39,7 @@ type ArcPlanOutput = {
   keyEvents?: string[]
 }
 
-async function createProjectProvider(projectId: number): Promise<AIProvider> {
+export async function createProjectProvider(projectId: number): Promise<AIProvider> {
   const project = await prisma.novelProject.findUnique({
     where: { id: projectId },
     select: { aiModelId: true },
@@ -53,7 +53,7 @@ async function createProjectProvider(projectId: number): Promise<AIProvider> {
   return createProviderFromDefaultConfig()
 }
 
-async function ensureBlueprint(projectId: number, provider: AIProvider) {
+export async function ensureBlueprint(projectId: number, provider: AIProvider) {
   const existing = await prisma.bookBlueprint.findUnique({ where: { projectId } })
   if (existing) return existing
 
@@ -115,7 +115,7 @@ async function ensureBlueprint(projectId: number, provider: AIProvider) {
   return prisma.bookBlueprint.create({ data: { projectId, ...data } })
 }
 
-async function ensureArcPlans(projectId: number, provider: AIProvider) {
+export async function ensureArcPlans(projectId: number, provider: AIProvider) {
   const existing = await prisma.arcPlan.findMany({ where: { projectId }, orderBy: { arcNumber: 'asc' } })
   if (existing.length > 0) return existing
 

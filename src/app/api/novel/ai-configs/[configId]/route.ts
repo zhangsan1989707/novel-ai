@@ -14,6 +14,8 @@ const updateAIConfigSchema = z.object({
   modelId: z.string().min(1).optional(),
   apiKey: z.string().optional(), // 允许为空，表示不更新
   apiEndpoint: z.string().optional(),
+  embeddingModelId: z.string().optional(),
+  embeddingDimensions: z.number().int().positive().optional(),
   isDefault: z.boolean().optional(),
   sortOrder: z.number().int().optional(),
 })

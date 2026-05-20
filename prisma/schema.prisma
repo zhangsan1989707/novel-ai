@@ -172,6 +172,8 @@ model AIModelConfig {
   modelId       String          // 实际模型 ID
   apiKey        String?         // API Key（加密存储）
   apiEndpoint   String?         // 自定义端点
+  embeddingModelId String?      // 向量模型 ID
+  embeddingDimensions Int?       // 向量维度
   isDefault     Boolean         @default(false)
   sortOrder     Int             @default(0)
 

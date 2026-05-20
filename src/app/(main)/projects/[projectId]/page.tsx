@@ -81,6 +81,7 @@ interface Project {
     hasModel: boolean
     hasBlueprint: boolean
     hasArcPlans: boolean
+    hasStoryState: boolean
     totalChapters: number
     completedChapters: number
     reviewingChapters: number
@@ -229,6 +230,7 @@ export default function ProjectDetailPage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [pipelineStarting, setPipelineStarting] = useState(false)
+  const [bootstrapping, setBootstrapping] = useState(false)
   const [activeTab, setActiveTab] = useState<DashboardTab>('dashboard')
 
   const [pipeline, setPipeline] = useState<PipelineStatus | null>(null)
@@ -404,6 +406,26 @@ export default function ProjectDetailPage() {
       toast.error('启动失败')
     } finally {
       setPipelineStarting(false)
+    }
+  }
+
+  const handleBootstrapProject = async () => {
+    setBootstrapping(true)
+    try {
+      const res = await fetch(`/api/novel/projects/${projectId}/bootstrap`, {
+        method: 'POST',
+      })
+      const data = await res.json()
+      if (data.success) {
+        toast.success('创作系统已初始化')
+        await fetchProject()
+      } else {
+        toast.error(data.error?.message || '初始化失败')
+      }
+    } catch {
+      toast.error('初始化失败，请重试')
+    } finally {
+      setBootstrapping(false)
     }
   }
 
@@ -870,10 +892,25 @@ export default function ProjectDetailPage() {
                         </div>
                       </div>
                     )}
+                    {project.preflight.hasModel && (!project.preflight.hasBlueprint || !project.preflight.hasArcPlans || !project.preflight.hasStoryState) && (
+                      <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-blue-800 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-200">
+                        <div className="font-medium">可以先一键初始化创作系统</div>
+                        <div className="mt-1 text-xs leading-5 text-blue-700 dark:text-blue-300">
+                          这会自动生成 Book Blueprint、Arc Plan，并初始化故事状态。完成后再启动主流水线，长篇生产会更稳定。
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Button size="sm" variant="primary" onClick={handleBootstrapProject} disabled={bootstrapping}>
+                            {bootstrapping ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
+                            一键初始化
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                     <div className="grid grid-cols-2 gap-2 text-gray-600 dark:text-gray-400">
                       <div>模型：{project.preflight.hasModel ? '已绑定' : '未绑定'}</div>
                       <div>蓝图：{project.preflight.hasBlueprint ? '已生成' : '未生成'}</div>
                       <div>阶段规划：{project.preflight.hasArcPlans ? '已生成' : '未生成'}</div>
+                      <div>故事状态：{project.preflight.hasStoryState ? '已初始化' : '未初始化'}</div>
                       <div>已完成：{project.preflight.completedChapters} 章</div>
                       <div>待审稿：{project.preflight.reviewingChapters} 章</div>
                       <div>未写作：{project.preflight.draftChapters} 章</div>

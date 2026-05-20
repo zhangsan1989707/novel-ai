@@ -41,7 +41,9 @@ export interface GenerateOptions {
  */
 export class AIService {
   private static attachEmbeddingConfig(config: AIConfig): AIConfig {
-    const embeddingDimensions = Number(process.env.AI_EMBEDDING_DIMENSIONS || 256)
+    const embeddingDimensions = Number(
+      config.embeddingDimensions || process.env.AI_EMBEDDING_DIMENSIONS || 256
+    )
     const embeddingModelId = this.resolveEmbeddingModelId(config.vendor, config.modelId)
 
     return {
@@ -100,6 +102,8 @@ export class AIService {
           modelId: project.aiModelConfig.modelId,
           apiKey: project.aiModelConfig.apiKey || '',
           apiEndpoint: project.aiModelConfig.apiEndpoint || undefined,
+          embeddingModelId: project.aiModelConfig.embeddingModelId || undefined,
+          embeddingDimensions: project.aiModelConfig.embeddingDimensions || undefined,
         }
       }
     }
@@ -116,6 +120,8 @@ export class AIService {
           modelId: dbConfig.modelId,
           apiKey: dbConfig.apiKey || '',
           apiEndpoint: dbConfig.apiEndpoint || undefined,
+          embeddingModelId: dbConfig.embeddingModelId || undefined,
+          embeddingDimensions: dbConfig.embeddingDimensions || undefined,
         }
       }
     }
@@ -141,6 +147,8 @@ export class AIService {
           modelId: defaultConfig.modelId,
           apiKey: defaultConfig.apiKey || '',
           apiEndpoint: defaultConfig.apiEndpoint || undefined,
+          embeddingModelId: defaultConfig.embeddingModelId || undefined,
+          embeddingDimensions: defaultConfig.embeddingDimensions || undefined,
         }
       }
     }
@@ -195,12 +203,14 @@ export class AIService {
       if (project?.aiModelConfig) {
         const projectVendor = project.aiModelConfig.vendor as AIVendor
         vendor = this.resolveEmbeddingVendor(projectVendor)
-        config = vendor === projectVendor
+          config = vendor === projectVendor
           ? {
               vendor,
               modelId: project.aiModelConfig.modelId,
               apiKey: project.aiModelConfig.apiKey || '',
               apiEndpoint: project.aiModelConfig.apiEndpoint || undefined,
+              embeddingModelId: project.aiModelConfig.embeddingModelId || undefined,
+              embeddingDimensions: project.aiModelConfig.embeddingDimensions || undefined,
             }
           : this.getDefaultConfig(vendor)
       }
@@ -220,6 +230,8 @@ export class AIService {
               modelId: dbConfig.modelId,
               apiKey: dbConfig.apiKey || '',
               apiEndpoint: dbConfig.apiEndpoint || undefined,
+              embeddingModelId: dbConfig.embeddingModelId || undefined,
+              embeddingDimensions: dbConfig.embeddingDimensions || undefined,
             }
           : this.getDefaultConfig(vendor)
       }
@@ -248,6 +260,8 @@ export class AIService {
               modelId: defaultConfig.modelId,
               apiKey: defaultConfig.apiKey || '',
               apiEndpoint: defaultConfig.apiEndpoint || undefined,
+              embeddingModelId: defaultConfig.embeddingModelId || undefined,
+              embeddingDimensions: defaultConfig.embeddingDimensions || undefined,
             }
           : this.getDefaultConfig(vendor)
       }

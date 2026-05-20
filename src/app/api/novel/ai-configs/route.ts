@@ -14,6 +14,8 @@ const createAIConfigSchema = z.object({
   modelId: z.string().min(1, '请输入模型 ID'),
   apiKey: z.string().min(1, '请输入 API Key'),
   apiEndpoint: z.string().optional(),
+  embeddingModelId: z.string().optional(),
+  embeddingDimensions: z.number().int().positive().optional(),
   isDefault: z.boolean().default(false),
 })
 
