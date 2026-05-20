@@ -311,6 +311,14 @@ async function deleteRagDocumentsByProject(projectId: number): Promise<void> {
 }
 
 async function countRagDocuments(projectId: number): Promise<number> {
+  const existenceRows = await prisma.$queryRaw<Array<{ table_name: string | null }>>`
+    SELECT to_regclass('public.rag_documents')::text AS table_name
+  `
+  if (!existenceRows[0]?.table_name) {
+    logger.warn({ projectId }, 'rag_documents table is missing, fallback rag count to 0')
+    return 0
+  }
+
   const rows = await prisma.$queryRaw<Array<{ count: bigint }>>`
     SELECT COUNT(*)::bigint AS count
     FROM rag_documents

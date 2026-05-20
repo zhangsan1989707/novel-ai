@@ -41,3 +41,7 @@ export { Toolbox } from './Toolbox'
 export { AutoPipelinePanel } from './AutoPipelinePanel'
 // Export
 export { ExportPanel } from './ExportPanel'
+// Anti Detect
+export { AntiDetectPanel } from './AntiDetectPanel'
+// Chapter Quality
+export { ChapterQualityPanel } from './ChapterQualityPanel'
