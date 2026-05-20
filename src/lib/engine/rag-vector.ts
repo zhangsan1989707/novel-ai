@@ -73,16 +73,39 @@ const embeddingVectorCache = new Map<string, number[]>()
 let embeddingFallbackWarned = false
 let ragDocumentsMissingWarned = false
 
-async function hasRagDocumentsTable(): Promise<boolean> {
-  const existenceRows = await prisma.$queryRaw<Array<{ table_name: string | null }>>`
-    SELECT to_regclass('public.rag_documents')::text AS table_name
-  `
-  const exists = Boolean(existenceRows[0]?.table_name)
-  if (!exists && !ragDocumentsMissingWarned) {
-    logger.warn('rag_documents table is missing, fallback RAG operations to no-op')
+function isMissingRagDocumentsError(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === 'P2010' &&
+    typeof error.meta?.message === 'string' &&
+    error.meta.message.includes('relation "rag_documents" does not exist')
+  )
+}
+
+function warnMissingRagDocumentsTable(projectId?: number) {
+  if (!ragDocumentsMissingWarned) {
+    logger.warn({ projectId }, 'rag_documents table is missing, fallback RAG operations to no-op')
     ragDocumentsMissingWarned = true
   }
-  return exists
+}
+
+async function hasRagDocumentsTable(): Promise<boolean> {
+  try {
+    const existenceRows = await prisma.$queryRaw<Array<{ table_name: string | null }>>`
+      SELECT to_regclass('public.rag_documents')::text AS table_name
+    `
+    const exists = Boolean(existenceRows[0]?.table_name)
+    if (!exists) {
+      warnMissingRagDocumentsTable()
+    }
+    return exists
+  } catch (error) {
+    if (isMissingRagDocumentsError(error)) {
+      warnMissingRagDocumentsTable()
+      return false
+    }
+    throw error
+  }
 }
 
 function normalizeText(text: string): string {
@@ -276,47 +299,55 @@ async function upsertRagDocuments(
     return
   }
 
-  for (const doc of docs) {
-    await prisma.$executeRaw`
-      INSERT INTO rag_documents (
-        id,
-        project_id,
-        source_type,
-        source_id,
-        chapter_no,
-        chunk_no,
-        title,
-        content,
-        metadata,
-        embedding,
-        embedding_model,
-        created_at,
-        updated_at
-      ) VALUES (
-        ${`${doc.projectId}:${doc.sourceType}:${doc.sourceId}:${doc.chunkNo}`},
-        ${doc.projectId},
-        ${doc.sourceType},
-        ${doc.sourceId},
-        ${doc.chapterNo},
-        ${doc.chunkNo},
-        ${doc.title ?? null},
-        ${doc.content},
-        ${(doc.metadata || {}) as Prisma.InputJsonValue},
-        ${serializeVector(doc.embedding)}::vector,
-        ${doc.embeddingModel || 'local-hash-v1'},
-        NOW(),
-        NOW()
-      )
-      ON CONFLICT (project_id, source_type, source_id, chunk_no)
-      DO UPDATE SET
-        title = EXCLUDED.title,
-        content = EXCLUDED.content,
-        metadata = EXCLUDED.metadata,
-        embedding = EXCLUDED.embedding,
-        embedding_model = EXCLUDED.embedding_model,
-        chapter_no = EXCLUDED.chapter_no,
-        updated_at = NOW()
-    `
+  try {
+    for (const doc of docs) {
+      await prisma.$executeRaw`
+        INSERT INTO rag_documents (
+          id,
+          project_id,
+          source_type,
+          source_id,
+          chapter_no,
+          chunk_no,
+          title,
+          content,
+          metadata,
+          embedding,
+          embedding_model,
+          created_at,
+          updated_at
+        ) VALUES (
+          ${`${doc.projectId}:${doc.sourceType}:${doc.sourceId}:${doc.chunkNo}`},
+          ${doc.projectId},
+          ${doc.sourceType},
+          ${doc.sourceId},
+          ${doc.chapterNo},
+          ${doc.chunkNo},
+          ${doc.title ?? null},
+          ${doc.content},
+          ${(doc.metadata || {}) as Prisma.InputJsonValue},
+          ${serializeVector(doc.embedding)}::vector,
+          ${doc.embeddingModel || 'local-hash-v1'},
+          NOW(),
+          NOW()
+        )
+        ON CONFLICT (project_id, source_type, source_id, chunk_no)
+        DO UPDATE SET
+          title = EXCLUDED.title,
+          content = EXCLUDED.content,
+          metadata = EXCLUDED.metadata,
+          embedding = EXCLUDED.embedding,
+          embedding_model = EXCLUDED.embedding_model,
+          chapter_no = EXCLUDED.chapter_no,
+          updated_at = NOW()
+      `
+    }
+  } catch (error) {
+    if (isMissingRagDocumentsError(error)) {
+      warnMissingRagDocumentsTable(docs[0]?.projectId)
+      return
+    }
+    throw error
   }
 }
 
@@ -325,10 +356,18 @@ async function deleteRagDocumentsByProject(projectId: number): Promise<void> {
     return
   }
 
-  await prisma.$executeRaw`
-    DELETE FROM rag_documents
-    WHERE project_id = ${projectId}
-  `
+  try {
+    await prisma.$executeRaw`
+      DELETE FROM rag_documents
+      WHERE project_id = ${projectId}
+    `
+  } catch (error) {
+    if (isMissingRagDocumentsError(error)) {
+      warnMissingRagDocumentsTable(projectId)
+      return
+    }
+    throw error
+  }
 }
 
 async function countRagDocuments(projectId: number): Promise<number> {
@@ -336,12 +375,20 @@ async function countRagDocuments(projectId: number): Promise<number> {
     return 0
   }  
 
-  const rows = await prisma.$queryRaw<Array<{ count: bigint }>>`
-    SELECT COUNT(*)::bigint AS count
-    FROM rag_documents
-    WHERE project_id = ${projectId}
-  `
-  return Number(rows[0]?.count || 0)
+  try {
+    const rows = await prisma.$queryRaw<Array<{ count: bigint }>>`
+      SELECT COUNT(*)::bigint AS count
+      FROM rag_documents
+      WHERE project_id = ${projectId}
+    `
+    return Number(rows[0]?.count || 0)
+  } catch (error) {
+    if (isMissingRagDocumentsError(error)) {
+      warnMissingRagDocumentsTable(projectId)
+      return 0
+    }
+    throw error
+  }
 }
 
 /**
@@ -496,27 +543,36 @@ async function searchIndexedRagDocuments(
     ? Prisma.sql`AND (chapter_no = 0 OR chapter_no <= ${maxChapterNo})`
     : Prisma.empty
 
-  const rows = await prisma.$queryRaw<RagDocumentRow[]>(Prisma.sql`
-    SELECT
-      id,
-      project_id,
-      source_type,
-      source_id,
-      chapter_no,
-      chunk_no,
-      title,
-      content,
-      metadata,
-      1 - (embedding <=> ${vectorLiteral}::vector) AS embedding_score
-    FROM rag_documents
-    WHERE project_id = ${projectId}
-      ${typeClause}
-      ${chapterClause}
-      ${tagClause}
-      ${chapterLimitClause}
-    ORDER BY embedding <=> ${vectorLiteral}::vector ASC
-    LIMIT ${candidateLimit}
-  `)
+  let rows: RagDocumentRow[]
+  try {
+    rows = await prisma.$queryRaw<RagDocumentRow[]>(Prisma.sql`
+      SELECT
+        id,
+        project_id,
+        source_type,
+        source_id,
+        chapter_no,
+        chunk_no,
+        title,
+        content,
+        metadata,
+        1 - (embedding <=> ${vectorLiteral}::vector) AS embedding_score
+      FROM rag_documents
+      WHERE project_id = ${projectId}
+        ${typeClause}
+        ${chapterClause}
+        ${tagClause}
+        ${chapterLimitClause}
+      ORDER BY embedding <=> ${vectorLiteral}::vector ASC
+      LIMIT ${candidateLimit}
+    `)
+  } catch (error) {
+    if (isMissingRagDocumentsError(error)) {
+      warnMissingRagDocumentsTable(projectId)
+      return []
+    }
+    throw error
+  }
 
   return rows.map(row => {
     const metadata = row.metadata && typeof row.metadata === 'object' ? row.metadata as Record<string, unknown> : {}
