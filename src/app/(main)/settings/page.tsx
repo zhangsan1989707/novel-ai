@@ -150,7 +150,7 @@ export default function SettingsPage() {
     }
 
     // 如果是编辑模式且没有输入新的API Key，我们需要获取完整的API Key来测试
-    let apiKeyToUse = formData.apiKey
+    const apiKeyToUse = formData.apiKey
     if (editingConfig && !formData.apiKey) {
       // 这里我们需要一个API来获取完整的API Key用于测试
       // 但是考虑到安全性，我们暂时使用后端的 test/{id} 接口

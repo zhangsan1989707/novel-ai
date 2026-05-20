@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { logError } from '@/lib/logger'
 import { getCurrentUserId } from '@/lib/auth'
 import { createProviderFromConfigId, createProviderFromDefaultConfig } from '@/lib/ai/factory'
+import { refreshBlueprintConsole } from '@/lib/engine/blueprint-console'
 
 // ============================================
 // Schema 验证
@@ -288,6 +289,15 @@ export async function POST(request: NextRequest) {
         aiModelConfig: true,
       },
     })
+
+    try {
+      await refreshBlueprintConsole(project.id, '项目刚创建完成，请生成初始 AI 动态设定中枢。')
+    } catch (error) {
+      logError(error instanceof Error ? error : new Error(String(error)), {
+        type: 'create_project_bootstrap_console',
+        projectId: project.id,
+      })
+    }
 
     return NextResponse.json({ success: true, data: project }, { status: 201 })
   } catch (error: unknown) {

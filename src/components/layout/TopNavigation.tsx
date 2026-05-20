@@ -5,6 +5,7 @@ import { Button } from '@/components/ui'
 import { BookOpen, Settings, DollarSign, Search, TrendingUp } from 'lucide-react'
 import { ThemeToggle } from './ThemeToggle'
 import { HelpModal } from './HelpModal'
+import { NotificationDropdown } from './NotificationDropdown'
 
 interface TopNavigationProps {
   children: React.ReactNode
@@ -70,6 +71,7 @@ export function TopNavigation({ children }: TopNavigationProps) {
               </div>
 
               <HelpModal />
+              <NotificationDropdown />
               <ThemeToggle />
             </div>
           </div>

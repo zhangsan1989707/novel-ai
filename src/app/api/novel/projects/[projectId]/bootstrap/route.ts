@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { createProjectProvider, ensureArcPlans, ensureBlueprint } from '@/lib/engine/production-pipeline'
-import { initStoryState } from '@/lib/engine/story-state'
+import { initStoryState, initWorldState } from '@/lib/engine/story-state'
+import { loadProjectHealthReport } from '@/lib/engine/project-health'
+import { syncProjectHealthNotification } from '@/lib/notifications/project-health'
+import { refreshBlueprintConsole } from '@/lib/engine/blueprint-console'
 
 export async function POST(
   _request: NextRequest,
@@ -53,7 +56,14 @@ export async function POST(
       (project.totalVolumes || 4) * 25
     )
 
+    await initWorldState(projectId)
     await initStoryState(projectId, totalPlanned)
+    await refreshBlueprintConsole(projectId, '项目初始化完成，请同步生成当前 AI 动态设定中枢。')
+
+    const report = await loadProjectHealthReport(projectId)
+    if (report) {
+      await syncProjectHealthNotification(projectId, project.title, report)
+    }
 
     return NextResponse.json({
       success: true,
@@ -62,6 +72,7 @@ export async function POST(
         blueprintId: blueprint.id,
         arcPlanCount: arcPlans.length,
         totalPlanned,
+        worldStateInitialized: true,
         storyStateInitialized: true,
       },
     })

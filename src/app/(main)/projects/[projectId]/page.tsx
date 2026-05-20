@@ -3,12 +3,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Button, Card, CardContent, CardHeader, CardTitle, Badge, Progress, Modal, toast, MoreActionsMenu } from '@/components/ui'
-import { ProjectForm, ProjectFormData } from '@/components/project'
+import { BlueprintConsole, ProjectBaseInfoForm, ProjectBaseInfoFormData } from '@/components/project'
 import { StorySteeringPanel, Toolbox, AutoPipelinePanel } from '@/components/ai'
 import { CoverGenerator, PlotAnalyzer, ResearchPanel, ReviewPanel, DeslopPanel, ExportPanel } from '@/components/ai'
 import { BookOpen, Clock, Target, Users, Layers, Search, ClipboardList, Rocket, Shield, Sparkles, ChevronRight, ChevronDown, Wrench, Eye, Play, AlertCircle, CheckCircle2, Loader2, Download } from 'lucide-react'
 import type { ProjectStatus } from '@/types'
 import type { PipelineRuntimeState } from '@/lib/engine/pipeline-runtime'
+import type { BlueprintConsoleSnapshot } from '@/lib/engine/blueprint-console'
 
 interface Chapter {
   id: number
@@ -116,6 +117,7 @@ interface Project {
       message: string
     }>
   }
+  blueprintConsole?: BlueprintConsoleSnapshot
   createdAt: string
   updatedAt: string
 }
@@ -339,7 +341,7 @@ export default function ProjectDetailPage() {
     }
   }, [projectId, applyPipelineSnapshot])
 
-  const handleUpdate = async (formData: ProjectFormData) => {
+  const handleUpdate = async (formData: ProjectBaseInfoFormData) => {
     setSubmitting(true)
     try {
       const res = await fetch(`/api/novel/projects/${projectId}`, {
@@ -708,7 +710,7 @@ export default function ProjectDetailPage() {
             }`}
           >
             <Target className="h-4 w-4 inline mr-1.5" />
-            项目设定
+            AI 设定中枢
           </button>
         </div>
       </div>
@@ -1094,41 +1096,13 @@ export default function ProjectDetailPage() {
             </>
           )}
 
-          {activeTab === 'settings' && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Target className="h-5 w-5 text-blue-600" />
-                  项目设定
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ProjectForm
-                  defaultValues={{
-                    title: project.title,
-                    description: project.description ?? undefined,
-                    genre: project.genre ?? undefined,
-                    writingStyle: project.writingStyle ?? undefined,
-                    targetWordCount: project.targetWordCount ?? undefined,
-                    chapterWordCount: project.chapterWordCount,
-                    totalVolumes: project.totalVolumes,
-                    worldSetting: project.worldSetting ?? undefined,
-                    powerSystem: project.powerSystem ?? undefined,
-                    protagonistProfile: project.protagonistProfile ?? undefined,
-                    protagonistGoal: project.protagonistGoal ?? undefined,
-                    antagonistSetting: project.antagonistSetting ?? undefined,
-                    endingPlan: project.endingPlan ?? undefined,
-                    writingPrompt: project.writingPrompt ?? undefined,
-                    aiModelId: project.aiModelId ?? undefined,
-                  }}
-                  onSubmit={handleUpdate}
-                  onCancel={() => setActiveTab('dashboard')}
-                  loading={submitting}
-                  submitLabel="保存修改"
-                  showAdvancedFields={false}
-                />
-              </CardContent>
-            </Card>
+          {activeTab === 'settings' && project.blueprintConsole && (
+            <BlueprintConsole
+              projectId={projectId}
+              initialData={project.blueprintConsole}
+              onRefreshed={fetchProject}
+              onEditBaseInfo={() => setShowEditModal(true)}
+            />
           )}
         </div>
 
@@ -1309,10 +1283,10 @@ export default function ProjectDetailPage() {
       <Modal
         open={showEditModal}
         onClose={() => setShowEditModal(false)}
-        title="编辑项目"
+        title="编辑基础信息"
         className="max-w-2xl"
       >
-        <ProjectForm
+        <ProjectBaseInfoForm
           defaultValues={{
             title: project.title,
             description: project.description ?? undefined,
@@ -1321,20 +1295,12 @@ export default function ProjectDetailPage() {
             targetWordCount: project.targetWordCount ?? undefined,
             chapterWordCount: project.chapterWordCount,
             totalVolumes: project.totalVolumes,
-            worldSetting: project.worldSetting ?? undefined,
-            powerSystem: project.powerSystem ?? undefined,
-            protagonistProfile: project.protagonistProfile ?? undefined,
-            protagonistGoal: project.protagonistGoal ?? undefined,
-            antagonistSetting: project.antagonistSetting ?? undefined,
-            endingPlan: project.endingPlan ?? undefined,
-            writingPrompt: project.writingPrompt ?? undefined,
+            coverImage: project.coverImage ?? undefined,
             aiModelId: project.aiModelId ?? undefined,
           }}
           onSubmit={handleUpdate}
           onCancel={() => setShowEditModal(false)}
           loading={submitting}
-          submitLabel="保存修改"
-          showAdvancedFields={false}
         />
       </Modal>
 

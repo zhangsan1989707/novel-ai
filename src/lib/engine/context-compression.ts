@@ -136,7 +136,7 @@ export async function compressContext(
     .sort((a, b) => b.importance - a.importance)
 
   // 计算可用空间
-  let currentTokens = segments.reduce((sum, s) => sum + s.content.length / 4, 0)
+  const currentTokens = segments.reduce((sum, s) => sum + s.content.length / 4, 0)
   const maxOlderChapterTokens = (cfg.maxTokens - currentTokens) * cfg.compressionRatio
 
   let olderChapterTokens = 0

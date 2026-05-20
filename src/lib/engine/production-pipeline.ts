@@ -10,6 +10,9 @@ import { runChapterGenerationPipeline } from './orchestrator'
 import { parseAiJsonArray, parseAiJsonObject } from './ai-json'
 import { buildChapterListPrompt } from '../prompts/novel/chapter-list'
 import { archiveChapterRuntime, createPipelineRuntimeState, sanitizePipelineRuntime } from './pipeline-runtime'
+import { initStoryState, initWorldState } from './story-state'
+import { loadProjectHealthReport } from './project-health'
+import { syncProjectHealthNotification } from '@/lib/notifications/project-health'
 import type { SSEEvent } from './types'
 
 type ChapterOutline = {
@@ -537,6 +540,15 @@ export async function runProductionPipeline(jobId: number): Promise<void> {
   try {
     const provider = await createProjectProvider(projectId)
 
+    const project = await prisma.novelProject.findUnique({
+      where: { id: projectId },
+      select: { totalVolumes: true },
+    })
+    if (project) {
+      await initWorldState(projectId)
+      await initStoryState(projectId, project.totalVolumes * 25)
+    }
+
     await updateJobStep(jobId, 'blueprint' as PipelineStep, 1)
     const blueprint = await ensureBlueprint(projectId, provider)
     await saveCheckpoint(jobId, 'blueprint' as PipelineStep, { projectId }, { blueprintId: blueprint.id })
@@ -583,9 +595,31 @@ export async function runProductionPipeline(jobId: number): Promise<void> {
     await saveCheckpoint(jobId, 'summarize' as PipelineStep, { projectId }, { completedChapters: completed })
     await persistChain
     await completeJob(jobId)
+
+    const report = await loadProjectHealthReport(projectId)
+    if (report) {
+      const project = await prisma.novelProject.findUnique({
+        where: { id: projectId },
+        select: { title: true },
+      })
+      if (project) {
+        await syncProjectHealthNotification(projectId, project.title, report)
+      }
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     await persistChain
     await failJob(jobId, message)
+
+    const report = await loadProjectHealthReport(projectId)
+    if (report) {
+      const project = await prisma.novelProject.findUnique({
+        where: { id: projectId },
+        select: { title: true },
+      })
+      if (project) {
+        await syncProjectHealthNotification(projectId, project.title, report)
+      }
+    }
   }
 }

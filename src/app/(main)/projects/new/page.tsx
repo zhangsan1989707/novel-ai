@@ -155,7 +155,7 @@ export default function NewProjectPage() {
             </button>
             <div>
               <h1 className="text-xl font-semibold text-gray-950 dark:text-white">新建小说项目</h1>
-              <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">填写核心设定，AI 帮你完成后续创作</p>
+              <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">只提供方向，项目创建后由 AI 自动生成并维护全书设定中枢</p>
             </div>
           </div>
         </div>
@@ -208,7 +208,7 @@ export default function NewProjectPage() {
                   {...register('corePitch', { required: '请输入灵感' })}
                 />
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  这里是给 AI 看的灵感摘要，后续会用于自动生成标题、蓝图和阶段规划。
+                  这里是给 AI 的创作方向，后续会自动生成标题、蓝图、阶段规划和项目设定中枢。
                 </p>
               </div>
 
@@ -317,7 +317,7 @@ export default function NewProjectPage() {
             <div className="sticky bottom-0 -mx-4 border-t border-gray-200 bg-white/95 px-4 py-4 backdrop-blur dark:border-gray-700 dark:bg-gray-900/95 sm:mx-0 sm:rounded-lg sm:border sm:shadow-sm">
               <div className="flex items-center justify-between">
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  先选灵感，再补少量设定即可快速创建项目
+                  先给方向，创建后由 AI 接管设定生成与维护
                 </p>
                 <div className="flex gap-3">
                   <Button type="button" variant="outline" onClick={() => router.back()}>

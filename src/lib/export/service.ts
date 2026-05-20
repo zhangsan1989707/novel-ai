@@ -2,7 +2,10 @@ import { prisma } from '@/lib/prisma'
 import type { ExportOptions, ExportResult, ExportedNovel } from './types'
 import { logError } from '@/lib/logger'
 import { getPlatformConfig, formatChapterTitle, type PlatformKey } from './adapters/index'
-import { generateEpub } from './adapters/epub'
+import Epub from 'epub-gen'
+import * as fs from 'fs'
+import * as path from 'path'
+import * as os from 'os'
 
 /**
  * 导出小说为指定格式
@@ -306,24 +309,57 @@ export async function exportForPlatform(
     const timestamp = new Date().toISOString().slice(0, 10)
 
     if (platform === 'epub') {
-      const epubData = generateEpub({
-        metadata: {
-          title: project.title,
-          description: project.description || undefined,
-        },
-        chapters: project.chapters.map(ch => ({
-          title: formatChapterTitle(ch.chapterNumber, ch.title, platform),
-          content: ch.content || '',
-          chapterNumber: ch.chapterNumber,
-        })),
-        includeStyles: true,
+      const tmpDir = os.tmpdir()
+      const tmpId = `epub-${Date.now()}-${projectId}`
+      const workDir = path.join(tmpDir, tmpId)
+      const tmpFile = path.join(tmpDir, `${tmpId}.epub`)
+
+      fs.mkdirSync(workDir, { recursive: true })
+
+      const epubOptions = {
+        title: project.title,
+        author: 'AI Novel Generator',
+        description: project.description || undefined,
+        tempDir: workDir,
+        content: project.chapters
+          .filter(ch => ch.content && ch.content.trim().length > 0)
+          .map(ch => ({
+            title: formatChapterTitle(ch.chapterNumber, ch.title, platform),
+            data: (ch.content || '')
+              .split('\n')
+              .filter(line => line.trim())
+              .map(line => `<p style="text-indent:2em;margin:0.5em 0;">${line.trim()}</p>`)
+              .join('\n'),
+          })),
+        css: `
+          body { font-family: "Noto Serif CJK SC", serif; line-height: 1.8; }
+          h2 { text-align: center; margin: 1.5em 0; }
+          p { margin: 0.3em 0; }
+        `,
+        lang: 'zh-CN',
+        tocTitle: '目录',
+      }
+
+      await new Promise<void>((resolve, reject) => {
+        const epub = new Epub(epubOptions, tmpFile)
+        epub.promise.then(() => resolve()).catch(reject)
       })
+
+      const epubBuffer = fs.readFileSync(tmpFile)
+      const base64Content = epubBuffer.toString('base64')
+
+      try {
+        fs.unlinkSync(tmpFile)
+      } catch {
+        // ignore cleanup errors
+      }
 
       return {
         success: true,
-        fileName: `${sanitizedTitle}_${timestamp}.epub.json`,
-        content: epubData,
-        contentType: 'application/json',
+        fileName: `${sanitizedTitle}_${timestamp}.epub`,
+        content: base64Content,
+        contentType: 'application/epub+zip',
+        isBase64: true,
       }
     }
 

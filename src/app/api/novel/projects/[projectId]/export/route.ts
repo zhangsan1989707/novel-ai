@@ -57,6 +57,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         )
       }
 
+      if (result.isBase64 && result.content) {
+        const binaryData = Buffer.from(result.content, 'base64')
+        return new NextResponse(binaryData, {
+          headers: {
+            'Content-Type': result.contentType || 'application/epub+zip',
+            'Content-Disposition': `attachment; filename="${encodeURIComponent(result.fileName)}"`,
+          },
+        })
+      }
+
       return NextResponse.json({
         success: true,
         data: {

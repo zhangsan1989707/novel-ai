@@ -59,7 +59,7 @@ export async function runFeedbackLoop(
   const reports: FeedbackLoopResult['reports'] = []
   
   let currentContent = ''
-  let currentOutline = input.outline
+  const currentOutline = input.outline
   
   logAIGeneration(input.projectId, input.chapterNo, 'feedback_loop_start', { config })
 

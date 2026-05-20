@@ -408,7 +408,7 @@ export function AntiDetectPanel({ content, chapterId, onRewriteComplete }: AntiD
         <Card>
           <CardContent className="py-8 text-center text-gray-500">
             <Shield className="h-8 w-8 mx-auto mb-2 opacity-50" />
-            <p>点击"开始检测"分析AI生成特征</p>
+            <p>点击“开始检测”分析 AI 生成特征</p>
           </CardContent>
         </Card>
       )}

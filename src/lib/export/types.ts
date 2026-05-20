@@ -23,6 +23,7 @@ export interface ExportResult {
   downloadUrl?: string
   content?: string
   contentType?: string
+  isBase64?: boolean
   error?: string
 }
 
