@@ -4,9 +4,10 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Button, Input, Textarea, Modal } from '@/components/ui'
 import { toast } from '@/components/ui/Toast'
-import { ArrowLeft, Save, Trash2, FileText, Wand2, Edit3, X, BookOpen, RefreshCw } from 'lucide-react'
+import { ArrowLeft, Save, Trash2, FileText, Wand2, Edit3, X, BookOpen, RefreshCw, Shield } from 'lucide-react'
 import { ChapterStatus } from '@/types'
 import { ChapterQualityPanel } from '@/components/ai/ChapterQualityPanel'
+import { AntiDetectPanel } from '@/components/ai/AntiDetectPanel'
 import { countChineseWords } from '@/lib/utils'
 
 interface ChapterEditorProps {
@@ -31,6 +32,7 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
   const [editContent, setEditContent] = useState('')
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [showQualityPanel, setShowQualityPanel] = useState(false)
+  const [showAntiDetectPanel, setShowAntiDetectPanel] = useState(false)
   const [wordCount, setWordCount] = useState(0)
   const [nextChapterNumber, setNextChapterNumber] = useState(1)
 
@@ -249,6 +251,16 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
                     <Wand2 className="h-4 w-4" />
                     AI 去AI味
                   </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!chapter.content}
+                    onClick={() => setShowAntiDetectPanel(!showAntiDetectPanel)}
+                    className={`gap-1.5 whitespace-nowrap ${showAntiDetectPanel ? 'bg-blue-50 border-blue-500 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300' : ''}`}
+                  >
+                    <Shield className="h-4 w-4" />
+                    AI 检测
+                  </Button>
                 </>
               )}
               {chapterId && !isEditing && (
@@ -282,6 +294,16 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
               chapterTitle={chapter.title || '无标题'}
               content={chapter.content || ''}
               onOptimizeComplete={handleOptimizeComplete}
+            />
+          </div>
+        )}
+
+        {showAntiDetectPanel && chapterId && chapter.content && (
+          <div className="mb-5">
+            <AntiDetectPanel
+              content={chapter.content || ''}
+              chapterId={chapterId}
+              onRewriteComplete={handleOptimizeComplete}
             />
           </div>
         )}
