@@ -57,7 +57,7 @@ interface RagDocumentRow {
   title: string | null
   content: string
   metadata: Prisma.JsonValue
-  embedding_score?: number
+  embedding: Prisma.JsonValue | string | null
 }
 
 const DEFAULT_CONFIG: VectorConfig = {
@@ -72,6 +72,7 @@ const embeddingProviderCache = new Map<number, Promise<Awaited<ReturnType<typeof
 const embeddingVectorCache = new Map<string, number[]>()
 let embeddingFallbackWarned = false
 let ragDocumentsMissingWarned = false
+let ragEmbeddingStorageModePromise: Promise<'jsonb' | 'vector' | null> | null = null
 
 function isMissingRagDocumentsError(error: unknown): boolean {
   return (
@@ -219,10 +220,6 @@ function deriveChunkType(content: string): ChunkMetadata['type'] {
   return 'plot'
 }
 
-function serializeVector(vector: number[]): string {
-  return `[${vector.map(v => Number.isFinite(v) ? v.toFixed(8) : '0').join(',')}]`
-}
-
 function normalizeEmbeddingDimensions(embedding: number[], targetDimensions: number): number[] {
   if (!Number.isFinite(targetDimensions) || targetDimensions <= 0) {
     return embedding
@@ -259,6 +256,25 @@ function normalizeEmbeddingDimensions(embedding: number[], targetDimensions: num
   return magnitude > 0 ? padded.map(val => val / magnitude) : padded
 }
 
+function parseStoredEmbedding(value: Prisma.JsonValue | null): number[] {
+  if (!value) return []
+  if (Array.isArray(value)) {
+    return value.map(entry => (typeof entry === 'number' ? entry : Number(entry) || 0))
+  }
+  if (typeof value === 'string') {
+    try {
+      return parseStoredEmbedding(JSON.parse(value) as Prisma.JsonValue)
+    } catch {
+      return []
+    }
+  }
+  return []
+}
+
+function serializeEmbeddingVector(embedding: number[]): string {
+  return `[${embedding.map(value => Number.isFinite(value) ? value : 0).join(',')}]`
+}
+
 function getEmbeddingCacheKey(projectId: number, text: string): string {
   return `${projectId}:${text.slice(0, 512)}:${text.length}`
 }
@@ -275,6 +291,27 @@ async function getEmbeddingProvider(projectId: number) {
     embeddingProviderCache.set(projectId, createEmbeddingProviderPromise(projectId))
   }
   return embeddingProviderCache.get(projectId)!
+}
+
+async function getRagEmbeddingStorageMode(): Promise<'jsonb' | 'vector' | null> {
+  if (!ragEmbeddingStorageModePromise) {
+    ragEmbeddingStorageModePromise = (async () => {
+      const rows = await prisma.$queryRaw<Array<{ data_type: string | null; udt_name: string | null }>>`
+        SELECT data_type, udt_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'rag_documents'
+          AND column_name = 'embedding'
+        LIMIT 1
+      `
+      const row = rows[0]
+      if (!row) return null
+      if (row.data_type === 'jsonb') return 'jsonb'
+      if (row.udt_name === 'vector') return 'vector'
+      return null
+    })()
+  }
+  return ragEmbeddingStorageModePromise
 }
 
 function buildDocumentText(title: string | null | undefined, content: string): string {
@@ -300,7 +337,52 @@ async function upsertRagDocuments(
   }
 
   try {
+    const storageMode = await getRagEmbeddingStorageMode()
     for (const doc of docs) {
+      if (storageMode === 'vector') {
+        await prisma.$executeRaw`
+          INSERT INTO rag_documents (
+            id,
+            project_id,
+            source_type,
+            source_id,
+            chapter_no,
+            chunk_no,
+            title,
+            content,
+            metadata,
+            embedding,
+            embedding_model,
+            created_at,
+            updated_at
+          ) VALUES (
+            ${`${doc.projectId}:${doc.sourceType}:${doc.sourceId}:${doc.chunkNo}`},
+            ${doc.projectId},
+            ${doc.sourceType},
+            ${doc.sourceId},
+            ${doc.chapterNo},
+            ${doc.chunkNo},
+            ${doc.title ?? null},
+            ${doc.content},
+            ${(doc.metadata || {}) as Prisma.InputJsonValue},
+            ${serializeEmbeddingVector(doc.embedding)}::vector,
+            ${doc.embeddingModel || 'local-hash-v1'},
+            NOW(),
+            NOW()
+          )
+          ON CONFLICT (project_id, source_type, source_id, chunk_no)
+          DO UPDATE SET
+            title = EXCLUDED.title,
+            content = EXCLUDED.content,
+            metadata = EXCLUDED.metadata,
+            embedding = EXCLUDED.embedding,
+            embedding_model = EXCLUDED.embedding_model,
+            chapter_no = EXCLUDED.chapter_no,
+            updated_at = NOW()
+        `
+        continue
+      }
+
       await prisma.$executeRaw`
         INSERT INTO rag_documents (
           id,
@@ -326,7 +408,7 @@ async function upsertRagDocuments(
           ${doc.title ?? null},
           ${doc.content},
           ${(doc.metadata || {}) as Prisma.InputJsonValue},
-          ${serializeVector(doc.embedding)}::vector,
+          ${(doc.embedding || []) as Prisma.InputJsonValue},
           ${doc.embeddingModel || 'local-hash-v1'},
           NOW(),
           NOW()
@@ -528,8 +610,6 @@ async function searchIndexedRagDocuments(
   }
 
   const { topK, filter, maxChapterNo } = options
-  const candidateLimit = Math.max(topK * 6, 20)
-  const vectorLiteral = serializeVector(queryEmbedding)
   const typeClause = filter?.type ? Prisma.sql`AND source_type = ${filter.type}` : Prisma.empty
   const chapterClause = filter?.chapterNo !== undefined ? Prisma.sql`AND chapter_no = ${filter.chapterNo}` : Prisma.empty
   const tagClause = filter?.tags?.length
@@ -556,15 +636,13 @@ async function searchIndexedRagDocuments(
         title,
         content,
         metadata,
-        1 - (embedding <=> ${vectorLiteral}::vector) AS embedding_score
+        embedding::text AS embedding
       FROM rag_documents
       WHERE project_id = ${projectId}
         ${typeClause}
         ${chapterClause}
         ${tagClause}
         ${chapterLimitClause}
-      ORDER BY embedding <=> ${vectorLiteral}::vector ASC
-      LIMIT ${candidateLimit}
     `)
   } catch (error) {
     if (isMissingRagDocumentsError(error)) {
@@ -574,31 +652,36 @@ async function searchIndexedRagDocuments(
     throw error
   }
 
-  return rows.map(row => {
-    const metadata = row.metadata && typeof row.metadata === 'object' ? row.metadata as Record<string, unknown> : {}
-    const chunkType = (metadata.type as ChunkMetadata['type']) || (row.source_type === 'chapter' ? 'plot' : 'setting')
-    const importance = Number(metadata.importance ?? 1)
-    const chunk: SemanticChunk = {
-      id: row.id,
-      content: row.content,
-      embedding: queryEmbedding,
-      metadata: {
-        projectId: row.project_id,
-        chapterNo: row.chapter_no,
-        type: chunkType,
-        importance,
-        characters: Array.isArray(metadata.characters) ? metadata.characters.map(value => String(value)) : undefined,
-        tags: Array.isArray(metadata.tags) ? metadata.tags.map(value => String(value)) : undefined,
-      },
-    }
+  return rows
+    .map(row => {
+      const storedEmbedding = parseStoredEmbedding(row.embedding)
+      const score = cosineSimilarity(queryEmbedding, storedEmbedding)
+      const metadata = row.metadata && typeof row.metadata === 'object' ? row.metadata as Record<string, unknown> : {}
+      const chunkType = (metadata.type as ChunkMetadata['type']) || (row.source_type === 'chapter' ? 'plot' : 'setting')
+      const importance = Number(metadata.importance ?? 1)
+      const chunk: SemanticChunk = {
+        id: row.id,
+        content: row.content,
+        embedding: queryEmbedding,
+        metadata: {
+          projectId: row.project_id,
+          chapterNo: row.chapter_no,
+          type: chunkType,
+          importance,
+          characters: Array.isArray(metadata.characters) ? metadata.characters.map(value => String(value)) : undefined,
+          tags: Array.isArray(metadata.tags) ? metadata.tags.map(value => String(value)) : undefined,
+        },
+      }
 
-    return {
-      chunk,
-      score: row.embedding_score ?? 0,
-      rerankedContent: row.title ? `${row.title}\n${row.content}` : row.content,
-      document: row,
-    }
-  })
+      return {
+        chunk,
+        score,
+        rerankedContent: row.title ? `${row.title}\n${row.content}` : row.content,
+        document: row,
+      }
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, topK)
 }
 
 function rerankHeuristically(query: string, result: SearchResult): number {

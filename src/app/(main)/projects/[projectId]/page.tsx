@@ -6,7 +6,7 @@ import { Button, Card, CardContent, CardHeader, CardTitle, Badge, Progress, Moda
 import { BlueprintConsole, ProjectBaseInfoForm, ProjectBaseInfoFormData } from '@/components/project'
 import { Toolbox, AutoPipelinePanel } from '@/components/ai'
 import { CoverGenerator, PlotAnalyzer, ResearchPanel, ReviewPanel, DeslopPanel, ExportPanel } from '@/components/ai'
-import { BookOpen, Clock, Target, Users, Layers, Search, ClipboardList, Rocket, Shield, Sparkles, ChevronRight, ChevronDown, Wrench, Eye, Play, Pause, AlertCircle, CheckCircle2, Loader2, Download } from 'lucide-react'
+import { BookOpen, Clock, Target, Users, Layers, Search, ClipboardList, Rocket, Shield, Sparkles, ChevronRight, ChevronDown, Wrench, Eye, Play, Pause, AlertCircle, CheckCircle2, Loader2, Download, RefreshCw } from 'lucide-react'
 import type { ProjectStatus } from '@/types'
 import type { PipelineRuntimeState } from '@/lib/engine/pipeline-runtime'
 import type { BlueprintConsoleSnapshot } from '@/lib/engine/blueprint-console'
@@ -250,6 +250,7 @@ export default function ProjectDetailPage() {
   const [submitting, setSubmitting] = useState(false)
   const [pipelineStarting, setPipelineStarting] = useState(false)
   const [bootstrapping, setBootstrapping] = useState(false)
+  const [rebuildingRag, setRebuildingRag] = useState(false)
   const [activeTab, setActiveTab] = useState<DashboardTab>('dashboard')
 
   const [pipeline, setPipeline] = useState<PipelineStatus | null>(null)
@@ -462,6 +463,26 @@ export default function ProjectDetailPage() {
       toast.error('初始化失败，请重试')
     } finally {
       setBootstrapping(false)
+    }
+  }
+
+  const handleRebuildRagIndex = async () => {
+    setRebuildingRag(true)
+    try {
+      const res = await fetch(`/api/novel/projects/${projectId}/rag/rebuild`, {
+        method: 'POST',
+      })
+      const data = await res.json()
+      if (data.success) {
+        toast.success(`RAG 索引已重建，共写入 ${data.data.indexedCount} 条`)
+        await fetchProject()
+      } else {
+        toast.error(data.error?.message || '重建 RAG 索引失败')
+      }
+    } catch {
+      toast.error('重建 RAG 索引失败')
+    } finally {
+      setRebuildingRag(false)
     }
   }
 
@@ -1096,6 +1117,30 @@ export default function ProjectDetailPage() {
                           {project.preflight.primaryAction}
                         </div>
                       </div>
+                    </div>
+
+                    <div className="flex flex-col gap-2 rounded-md border border-gray-200 px-3 py-3 dark:border-gray-800 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">RAG 索引</div>
+                        <div className="mt-1 text-sm font-medium text-gray-900 dark:text-gray-100">
+                          {project.preflight.ragDocumentCount > 0
+                            ? `已建立，共 ${project.preflight.ragDocumentCount} 条`
+                            : '尚未建立或为空'}
+                        </div>
+                        <div className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                          用于语义检索、记忆回写和长篇上下文恢复
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleRebuildRagIndex}
+                        disabled={rebuildingRag}
+                        className="md:self-start"
+                      >
+                        {rebuildingRag ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+                        重建 RAG 索引
+                      </Button>
                     </div>
 
                     {project.preflight.issues.length > 0 ? (

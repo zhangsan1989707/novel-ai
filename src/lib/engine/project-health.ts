@@ -137,7 +137,7 @@ function buildRecommendations(report: HealthSummary): string[] {
     recommendations.push('追读稳定度偏低，建议补强伏笔、角色状态和故事摘要')
   }
   if (report.ragDocumentCount === 0 && (report.completedChapters > 0 || report.bookSummaryCount > 0)) {
-    recommendations.push('RAG 索引为空，建议重建向量索引以恢复语义检索')
+    recommendations.push('RAG 索引为空，建议重建 RAG 索引以恢复语义检索')
   }
 
   if (recommendations.length === 0) {
