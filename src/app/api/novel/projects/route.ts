@@ -4,8 +4,7 @@ import { z } from 'zod'
 import { logError } from '@/lib/logger'
 import { getCurrentUserId } from '@/lib/auth'
 import { createProviderFromConfigId, createProviderFromDefaultConfig, getDefaultAIConfigRecord } from '@/lib/ai/factory'
-import { refreshBlueprintConsole } from '@/lib/engine/blueprint-console'
-import { scheduleProjectBootstrap } from '@/lib/engine/auto-maintenance'
+import { queueProjectBootstrap } from '@/lib/engine/auto-maintenance'
 
 // ============================================
 // Schema 验证
@@ -294,11 +293,10 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    scheduleProjectBootstrap(
-      project.id,
-      () => refreshBlueprintConsole(project.id, '项目刚创建完成，请自动生成初始 AI 动态设定中枢。'),
-      { source: 'project_create' }
-    )
+    await queueProjectBootstrap(project.id, {
+      source: 'project_create',
+      title: project.title,
+    })
 
     return NextResponse.json({ success: true, data: project }, { status: 201 })
   } catch (error: unknown) {

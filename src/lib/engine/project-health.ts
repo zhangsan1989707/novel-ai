@@ -43,6 +43,10 @@ export interface ProjectHealthInput {
   resolvedPlotlineCount: number
   researchRefCount: number
   ragDocumentCount: number
+  automationState?: {
+    bootstrapQueued?: boolean
+    ragQueued?: boolean
+  }
 }
 
 export interface ProjectHealthReport {
@@ -98,12 +102,12 @@ type HealthSummary = Omit<ProjectHealthReport, 'primaryAction' | 'recommendation
 
 function buildPrimaryAction(report: HealthSummary): string {
   if (!report.hasModel) return '先绑定 AI 模型'
-  if (!report.hasBlueprint || !report.hasArcPlans || !report.hasStoryState) return '一键初始化创作系统'
+  if (!report.hasBlueprint || !report.hasArcPlans || !report.hasStoryState) return '系统正在自动初始化'
   if (report.emptyCompletedChapters > 0) return '回看短章并重算投影'
   if (report.recentCommitFailures > 0) return '重放失败的章节提交'
   if (report.overduePlotlineCount > 0) return '回收过期伏笔'
   if (report.chapterSummaryCoverage < 80 && report.completedChapters >= 5) return '补齐章节摘要'
-  if (report.ragDocumentCount === 0 && (report.completedChapters > 0 || report.bookSummaryCount > 0)) return '重建 RAG 索引'
+  if (report.ragDocumentCount === 0 && (report.completedChapters > 0 || report.bookSummaryCount > 0)) return '系统正在自动重建 RAG 索引'
   if (report.wordCountComplianceRate < 80 && report.completedChapters > 0) return '提高章节字数门槛'
   if (report.strandScore < 45 && report.hasBlueprint && report.hasArcPlans) return '补强伏笔与摘要链路'
   return '继续生产'
@@ -116,7 +120,7 @@ function buildRecommendations(report: HealthSummary): string[] {
     recommendations.push('先绑定 AI 模型，否则主生成链路无法稳定运行')
   }
   if (!report.hasBlueprint || !report.hasArcPlans || !report.hasStoryState) {
-    recommendations.push('先执行“一键初始化创作系统”，补齐蓝图、阶段规划和故事状态')
+    recommendations.push('系统正在自动初始化创作系统，补齐蓝图、阶段规划和故事状态')
   }
   if (report.emptyCompletedChapters > 0) {
     recommendations.push('修复已完成但字数过低的章节，避免质量门失真')
@@ -137,7 +141,7 @@ function buildRecommendations(report: HealthSummary): string[] {
     recommendations.push('追读稳定度偏低，建议补强伏笔、角色状态和故事摘要')
   }
   if (report.ragDocumentCount === 0 && (report.completedChapters > 0 || report.chapterSummaryCount > 0 || report.volumeSummaryCount > 0 || report.bookSummaryCount > 0)) {
-    recommendations.push('RAG 索引为空，建议重建 RAG 索引以恢复语义检索')
+    recommendations.push('RAG 索引正在自动重建，完成后会恢复语义检索')
   }
 
   if (recommendations.length === 0) {
@@ -253,16 +257,16 @@ export function buildProjectHealthReport(input: ProjectHealthInput): ProjectHeal
     issues.push({ severity: 'error', code: 'MODEL_NOT_BOUND', message: '项目未绑定 AI 模型，主生成链路可能无法稳定运行' })
   }
   if (!hasBlueprint) {
-    issues.push({ severity: 'warning', code: 'BLUEPRINT_MISSING', message: '尚未生成书籍蓝图，创作方向还没有锁定' })
+    issues.push({ severity: input.automationState?.bootstrapQueued ? 'info' : 'warning', code: 'BLUEPRINT_MISSING', message: input.automationState?.bootstrapQueued ? '书籍蓝图正在自动生成' : '尚未生成书籍蓝图，创作方向还没有锁定' })
   }
   if (!hasArcPlans) {
-    issues.push({ severity: 'warning', code: 'ARC_PLAN_MISSING', message: '尚未生成阶段规划，长篇结构会更依赖局部上下文' })
+    issues.push({ severity: input.automationState?.bootstrapQueued ? 'info' : 'warning', code: 'ARC_PLAN_MISSING', message: input.automationState?.bootstrapQueued ? '阶段规划正在自动生成' : '尚未生成阶段规划，长篇结构会更依赖局部上下文' })
   }
   if (!hasStoryState) {
-    issues.push({ severity: 'warning', code: 'STORY_STATE_MISSING', message: '尚未初始化故事状态，情绪曲线与主线冲突不会稳定回写' })
+    issues.push({ severity: input.automationState?.bootstrapQueued ? 'info' : 'warning', code: 'STORY_STATE_MISSING', message: input.automationState?.bootstrapQueued ? '故事状态正在自动初始化' : '尚未初始化故事状态，情绪曲线与主线冲突不会稳定回写' })
   }
   if (!hasWorldState) {
-    issues.push({ severity: 'info', code: 'WORLD_STATE_MISSING', message: '尚未初始化世界状态，世界扩张会更依赖导演提示' })
+    issues.push({ severity: input.automationState?.bootstrapQueued ? 'info' : 'info', code: 'WORLD_STATE_MISSING', message: input.automationState?.bootstrapQueued ? '世界状态正在自动初始化' : '尚未初始化世界状态，世界扩张会更依赖导演提示' })
   }
   if (draftChapters.length > 0) {
     issues.push({ severity: 'info', code: 'DRAFT_CHAPTERS_EXIST', message: `还有 ${draftChapters.length} 章未写作` })
@@ -280,7 +284,7 @@ export function buildProjectHealthReport(input: ProjectHealthInput): ProjectHeal
     issues.push({ severity: 'warning', code: 'OVERDUE_PLOTLINES', message: `有 ${overduePlotlineCount} 条伏笔已超期未回收` })
   }
   if (input.ragDocumentCount === 0 && (completedChapters.length > 0 || input.chapterSummaryCount > 0 || input.volumeSummaryCount > 0 || input.bookSummaryCount > 0)) {
-    issues.push({ severity: 'warning', code: 'RAG_INDEX_MISSING', message: 'RAG 索引尚未建立或为空，语义检索会先触发重建' })
+    issues.push({ severity: input.automationState?.ragQueued ? 'info' : 'warning', code: 'RAG_INDEX_MISSING', message: input.automationState?.ragQueued ? 'RAG 索引正在自动重建' : 'RAG 索引尚未建立或为空，语义检索会先触发重建' })
   }
   if (completedChapters.length >= 5 && chapterSummaryCoverage < 80) {
     issues.push({ severity: 'warning', code: 'CHAPTER_SUMMARY_COVERAGE_LOW', message: `章节摘要覆盖率仅 ${chapterSummaryCoverage}%` })

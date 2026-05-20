@@ -5,17 +5,11 @@ import { z } from 'zod'
 import { logError } from '@/lib/logger'
 import { getRAGDocumentCount } from '@/lib/engine/rag-vector'
 import { buildProjectHealthReport } from '@/lib/engine/project-health'
-import { buildBlueprintConsoleSnapshot, refreshBlueprintConsole } from '@/lib/engine/blueprint-console'
+import { buildBlueprintConsoleSnapshot } from '@/lib/engine/blueprint-console'
 import { getDefaultAIConfigRecord } from '@/lib/ai/factory'
-import { rebuildProjectRAGIndex } from '@/lib/engine/rag-vector'
-import { scheduleProjectBootstrap, scheduleRagRebuild } from '@/lib/engine/auto-maintenance'
+import { ensureProjectMaintenanceQueued, getProjectMaintenanceSummary } from '@/lib/engine/auto-maintenance'
 
 type PreflightIssueSeverity = 'error' | 'warning' | 'info'
-
-const autoMaintenanceStatus = new Map<number, {
-  bootstrapTriggered: boolean
-  ragRebuildTriggered: boolean
-}>()
 
 interface PreflightIssue {
   severity: PreflightIssueSeverity
@@ -49,17 +43,12 @@ function buildProjectPreflight(project: {
   resolvedPlotlineCount: number
   researchRefCount: number
   ragDocumentCount: number
+  automationState?: {
+    bootstrapQueued?: boolean
+    ragQueued?: boolean
+  }
 }) {
   return buildProjectHealthReport(project)
-}
-
-function getAutoMaintenanceState(projectId: number) {
-  const current = autoMaintenanceStatus.get(projectId) || {
-    bootstrapTriggered: false,
-    ragRebuildTriggered: false,
-  }
-  autoMaintenanceStatus.set(projectId, current)
-  return current
 }
 
 // ============================================
@@ -268,33 +257,24 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       )
     }
 
-    const resolvedProjectId = id
-
     // 实时计算当前总字数
     const totalWordCount = project.chapters.reduce((sum, chapter) => {
       return sum + (chapter.wordCount || 0)
     }, 0)
+    await ensureProjectMaintenanceQueued(id, {
+      hasModel: Boolean(project.aiModelConfig),
+      hasBlueprint: Boolean(project.bookBlueprint),
+      hasArcPlans: project.arcPlans.length > 0,
+      hasStoryState: Boolean(project.storyState),
+      hasWorldState: Boolean(project.worldState),
+      ragDocumentCount,
+      completedChapters: project.chapters.filter(chapter => chapter.status === 'COMPLETED').length,
+      chapterSummaryCount,
+      volumeSummaryCount,
+      bookSummaryCount,
+    })
 
-    const autoState = getAutoMaintenanceState(resolvedProjectId)
-    const needsBootstrap = !project.bookBlueprint || !project.storyState || !project.worldState || project.arcPlans.length === 0
-    if (needsBootstrap && !autoState.bootstrapTriggered) {
-      autoState.bootstrapTriggered = true
-      scheduleProjectBootstrap(
-        resolvedProjectId,
-        () => refreshBlueprintConsole(resolvedProjectId, '项目已创建但尚未完成初始化，请自动补齐创作系统。'),
-        { source: 'project_detail_get' }
-      )
-    }
-
-    const needsRagRebuild = ragDocumentCount === 0 && (chapterSummaryCount > 0 || volumeSummaryCount > 0 || bookSummaryCount > 0 || totalWordCount > 0)
-    if (needsRagRebuild && !autoState.ragRebuildTriggered) {
-      autoState.ragRebuildTriggered = true
-      scheduleRagRebuild(
-        resolvedProjectId,
-        () => rebuildProjectRAGIndex(resolvedProjectId),
-        { source: 'project_detail_get' }
-      )
-    }
+    const maintenanceSummary = await getProjectMaintenanceSummary(id)
 
     const preflight = buildProjectPreflight({
       aiModelConfig: project.aiModelConfig,
@@ -316,6 +296,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       plotlines: project.plotlines,
       villains: project.villains,
       worldState: project.worldState,
+      automationState: {
+        bootstrapQueued: maintenanceSummary.bootstrapQueued || maintenanceSummary.bootstrapRunning,
+        ragQueued: maintenanceSummary.ragQueued || maintenanceSummary.ragRunning,
+      },
     })
     const blueprintConsole = await buildBlueprintConsoleSnapshot(id)
 
@@ -328,6 +312,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         recentCommits,
         preflight,
         blueprintConsole,
+        maintenanceSummary,
       }
     })
   } catch (error) {

@@ -117,6 +117,15 @@ interface Project {
       message: string
     }>
   }
+  maintenanceSummary?: {
+    bootstrapQueued: boolean
+    bootstrapRunning: boolean
+    ragQueued: boolean
+    ragRunning: boolean
+    bootstrapFailed: boolean
+    ragFailed: boolean
+    queuedTaskCount: number
+  }
   blueprintConsole?: BlueprintConsoleSnapshot
   createdAt: string
   updatedAt: string
@@ -988,7 +997,11 @@ export default function ProjectDetailPage() {
                     )}
                     {project.preflight.hasModel && (!project.preflight.hasBlueprint || !project.preflight.hasArcPlans || !project.preflight.hasStoryState || !project.preflight.hasWorldState) && (
                       <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-blue-800 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-200">
-                        <div className="font-medium">AI 正在自动初始化创作系统</div>
+                        <div className="font-medium">
+                          {project.maintenanceSummary?.bootstrapQueued || project.maintenanceSummary?.bootstrapRunning
+                            ? 'AI 正在自动初始化创作系统'
+                            : '系统会自动补齐创作系统'}
+                        </div>
                         <div className="mt-1 text-xs leading-5 text-blue-700 dark:text-blue-300">
                           系统会自动补齐 Book Blueprint、阶段规划、世界状态和故事状态，完成后会进入可继续生产状态。
                         </div>
@@ -1068,6 +1081,11 @@ export default function ProjectDetailPage() {
                         <div className="mt-1 text-sm font-medium text-gray-900 dark:text-gray-100">
                           {project.preflight.primaryAction}
                         </div>
+                        {project.maintenanceSummary?.queuedTaskCount ? (
+                          <div className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                            后台任务：{project.maintenanceSummary.queuedTaskCount} 个
+                          </div>
+                        ) : null}
                       </div>
                     </div>
 
@@ -1077,8 +1095,10 @@ export default function ProjectDetailPage() {
                         <div className="mt-1 text-sm font-medium text-gray-900 dark:text-gray-100">
                           {project.preflight.ragDocumentCount > 0
                             ? `已建立，共 ${project.preflight.ragDocumentCount} 条`
-                            : project.preflight.completedChapters > 0 || project.preflight.bookSummaryCount > 0 || project.preflight.chapterSummaryCount > 0
+                            : project.maintenanceSummary?.ragQueued || project.maintenanceSummary?.ragRunning
                               ? 'AI 正在自动重建索引'
+                              : project.preflight.completedChapters > 0 || project.preflight.bookSummaryCount > 0 || project.preflight.chapterSummaryCount > 0
+                                ? '索引待补齐'
                               : '暂无可索引内容，写作后会自动建立'}
                         </div>
                         <div className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">

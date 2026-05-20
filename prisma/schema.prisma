@@ -258,6 +258,7 @@ model NovelProject {
   reviewReports       ReviewReport[]
   shortStory          ShortStory?
   chapterCommits      ChapterCommit[]
+  maintenanceTasks    ProjectMaintenanceTask[]
 
   pipelineJobs        GenerationJob[]
   bookBlueprint       BookBlueprint?
@@ -989,6 +990,31 @@ model GenerationJob {
   @@index([projectId])
   @@index([status])
   @@map("generation_jobs")
+}
+
+model ProjectMaintenanceTask {
+  id             String        @id @default(cuid())
+  projectId      Int
+  project        NovelProject   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  taskType       String
+  status         JobStatus      @default(PENDING)
+  payload        Json?          @default("{}")
+  result         Json?          @default("{}")
+  errorMessage   String?
+  retryCount     Int            @default(0)
+  maxRetries     Int            @default(3)
+  priority       Int            @default(0)
+  nextRunAt      DateTime?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  lockedAt       DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([projectId])
+  @@index([status, nextRunAt, priority, createdAt])
+  @@index([projectId, taskType, status])
+  @@map("project_maintenance_tasks")
 }
 
 model PipelineCheckpoint {
