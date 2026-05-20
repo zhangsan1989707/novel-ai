@@ -20,9 +20,19 @@ interface StorySteeringPanelProps {
   initialValues?: Partial<StorySteering>
   onSave?: (steering: StorySteering) => void
   defaultValues?: Partial<StorySteering>
+  title?: string
+  description?: string
+  submitLabel?: string
 }
 
-export function StorySteeringPanel({ projectId, initialValues, onSave }: StorySteeringPanelProps) {
+export function StorySteeringPanel({
+  projectId,
+  initialValues,
+  onSave,
+  title = '风格方向盘',
+  description,
+  submitLabel = '保存风格指令',
+}: StorySteeringPanelProps) {
   const [steering, setSteering] = useState<StorySteering>({
     pace: 0.5,
     darkness: 0.3,
@@ -79,8 +89,11 @@ export function StorySteeringPanel({ projectId, initialValues, onSave }: StorySt
       <CardContent className="p-4 space-y-4">
         <div className="flex items-center gap-2">
           <Sliders className="h-4 w-4 text-blue-600" />
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">风格方向盘</h3>
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{title}</h3>
         </div>
+        {description && (
+          <p className="text-xs leading-5 text-gray-500 dark:text-gray-400">{description}</p>
+        )}
 
         <div className="flex flex-wrap gap-1.5">
           {presetButtons.map(preset => (
@@ -124,7 +137,7 @@ export function StorySteeringPanel({ projectId, initialValues, onSave }: StorySt
 
         <Button variant="primary" size="sm" onClick={handleSave} loading={saving} className="w-full gap-1.5">
           <Save className="h-3.5 w-3.5" />
-          保存风格指令
+          {submitLabel}
         </Button>
       </CardContent>
     </Card>

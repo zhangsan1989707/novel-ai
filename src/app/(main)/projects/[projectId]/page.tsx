@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Button, Card, CardContent, CardHeader, CardTitle, Badge, Progress, Modal, toast, MoreActionsMenu } from '@/components/ui'
 import { BlueprintConsole, ProjectBaseInfoForm, ProjectBaseInfoFormData } from '@/components/project'
-import { StorySteeringPanel, Toolbox, AutoPipelinePanel } from '@/components/ai'
+import { Toolbox, AutoPipelinePanel } from '@/components/ai'
 import { CoverGenerator, PlotAnalyzer, ResearchPanel, ReviewPanel, DeslopPanel, ExportPanel } from '@/components/ai'
 import { BookOpen, Clock, Target, Users, Layers, Search, ClipboardList, Rocket, Shield, Sparkles, ChevronRight, ChevronDown, Wrench, Eye, Play, AlertCircle, CheckCircle2, Loader2, Download } from 'lucide-react'
 import type { ProjectStatus } from '@/types'
@@ -1079,20 +1079,6 @@ export default function ProjectDetailPage() {
                 </Card>
               )}
 
-              {/* StorySteering Panel */}
-              <StorySteeringPanel
-                projectId={projectId}
-                initialValues={{
-                  pace: project.pace ?? 0.5,
-                  darkness: project.darkness ?? 0.3,
-                  humor: project.humor ?? 0.3,
-                  romance: project.romance ?? 0.2,
-                  powerGrowth: project.powerGrowth ?? 0.5,
-                  conflictIntensity: project.conflictIntensity ?? 0.5,
-                  mysteryDensity: project.mysteryDensity ?? 0.3,
-                }}
-                onSave={() => fetchProject()}
-              />
             </>
           )}
 
@@ -1100,6 +1086,15 @@ export default function ProjectDetailPage() {
             <BlueprintConsole
               projectId={projectId}
               initialData={project.blueprintConsole}
+              steeringValues={{
+                pace: project.pace ?? 0.5,
+                darkness: project.darkness ?? 0.3,
+                humor: project.humor ?? 0.3,
+                romance: project.romance ?? 0.2,
+                powerGrowth: project.powerGrowth ?? 0.5,
+                conflictIntensity: project.conflictIntensity ?? 0.5,
+                mysteryDensity: project.mysteryDensity ?? 0.3,
+              }}
               onRefreshed={fetchProject}
               onEditBaseInfo={() => setShowEditModal(true)}
             />

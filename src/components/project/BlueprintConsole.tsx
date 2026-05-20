@@ -4,10 +4,13 @@ import { useMemo, useState } from 'react'
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Textarea, toast } from '@/components/ui'
 import { RefreshCw, Sparkles, Target, Wand2 } from 'lucide-react'
 import type { BlueprintConsoleSnapshot } from '@/lib/engine/blueprint-console'
+import type { StorySteering } from '@/types'
+import { StorySteeringPanel } from '@/components/ai'
 
 interface BlueprintConsoleProps {
   projectId: number
   initialData: BlueprintConsoleSnapshot
+  steeringValues: Partial<StorySteering>
   onRefreshed?: () => void
   onEditBaseInfo?: () => void
 }
@@ -23,7 +26,7 @@ const QUICK_TWEAKS = [
   '强化资本博弈',
 ]
 
-export function BlueprintConsole({ projectId, initialData, onRefreshed, onEditBaseInfo }: BlueprintConsoleProps) {
+export function BlueprintConsole({ projectId, initialData, steeringValues, onRefreshed, onEditBaseInfo }: BlueprintConsoleProps) {
   const [snapshot, setSnapshot] = useState(initialData)
   const [guidance, setGuidance] = useState('')
   const [refreshing, setRefreshing] = useState(false)
@@ -197,6 +200,15 @@ export function BlueprintConsole({ projectId, initialData, onRefreshed, onEditBa
               </div>
             </CardContent>
           </Card>
+
+          <StorySteeringPanel
+            projectId={projectId}
+            initialValues={steeringValues}
+            title="Story Steering System"
+            description="这里不是复杂参数后台，而是给 AI 的实时方向盘。你只需要调节爽度、黑暗度、搞笑度、感情线和节奏，后续蓝图与章节策略会据此偏转。"
+            submitLabel="保存并影响后续 AI 生成"
+            onSave={() => onRefreshed?.()}
+          />
         </div>
 
         <div className="space-y-6">
