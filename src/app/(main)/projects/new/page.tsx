@@ -202,7 +202,7 @@ export default function NewProjectPage() {
                   灵感 <span className="text-red-500">*</span>
                 </label>
                 <Textarea
-                  placeholder="例：社畜穿越成赘婿，靠996卷死修仙界；也可以直接从上面的热门灵感里选"
+                  placeholder="例：社畜穿越成赘婿，靠996卷死修仙界；也可以直接从上面的市场趋势灵感里选"
                   rows={3}
                   error={errors.corePitch?.message}
                   {...register('corePitch', { required: '请输入灵感' })}
@@ -335,9 +335,9 @@ export default function NewProjectPage() {
           <aside className="lg:sticky lg:top-20 lg:self-start">
             <section className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
               <div className="mb-4">
-                <h2 className="text-base font-semibold text-gray-900 dark:text-white">灵感库</h2>
+                <h2 className="text-base font-semibold text-gray-900 dark:text-white">基于市场趋势的灵感库</h2>
                 <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                  选一个方向即可，不需要在这里完成全部设定。
+                  这里展示的是最近市场趋势聚合出的方向，不需要在这里完成全部设定。
                 </p>
               </div>
               <InspirationPanel onSelect={handleInspirationSelect} compact limit={4} />

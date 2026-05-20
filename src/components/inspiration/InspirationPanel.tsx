@@ -70,8 +70,8 @@ export function InspirationPanel({ onSelect, compact = false, limit = 6, classNa
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <Sparkles className={compact ? 'h-4 w-4 text-amber-500' : 'h-5 w-5 text-amber-500'} />
-          <h3 className={compact ? 'text-sm font-semibold text-gray-900 dark:text-white' : 'font-medium text-lg'}>热门灵感</h3>
-          {!compact && <span className="text-xs text-gray-500">从热榜中挑一个开写</span>}
+          <h3 className={compact ? 'text-sm font-semibold text-gray-900 dark:text-white' : 'font-medium text-lg'}>基于市场趋势的灵感库</h3>
+          {!compact && <span className="text-xs text-gray-500">从最近市场趋势里挑一个开写</span>}
         </div>
         <Button
           type="button"
@@ -81,7 +81,7 @@ export function InspirationPanel({ onSelect, compact = false, limit = 6, classNa
           disabled={loading}
         >
           <RefreshCw className={`h-4 w-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
-          换一批
+          刷新趋势
         </Button>
       </div>
 
@@ -206,7 +206,7 @@ function InspirationCard({ inspiration, onSelect, compact = false }: Inspiration
         {expanded && (
           <div className="mb-3 rounded-lg bg-gray-50 p-3 dark:bg-gray-800/50">
             <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
-              <span className="font-medium">代表作品：</span>
+              <span className="font-medium">趋势样本：</span>
               {inspiration.exampleWorks.join('、')}
             </p>
             <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">

@@ -204,7 +204,7 @@ export function BlueprintConsole({ projectId, initialData, steeringValues, onRef
           <StorySteeringPanel
             projectId={projectId}
             initialValues={steeringValues}
-            title="Story Steering System"
+            title="故事方向盘"
             description="这里不是复杂参数后台，而是给 AI 的实时方向盘。你只需要调节爽度、黑暗度、搞笑度、感情线和节奏，后续蓝图与章节策略会据此偏转。"
             submitLabel="保存并影响后续 AI 生成"
             onSave={() => onRefreshed?.()}

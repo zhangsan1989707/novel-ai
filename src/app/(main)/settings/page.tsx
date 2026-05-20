@@ -1,10 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
-import { Button, Input, Select, Modal, Badge, Card, CardContent, Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui'
-import { AgentManager, WorkflowHooksPanel } from '@/components/ai'
-import { Plus, Trash2, Edit2, Check, Key, Shield, Play, Loader2, CheckCircle, XCircle, Bot, Workflow, Eye, EyeOff } from 'lucide-react'
+import { Button, Input, Select, Modal, Badge, Card, CardContent, toast } from '@/components/ui'
+import { Plus, Trash2, Edit2, Check, Key, Play, Loader2, CheckCircle, XCircle, Eye, EyeOff } from 'lucide-react'
 import { AIVendor } from '@/types'
 
 interface AIConfig {
@@ -64,13 +62,13 @@ const defaultEmbeddingModelIds: Partial<Record<AIVendor, string>> = {
 const defaultEmbeddingDimensions = 256
 
 export default function SettingsPage() {
-  const router = useRouter()
   const [configs, setConfigs] = useState<AIConfig[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editingConfig, setEditingConfig] = useState<AIConfig | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [testing, setTesting] = useState(false)
+  const [defaultingConfigId, setDefaultingConfigId] = useState<number | null>(null)
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
 
   const [formData, setFormData] = useState({
@@ -84,14 +82,6 @@ export default function SettingsPage() {
     isDefault: false,
   })
   const [showApiKey, setShowApiKey] = useState(false)
-
-  const [activeTab, setActiveTab] = useState<'ai-configs' | 'agents' | 'hooks'>('ai-configs')
-  const [loadedTabs, setLoadedTabs] = useState<Set<string>>(new Set(['ai-configs']))
-
-  const handleTabChange = (tab: string) => {
-    setActiveTab(tab as typeof activeTab)
-    setLoadedTabs(prev => new Set([...prev, tab]))
-  }
 
   const fetchConfigs = useCallback(async () => {
     setLoading(true)
@@ -262,6 +252,7 @@ export default function SettingsPage() {
   }
 
   const handleSetDefault = async (configId: number) => {
+    setDefaultingConfigId(configId)
     try {
       const res = await fetch(`/api/novel/ai-configs/${configId}/set-default`, {
         method: 'POST',
@@ -269,9 +260,15 @@ export default function SettingsPage() {
       const result = await res.json()
       if (result.success) {
         fetchConfigs()
+        toast.success('默认配置已更新')
+      } else {
+        toast.error(result.error?.message || '设置默认失败')
       }
     } catch (error) {
       console.error('设置默认失败:', error)
+      toast.error('设置默认失败')
+    } finally {
+      setDefaultingConfigId(null)
     }
   }
 
@@ -299,195 +296,121 @@ export default function SettingsPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">系统设置</h1>
-          <p className="text-sm text-gray-500">管理 AI 配置、Agent 和工作流</p>
+          <p className="text-sm text-gray-500">管理 AI 配置</p>
         </div>
       </div>
 
-      <Tabs value={activeTab} onValueChange={handleTabChange}>
-        <TabsList>
-          <TabsTrigger value="ai-configs">
-            <Key className="h-4 w-4 mr-2" />
-            AI 配置
-          </TabsTrigger>
-          <TabsTrigger value="agents">
-            <Bot className="h-4 w-4 mr-2" />
-            Agent 管理
-          </TabsTrigger>
-          <TabsTrigger value="hooks">
-            <Workflow className="h-4 w-4 mr-2" />
-            工作流 Hooks
-          </TabsTrigger>
-        </TabsList>
+      <div className="max-w-5xl mx-auto space-y-6">
+        <div className="flex justify-end">
+          <Button type="button" onClick={() => openModal()}>
+            <Plus className="h-4 w-4 mr-2" />
+            添加配置
+          </Button>
+        </div>
 
-        <TabsContent value="ai-configs">
-          <div className="max-w-4xl mx-auto space-y-6">
-            <Card>
-              <CardContent className="p-4">
-                <div className="space-y-2">
-                  <h3 className="font-medium text-sm text-gray-900 dark:text-white">绑定 AI 模型的最短路径</h3>
-                  <ol className="list-decimal space-y-1 pl-5 text-xs text-gray-600 dark:text-gray-400">
-                    <li>点击“添加配置”。</li>
-                    <li>选择供应商，填模型 ID 和 API Key。</li>
-                    <li>保存后点左侧的“默认”按钮，或回到小说页在“编辑小说”里选中它。</li>
-                  </ol>
-                </div>
-              </CardContent>
-            </Card>
-            <div className="flex justify-end">
-              <Button onClick={() => openModal()}>
+        {testResult && (
+          <Card className={testResult.success ? 'border-green-200' : 'border-red-200'}>
+            <CardContent className="p-5">
+              <div className="flex items-center gap-2">
+                {testResult.success ? (
+                  <CheckCircle className="h-5 w-5 text-green-500" />
+                ) : (
+                  <XCircle className="h-5 w-5 text-red-500" />
+                )}
+                <span className={testResult.success ? 'text-green-700' : 'text-red-700'}>
+                  {testResult.message}
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {loading ? (
+          <div className="text-center py-12 text-gray-500">加载中...</div>
+        ) : configs.length === 0 ? (
+          <Card>
+            <CardContent className="p-8 text-center">
+              <Key className="h-12 w-12 mx-auto text-gray-300 mb-4" />
+              <h3 className="font-medium mb-2">暂无 AI 配置</h3>
+              <p className="text-sm text-gray-500 mb-4">添加您的第一个 AI API 配置</p>
+              <Button type="button" onClick={() => openModal()}>
                 <Plus className="h-4 w-4 mr-2" />
                 添加配置
               </Button>
-            </div>
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-start gap-3">
-                  <Shield className="h-5 w-5 text-blue-500 mt-0.5" />
-                  <div>
-                    <h3 className="font-medium text-sm">API Key 安全说明</h3>
-                    <p className="text-xs text-gray-500 mt-1">
-                      您的 API Key 会加密存储，仅用于调用对应 AI 服务商接口。
-                      我们不会将您的 API Key 用于任何其他用途。
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {testResult && (
-              <Card className={testResult.success ? 'border-green-200' : 'border-red-200'}>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2">
-                    {testResult.success ? (
-                      <CheckCircle className="h-5 w-5 text-green-500" />
-                    ) : (
-                      <XCircle className="h-5 w-5 text-red-500" />
-                    )}
-                    <span className={testResult.success ? 'text-green-700' : 'text-red-700'}>
-                      {testResult.message}
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {loading ? (
-              <div className="text-center py-12 text-gray-500">加载中...</div>
-            ) : configs.length === 0 ? (
-              <Card>
-                <CardContent className="p-8 text-center">
-                  <Key className="h-12 w-12 mx-auto text-gray-300 mb-4" />
-                  <h3 className="font-medium mb-2">暂无 AI 配置</h3>
-                  <p className="text-sm text-gray-500 mb-4">添加您的第一个 AI API 配置</p>
-                  <Button onClick={() => openModal()}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    添加配置
-                  </Button>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="space-y-3">
-                {configs.map((config) => (
-                  <Card key={config.id}>
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="font-medium">{config.name}</span>
-                            <Badge variant="outline">{vendorLabels[config.vendor]}</Badge>
-                            {config.isDefault && (
-                              <Badge variant="success">默认</Badge>
-                            )}
-                          </div>
-                          <div className="text-sm text-gray-500 space-y-1">
-                            <p>模型: {config.modelId}</p>
-                            <p>API Key: {config.apiKey ? '已配置' : '未设置'}</p>
-                            {config.apiEndpoint && <p>端点: {config.apiEndpoint}</p>}
-                            {config.embeddingModelId && <p>Embedding: {config.embeddingModelId}</p>}
-                            {config.embeddingDimensions && <p>Embedding 维度: {config.embeddingDimensions}</p>}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleTestConfig(config)}
-                            disabled={testing}
-                          >
-                            {testing ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <Play className="h-4 w-4" />
-                            )}
-                            测试
-                          </Button>
-                          {!config.isDefault && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleSetDefault(config.id)}
-                            >
-                              <Check className="h-4 w-4" />
-                            </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openModal(config)}
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDelete(config.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-3">
+            {configs.map((config) => (
+              <Card key={config.id}>
+                <CardContent className="p-5">
+                  <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+                    <div className="min-w-0 space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium text-gray-900 dark:text-white">{config.name}</span>
+                        <Badge variant="outline">{vendorLabels[config.vendor]}</Badge>
+                        {config.isDefault && <Badge variant="success">默认</Badge>}
                       </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </div>
-        </TabsContent>
-
-        <TabsContent value="agents">
-          <div className="max-w-4xl mx-auto">
-            <Card>
-              <CardContent className="p-6">
-                {loadedTabs.has('agents') ? (
-                  <AgentManager />
-                ) : (
-                  <div className="text-center py-12 text-gray-500">
-                    <Loader2 className="h-8 w-8 mx-auto mb-4 animate-spin" />
-                    加载中...
+                      <div className="grid gap-1 text-sm text-gray-500">
+                        <p>模型: {config.modelId}</p>
+                        <p>API Key: {config.apiKey ? '已配置' : '未设置'}</p>
+                        {config.apiEndpoint && <p>端点: {config.apiEndpoint}</p>}
+                        {config.embeddingModelId && <p>Embedding: {config.embeddingModelId}</p>}
+                        {config.embeddingDimensions && <p>Embedding 维度: {config.embeddingDimensions}</p>}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2 lg:justify-end">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleTestConfig(config)}
+                        disabled={testing}
+                      >
+                        {testing ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Play className="h-4 w-4" />
+                        )}
+                        测试
+                      </Button>
+                      {!config.isDefault && (
+                        <Button
+                          type="button"
+                          variant="primary"
+                          size="sm"
+                          onClick={() => handleSetDefault(config.id)}
+                          loading={defaultingConfigId === config.id}
+                          disabled={defaultingConfigId !== null}
+                        >
+                          <Check className="h-4 w-4" />
+                          设为默认
+                        </Button>
+                      )}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openModal(config)}
+                      >
+                        <Edit2 className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDelete(config.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
-                )}
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            ))}
           </div>
-        </TabsContent>
-
-        <TabsContent value="hooks">
-          <div className="max-w-4xl mx-auto">
-            <Card>
-              <CardContent className="p-6">
-                {loadedTabs.has('hooks') ? (
-                  <WorkflowHooksPanel />
-                ) : (
-                  <div className="text-center py-12 text-gray-500">
-                    <Loader2 className="h-8 w-8 mx-auto mb-4 animate-spin" />
-                    加载中...
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-      </Tabs>
+        )}
+      </div>
 
       <Modal
         open={showModal}
@@ -589,7 +512,7 @@ export default function SettingsPage() {
           )}
 
           <div className="flex gap-3 justify-end">
-            <Button variant="outline" onClick={handleTest} disabled={testing || submitting}>
+            <Button type="button" variant="outline" onClick={handleTest} disabled={testing || submitting}>
               {testing ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               ) : (
@@ -597,7 +520,7 @@ export default function SettingsPage() {
               )}
               测试连接
             </Button>
-            <Button variant="primary" onClick={handleSubmit} disabled={submitting || testing}>
+            <Button type="button" variant="primary" onClick={handleSubmit} disabled={submitting || testing}>
               {submitting ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               ) : null}

@@ -29,10 +29,6 @@ export { CoverGenerator } from './CoverGenerator'
 export { DeslopPanel } from './DeslopPanel'
 // Short Story
 export { ShortStoryPanel } from './ShortStoryPanel'
-// Agent Manager
-export { AgentManager } from './AgentManager'
-// Hooks
-export { WorkflowHooksPanel } from './WorkflowHooksPanel'
 // Story Steering
 export { StorySteeringPanel } from './StorySteeringPanel'
 // Toolbox
