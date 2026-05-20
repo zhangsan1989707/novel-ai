@@ -82,7 +82,7 @@ export function BlueprintConsole({ projectId, initialData, steeringValues, onRef
             <div className="flex flex-wrap gap-2">
               {onEditBaseInfo && (
                 <Button variant="outline" size="sm" onClick={onEditBaseInfo} className="border-white/20 bg-white/10 text-white hover:bg-white/20">
-                  基础信息
+                  编辑标题
                 </Button>
               )}
               <Button
@@ -255,7 +255,7 @@ export function BlueprintConsole({ projectId, initialData, steeringValues, onRef
             <CardContent className="space-y-3 text-sm text-gray-600 dark:text-gray-300">
               <p>这里展示的是 AI 当前理解的全书状态，不是让你从零填写设定。</p>
               <p>你的动作应当是查看、微调、修正方向，AI 会据此重写世界、人设和后续推进策略。</p>
-              <p>如果基础信息有误，再去改标题、模型、字数等基础字段。</p>
+              <p>如果书名有误，再去改小说标题；其他设定请直接通过上面的方向调节和 AI 刷新来影响。</p>
             </CardContent>
           </Card>
         </div>

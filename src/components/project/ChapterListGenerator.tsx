@@ -453,7 +453,7 @@ export function ChapterListGenerator({
                 <Sparkles className="h-8 w-8 text-gray-400" />
               </div>
               <p className="text-gray-500 dark:text-gray-400 mb-1">点击上方&quot;生成目录&quot;按钮</p>
-              <p className="text-sm text-gray-400 dark:text-gray-500">AI 将根据项目设定生成专业的章节目录</p>
+              <p className="text-sm text-gray-400 dark:text-gray-500">AI 将根据小说设定生成专业的章节目录</p>
             </div>
           )}
 
@@ -465,7 +465,7 @@ export function ChapterListGenerator({
               </Button>
               <Button variant="primary" onClick={handleApply}>
                 <Check className="h-4 w-4 mr-2" />
-                应用到项目（创建 {chapters.length} 章）
+                应用到小说设定（创建 {chapters.length} 章）
               </Button>
             </div>
           )}

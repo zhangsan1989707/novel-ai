@@ -87,7 +87,7 @@ export function AnalyzeWizard({ onCancel }: AnalyzeWizardProps) {
     }
   }, [handleFileSelect])
 
-  // 创建项目并上传文件
+  // 创建小说并上传文件
   const handleCreateAndAnalyze = async () => {
     if (!selectedFile) return
 
@@ -96,7 +96,7 @@ export function AnalyzeWizard({ onCancel }: AnalyzeWizardProps) {
     setError('')
 
     try {
-      // 1. 先创建项目获取 ID
+      // 1. 先创建小说获取 ID
       const createRes = await fetch('/api/novel/projects/analyze-mode', {
         method: 'POST',
         headers: { 'Content-Type': "application/json" },
@@ -110,7 +110,7 @@ export function AnalyzeWizard({ onCancel }: AnalyzeWizardProps) {
 
       const createData = await createRes.json()
       if (!createData.success) {
-        setError(createData.error?.message || '创建项目失败')
+        setError(createData.error?.message || '创建小说失败')
         setStep('upload')
         return
       }
@@ -249,8 +249,8 @@ export function AnalyzeWizard({ onCancel }: AnalyzeWizardProps) {
           </div>
 
           <Input
-            label="项目标题"
-            placeholder="给这个拆解项目起个名字"
+            label="小说标题"
+            placeholder="给这个拆解小说起个名字"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
           />
@@ -420,7 +420,7 @@ export function AnalyzeWizard({ onCancel }: AnalyzeWizardProps) {
             </Button>
             <Button onClick={handleGoToProject}>
               <BookOpen className="w-4 h-4 mr-2" />
-              查看项目详情
+              查看小说详情
             </Button>
           </div>
         </div>

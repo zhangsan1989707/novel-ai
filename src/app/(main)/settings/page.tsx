@@ -328,7 +328,7 @@ export default function SettingsPage() {
                   <ol className="list-decimal space-y-1 pl-5 text-xs text-gray-600 dark:text-gray-400">
                     <li>点击“添加配置”。</li>
                     <li>选择供应商，填模型 ID 和 API Key。</li>
-                    <li>保存后点左侧的“默认”按钮，或回到项目页在“编辑项目”里选中它。</li>
+                    <li>保存后点左侧的“默认”按钮，或回到小说页在“编辑小说”里选中它。</li>
                   </ol>
                 </div>
               </CardContent>

@@ -132,10 +132,10 @@ export default function NewProjectPage() {
       if (result.success) {
         router.push(`/projects/${result.data.id}`)
       } else {
-        toast.error(result.error?.message || '创建项目失败')
+        toast.error(result.error?.message || '创建小说失败')
       }
     } catch {
-      toast.error('创建项目失败，请稍后重试')
+      toast.error('创建小说失败，请稍后重试')
     } finally {
       setSubmitting(false)
     }
@@ -154,8 +154,8 @@ export default function NewProjectPage() {
               <ArrowLeft className="h-5 w-5 text-gray-600 dark:text-gray-300" />
             </button>
             <div>
-              <h1 className="text-xl font-semibold text-gray-950 dark:text-white">新建小说项目</h1>
-              <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">只提供方向，项目创建后由 AI 自动生成并维护全书设定中枢</p>
+              <h1 className="text-xl font-semibold text-gray-950 dark:text-white">新建小说</h1>
+              <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">只提供方向，小说创建后由 AI 自动生成并维护全书设定中枢</p>
             </div>
           </div>
         </div>
@@ -208,7 +208,7 @@ export default function NewProjectPage() {
                   {...register('corePitch', { required: '请输入灵感' })}
                 />
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  这里是给 AI 的创作方向，后续会自动生成标题、蓝图、阶段规划和项目设定中枢。
+                  这里是给 AI 的创作方向，后续会自动生成标题、蓝图、阶段规划和小说设定中枢。
                 </p>
               </div>
 
@@ -248,7 +248,7 @@ export default function NewProjectPage() {
             <CollapsibleSection title="高级设置" description="标题、字数、AI 模型（可选）">
               <div className="space-y-4 pt-1">
                 <Input
-                  label="项目标题"
+                  label="小说标题"
                   placeholder="留空则自动生成，不会用灵感代替"
                   maxLength={200}
                   {...register('title')}

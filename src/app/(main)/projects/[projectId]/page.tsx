@@ -266,7 +266,7 @@ export default function ProjectDetailPage() {
         setError(data.error.message)
       }
     } catch {
-      setError('获取项目详情失败')
+      setError('获取小说详情失败')
     } finally {
       setLoading(false)
     }
@@ -352,7 +352,7 @@ export default function ProjectDetailPage() {
       const result = await res.json()
       if (result.success) {
         setShowEditModal(false)
-        toast.success('项目已更新')
+        toast.success('小说已更新')
         fetchProject()
       } else {
         toast.error(result.error?.message || '更新失败')
@@ -372,7 +372,7 @@ export default function ProjectDetailPage() {
       })
       const result = await res.json()
       if (result.success) {
-        toast.success('项目已删除')
+        toast.success('小说已删除')
         router.push('/projects')
       } else {
         toast.error(result.error?.message || '删除失败')
@@ -504,7 +504,7 @@ export default function ProjectDetailPage() {
   if (error || !project) {
     return (
       <div className="text-center py-12">
-        <p className="text-red-500">{error || '项目不存在'}</p>
+        <p className="text-red-500">{error || '小说不存在'}</p>
         <Button variant="outline" onClick={() => router.push('/projects')} className="mt-4">
           返回列表
         </Button>
@@ -908,7 +908,7 @@ export default function ProjectDetailPage() {
                       ) : (
                         <AlertCircle className="h-5 w-5 text-amber-600" />
                       )}
-                      项目预检
+                      小说预检
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4 text-sm">
@@ -920,7 +920,7 @@ export default function ProjectDetailPage() {
                           : 'border-green-200 bg-green-50 text-green-700 dark:border-green-900/40 dark:bg-green-950/20 dark:text-green-300'
                     }`}>
                       <div className="flex items-center justify-between gap-3">
-                        <div className="font-medium">项目健康分</div>
+                        <div className="font-medium">小说健康分</div>
                         <Badge variant={healthLevelMap[project.preflight.healthLevel].variant}>
                           {healthLevelMap[project.preflight.healthLevel].label}
                         </Badge>
@@ -938,12 +938,12 @@ export default function ProjectDetailPage() {
                       <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">
                         <div className="font-medium">先绑定 AI 模型，再启动主链路</div>
                         <div className="mt-1 text-xs leading-5 text-amber-700 dark:text-amber-300">
-                          绑定方式很简单：如果你已经在“系统设置 → AI 配置”里创建过配置，就点“编辑项目”在 AI 模型配置里选择它；
+                          绑定方式很简单：如果你已经在“系统设置 → AI 配置”里创建过配置，就点“编辑小说”在 AI 模型配置里选择它；
                           如果还没有配置，先去系统设置新增一个，再回来选择。
                         </div>
                         <div className="mt-3 flex flex-wrap gap-2">
                           <Button size="sm" variant="primary" onClick={() => setShowEditModal(true)}>
-                            编辑项目
+                            编辑小说
                           </Button>
                           <Button size="sm" variant="outline" onClick={() => router.push('/settings')}>
                             去系统设置
@@ -1278,20 +1278,13 @@ export default function ProjectDetailPage() {
       <Modal
         open={showEditModal}
         onClose={() => setShowEditModal(false)}
-        title="编辑基础信息"
-        className="max-w-2xl"
+        title="编辑小说标题"
+        description="这里只允许修改小说标题，其余设定由 AI 设定中枢维护。"
+        className="max-w-xl"
       >
         <ProjectBaseInfoForm
           defaultValues={{
             title: project.title,
-            description: project.description ?? undefined,
-            genre: project.genre ?? undefined,
-            writingStyle: project.writingStyle ?? undefined,
-            targetWordCount: project.targetWordCount ?? undefined,
-            chapterWordCount: project.chapterWordCount,
-            totalVolumes: project.totalVolumes,
-            coverImage: project.coverImage ?? undefined,
-            aiModelId: project.aiModelId ?? undefined,
           }}
           onSubmit={handleUpdate}
           onCancel={() => setShowEditModal(false)}
@@ -1303,8 +1296,8 @@ export default function ProjectDetailPage() {
       <Modal
         open={showDeleteModal}
         onClose={() => setShowDeleteModal(false)}
-        title="删除项目"
-        description="确定要删除这个项目吗？此操作不可撤销，所有章节内容也将被删除。"
+        title="删除小说"
+        description="确定要删除这本小说吗？此操作不可撤销，所有章节内容也将被删除。"
       >
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={() => setShowDeleteModal(false)}>

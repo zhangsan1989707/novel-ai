@@ -96,7 +96,7 @@ export default function ChapterGeneratePage() {
         <div className="text-center">
           <p className="text-gray-500">章节不存在</p>
           <Button variant="outline" onClick={() => router.push(`/projects/${projectId}`)} className="mt-4">
-            返回项目
+            返回小说
           </Button>
         </div>
       </div>

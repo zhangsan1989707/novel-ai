@@ -118,7 +118,7 @@ export function OutlineGenerator({
           </div>
 
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            基于项目设定，AI 将为你生成一个完整的故事大纲，包括主线剧情、起承转合、核心冲突等。
+            基于小说设定，AI 将为你生成一个完整的故事大纲，包括主线剧情、起承转合、核心冲突等。
           </p>
         </>
       )}
@@ -127,7 +127,7 @@ export function OutlineGenerator({
         <div className="flex items-start gap-3 rounded-lg bg-blue-50 p-3 text-sm text-blue-700 dark:bg-blue-900/20 dark:text-blue-300">
           <Sparkles className="mt-0.5 h-4 w-4 shrink-0" />
           <div>
-            将根据当前项目的题材、风格、世界观、主角目标等信息生成故事大纲。
+            将根据当前小说的题材、风格、世界观、主角目标等信息生成故事大纲。
           </div>
         </div>
       )}
@@ -165,7 +165,7 @@ export function OutlineGenerator({
             </Button>
             {onApply && (
               <Button size="sm" onClick={handleApply}>
-                应用到项目设定
+                应用到小说设定
               </Button>
             )}
           </div>

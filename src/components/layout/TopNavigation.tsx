@@ -65,7 +65,7 @@ export function TopNavigation({ children }: TopNavigationProps) {
                 <Search className="h-4 w-4 text-muted-foreground" />
                 <input
                   type="text"
-                  placeholder="搜索项目..."
+                  placeholder="搜索小说..."
                   className="bg-transparent border-none outline-none text-sm ml-2 w-32 focus:w-48 transition-all text-foreground placeholder:text-muted-foreground"
                 />
               </div>

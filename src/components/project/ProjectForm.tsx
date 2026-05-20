@@ -535,7 +535,7 @@ export function ProjectForm({ defaultValues, onSubmit, onCancel, loading, submit
           </Button>
         )}
         <Button type="submit" loading={loading}>
-          {submitLabel || '创建项目'}
+          {submitLabel || '创建小说'}
         </Button>
       </div>
     </form>

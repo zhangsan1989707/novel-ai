@@ -58,7 +58,7 @@ interface TriggerResult {
 }
 
 const triggerLabels: Record<HookTrigger, string> = {
-  project_create: '项目创建',
+  project_create: '小说创建',
   chapter_generate_start: '章节生成开始',
   chapter_generate_end: '章节生成结束',
   chapter_save: '章节保存',
