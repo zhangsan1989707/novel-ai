@@ -136,7 +136,7 @@ function buildRecommendations(report: HealthSummary): string[] {
   if (report.strandScore < 45 && report.hasBlueprint && report.hasArcPlans) {
     recommendations.push('追读稳定度偏低，建议补强伏笔、角色状态和故事摘要')
   }
-  if (report.ragDocumentCount === 0 && (report.completedChapters > 0 || report.bookSummaryCount > 0)) {
+  if (report.ragDocumentCount === 0 && (report.completedChapters > 0 || report.chapterSummaryCount > 0 || report.volumeSummaryCount > 0 || report.bookSummaryCount > 0)) {
     recommendations.push('RAG 索引为空，建议重建 RAG 索引以恢复语义检索')
   }
 
@@ -279,7 +279,7 @@ export function buildProjectHealthReport(input: ProjectHealthInput): ProjectHeal
   if (overduePlotlineCount > 0) {
     issues.push({ severity: 'warning', code: 'OVERDUE_PLOTLINES', message: `有 ${overduePlotlineCount} 条伏笔已超期未回收` })
   }
-  if (input.ragDocumentCount === 0 && (hasBlueprint || hasArcPlans || completedChapters.length > 0)) {
+  if (input.ragDocumentCount === 0 && (completedChapters.length > 0 || input.chapterSummaryCount > 0 || input.volumeSummaryCount > 0 || input.bookSummaryCount > 0)) {
     issues.push({ severity: 'warning', code: 'RAG_INDEX_MISSING', message: 'RAG 索引尚未建立或为空，语义检索会先触发重建' })
   }
   if (completedChapters.length >= 5 && chapterSummaryCoverage < 80) {

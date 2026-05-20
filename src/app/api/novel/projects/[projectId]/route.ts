@@ -5,10 +5,17 @@ import { z } from 'zod'
 import { logError } from '@/lib/logger'
 import { getRAGDocumentCount } from '@/lib/engine/rag-vector'
 import { buildProjectHealthReport } from '@/lib/engine/project-health'
-import { buildBlueprintConsoleSnapshot } from '@/lib/engine/blueprint-console'
+import { buildBlueprintConsoleSnapshot, refreshBlueprintConsole } from '@/lib/engine/blueprint-console'
 import { getDefaultAIConfigRecord } from '@/lib/ai/factory'
+import { rebuildProjectRAGIndex } from '@/lib/engine/rag-vector'
+import { scheduleProjectBootstrap, scheduleRagRebuild } from '@/lib/engine/auto-maintenance'
 
 type PreflightIssueSeverity = 'error' | 'warning' | 'info'
+
+const autoMaintenanceStatus = new Map<number, {
+  bootstrapTriggered: boolean
+  ragRebuildTriggered: boolean
+}>()
 
 interface PreflightIssue {
   severity: PreflightIssueSeverity
@@ -44,6 +51,15 @@ function buildProjectPreflight(project: {
   ragDocumentCount: number
 }) {
   return buildProjectHealthReport(project)
+}
+
+function getAutoMaintenanceState(projectId: number) {
+  const current = autoMaintenanceStatus.get(projectId) || {
+    bootstrapTriggered: false,
+    ragRebuildTriggered: false,
+  }
+  autoMaintenanceStatus.set(projectId, current)
+  return current
 }
 
 // ============================================
@@ -252,10 +268,34 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       )
     }
 
+    const resolvedProjectId = id
+
     // 实时计算当前总字数
     const totalWordCount = project.chapters.reduce((sum, chapter) => {
       return sum + (chapter.wordCount || 0)
     }, 0)
+
+    const autoState = getAutoMaintenanceState(resolvedProjectId)
+    const needsBootstrap = !project.bookBlueprint || !project.storyState || !project.worldState || project.arcPlans.length === 0
+    if (needsBootstrap && !autoState.bootstrapTriggered) {
+      autoState.bootstrapTriggered = true
+      scheduleProjectBootstrap(
+        resolvedProjectId,
+        () => refreshBlueprintConsole(resolvedProjectId, '项目已创建但尚未完成初始化，请自动补齐创作系统。'),
+        { source: 'project_detail_get' }
+      )
+    }
+
+    const needsRagRebuild = ragDocumentCount === 0 && (chapterSummaryCount > 0 || volumeSummaryCount > 0 || bookSummaryCount > 0 || totalWordCount > 0)
+    if (needsRagRebuild && !autoState.ragRebuildTriggered) {
+      autoState.ragRebuildTriggered = true
+      scheduleRagRebuild(
+        resolvedProjectId,
+        () => rebuildProjectRAGIndex(resolvedProjectId),
+        { source: 'project_detail_get' }
+      )
+    }
+
     const preflight = buildProjectPreflight({
       aiModelConfig: project.aiModelConfig,
       bookBlueprint: project.bookBlueprint,

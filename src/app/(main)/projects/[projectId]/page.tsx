@@ -6,7 +6,7 @@ import { Button, Card, CardContent, CardHeader, CardTitle, Badge, Progress, Moda
 import { BlueprintConsole, ProjectBaseInfoForm, ProjectBaseInfoFormData } from '@/components/project'
 import { Toolbox, AutoPipelinePanel } from '@/components/ai'
 import { CoverGenerator, PlotAnalyzer, ResearchPanel, ReviewPanel, DeslopPanel, ExportPanel } from '@/components/ai'
-import { BookOpen, Clock, Target, Users, Layers, Search, ClipboardList, Rocket, Shield, Sparkles, ChevronRight, ChevronDown, Wrench, Eye, Play, Pause, AlertCircle, CheckCircle2, Loader2, Download, RefreshCw } from 'lucide-react'
+import { BookOpen, Clock, Target, Users, Layers, Search, ClipboardList, Rocket, Shield, Sparkles, ChevronRight, ChevronDown, Wrench, Eye, Play, Pause, AlertCircle, CheckCircle2, Loader2, Download } from 'lucide-react'
 import type { ProjectStatus } from '@/types'
 import type { PipelineRuntimeState } from '@/lib/engine/pipeline-runtime'
 import type { BlueprintConsoleSnapshot } from '@/lib/engine/blueprint-console'
@@ -249,8 +249,6 @@ export default function ProjectDetailPage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [pipelineStarting, setPipelineStarting] = useState(false)
-  const [bootstrapping, setBootstrapping] = useState(false)
-  const [rebuildingRag, setRebuildingRag] = useState(false)
   const [activeTab, setActiveTab] = useState<DashboardTab>('dashboard')
 
   const [pipeline, setPipeline] = useState<PipelineStatus | null>(null)
@@ -443,46 +441,6 @@ export default function ProjectDetailPage() {
       toast.error('启动失败')
     } finally {
       setPipelineStarting(false)
-    }
-  }
-
-  const handleBootstrapProject = async () => {
-    setBootstrapping(true)
-    try {
-      const res = await fetch(`/api/novel/projects/${projectId}/bootstrap`, {
-        method: 'POST',
-      })
-      const data = await res.json()
-      if (data.success) {
-        toast.success('创作系统已初始化')
-        await fetchProject()
-      } else {
-        toast.error(data.error?.message || '初始化失败')
-      }
-    } catch {
-      toast.error('初始化失败，请重试')
-    } finally {
-      setBootstrapping(false)
-    }
-  }
-
-  const handleRebuildRagIndex = async () => {
-    setRebuildingRag(true)
-    try {
-      const res = await fetch(`/api/novel/projects/${projectId}/rag/rebuild`, {
-        method: 'POST',
-      })
-      const data = await res.json()
-      if (data.success) {
-        toast.success(`RAG 索引已重建，共写入 ${data.data.indexedCount} 条`)
-        await fetchProject()
-      } else {
-        toast.error(data.error?.message || '重建 RAG 索引失败')
-      }
-    } catch {
-      toast.error('重建 RAG 索引失败')
-    } finally {
-      setRebuildingRag(false)
     }
   }
 
@@ -1028,17 +986,11 @@ export default function ProjectDetailPage() {
                         </div>
                       </div>
                     )}
-                    {project.preflight.hasModel && (!project.preflight.hasBlueprint || !project.preflight.hasArcPlans || !project.preflight.hasStoryState) && (
+                    {project.preflight.hasModel && (!project.preflight.hasBlueprint || !project.preflight.hasArcPlans || !project.preflight.hasStoryState || !project.preflight.hasWorldState) && (
                       <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-blue-800 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-200">
-                        <div className="font-medium">可以先一键初始化创作系统</div>
+                        <div className="font-medium">AI 正在自动初始化创作系统</div>
                         <div className="mt-1 text-xs leading-5 text-blue-700 dark:text-blue-300">
-                          这会自动生成 Book Blueprint、Arc Plan、世界状态与故事状态。完成后再启动主流水线，长篇生产会更稳定。
-                        </div>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          <Button size="sm" variant="primary" onClick={handleBootstrapProject} disabled={bootstrapping}>
-                            {bootstrapping ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
-                            一键初始化
-                          </Button>
+                          系统会自动补齐 Book Blueprint、阶段规划、世界状态和故事状态，完成后会进入可继续生产状态。
                         </div>
                       </div>
                     )}
@@ -1125,22 +1077,14 @@ export default function ProjectDetailPage() {
                         <div className="mt-1 text-sm font-medium text-gray-900 dark:text-gray-100">
                           {project.preflight.ragDocumentCount > 0
                             ? `已建立，共 ${project.preflight.ragDocumentCount} 条`
-                            : '尚未建立或为空'}
+                            : project.preflight.completedChapters > 0 || project.preflight.bookSummaryCount > 0 || project.preflight.chapterSummaryCount > 0
+                              ? 'AI 正在自动重建索引'
+                              : '暂无可索引内容，写作后会自动建立'}
                         </div>
                         <div className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
                           用于语义检索、记忆回写和长篇上下文恢复
                         </div>
                       </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={handleRebuildRagIndex}
-                        disabled={rebuildingRag}
-                        className="md:self-start"
-                      >
-                        {rebuildingRag ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
-                        重建 RAG 索引
-                      </Button>
                     </div>
 
                     {project.preflight.issues.length > 0 ? (

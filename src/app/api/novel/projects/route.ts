@@ -5,24 +5,7 @@ import { logError } from '@/lib/logger'
 import { getCurrentUserId } from '@/lib/auth'
 import { createProviderFromConfigId, createProviderFromDefaultConfig, getDefaultAIConfigRecord } from '@/lib/ai/factory'
 import { refreshBlueprintConsole } from '@/lib/engine/blueprint-console'
-
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      reject(new Error(`${label} timed out after ${timeoutMs}ms`))
-    }, timeoutMs)
-
-    promise
-      .then((value) => {
-        clearTimeout(timer)
-        resolve(value)
-      })
-      .catch((error) => {
-        clearTimeout(timer)
-        reject(error)
-      })
-  })
-}
+import { scheduleProjectBootstrap } from '@/lib/engine/auto-maintenance'
 
 // ============================================
 // Schema 验证
@@ -311,18 +294,11 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    try {
-      await withTimeout(
-        refreshBlueprintConsole(project.id, '项目刚创建完成，请生成初始 AI 动态设定中枢。'),
-        12000,
-        'refreshBlueprintConsole'
-      )
-    } catch (error) {
-      logError(error instanceof Error ? error : new Error(String(error)), {
-        type: 'create_project_bootstrap_console',
-        projectId: project.id,
-      })
-    }
+    scheduleProjectBootstrap(
+      project.id,
+      () => refreshBlueprintConsole(project.id, '项目刚创建完成，请自动生成初始 AI 动态设定中枢。'),
+      { source: 'project_create' }
+    )
 
     return NextResponse.json({ success: true, data: project }, { status: 201 })
   } catch (error: unknown) {
