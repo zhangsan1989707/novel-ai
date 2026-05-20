@@ -296,6 +296,18 @@ export default function SettingsPage() {
 
         <TabsContent value="ai-configs">
           <div className="max-w-4xl mx-auto space-y-6">
+            <Card>
+              <CardContent className="p-4">
+                <div className="space-y-2">
+                  <h3 className="font-medium text-sm text-gray-900 dark:text-white">绑定 AI 模型的最短路径</h3>
+                  <ol className="list-decimal space-y-1 pl-5 text-xs text-gray-600 dark:text-gray-400">
+                    <li>点击“添加配置”。</li>
+                    <li>选择供应商，填模型 ID 和 API Key。</li>
+                    <li>保存后点左侧的“默认”按钮，或回到项目页在“编辑项目”里选中它。</li>
+                  </ol>
+                </div>
+              </CardContent>
+            </Card>
             <div className="flex justify-end">
               <Button onClick={() => openModal()}>
                 <Plus className="h-4 w-4 mr-2" />

@@ -3,6 +3,7 @@ import { PlotlineStatus } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { logError } from '@/lib/logger'
+import { getRAGDocumentCount } from '@/lib/engine/rag-vector'
 
 type PreflightIssueSeverity = 'error' | 'warning' | 'info'
 
@@ -27,6 +28,7 @@ function buildProjectPreflight(project: {
   openPlotlineCount: number
   resolvedPlotlineCount: number
   researchRefCount: number
+  ragDocumentCount: number
 }) {
   const issues: PreflightIssue[] = []
   const hasModel = Boolean(project.aiModelConfig)
@@ -72,6 +74,7 @@ function buildProjectPreflight(project: {
     (project.openPlotlineCount > 0 ? 5 : 0) +
     (project.researchRefCount > 0 ? 5 : 0)
   ))
+  const ragReady = project.ragDocumentCount > 0
 
   if (!hasModel) {
     issues.push({
@@ -129,6 +132,14 @@ function buildProjectPreflight(project: {
     })
   }
 
+  if (!ragReady && (hasBlueprint || hasArcPlans || completedChapters.length > 0)) {
+    issues.push({
+      severity: 'warning',
+      code: 'RAG_INDEX_MISSING',
+      message: 'RAG 索引尚未建立或为空，语义检索会先触发重建',
+    })
+  }
+
   if (completedChapters.length >= 5 && chapterSummaryCoverage < 80) {
     issues.push({
       severity: 'warning',
@@ -164,6 +175,7 @@ function buildProjectPreflight(project: {
     openPlotlineCount: project.openPlotlineCount,
     resolvedPlotlineCount: project.resolvedPlotlineCount,
     researchRefCount: project.researchRefCount,
+    ragDocumentCount: project.ragDocumentCount,
     chapterSummaryCoverage,
     volumeSummaryCoverage,
     memoryCoverageScore,
@@ -285,6 +297,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       openPlotlineCount,
       resolvedPlotlineCount,
       researchRefCount,
+      ragDocumentCount,
     ] = await Promise.all([
       prisma.chapterSummary.count({ where: { projectId: id } }),
       prisma.volumeSummary.count({ where: { projectId: id } }),
@@ -294,6 +307,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       prisma.plotline.count({ where: { projectId: id, status: PlotlineStatus.OPEN } }),
       prisma.plotline.count({ where: { projectId: id, status: PlotlineStatus.RESOLVED } }),
       prisma.researchRef.count({ where: { projectId: id } }),
+      getRAGDocumentCount(id),
     ])
 
     if (!project) {
@@ -322,6 +336,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       openPlotlineCount,
       resolvedPlotlineCount,
       researchRefCount,
+      ragDocumentCount,
     })
 
     // 返回带计算后字数的项目数据

@@ -6,6 +6,7 @@ import { batchCreatePlotlines, batchResolvePlotlines } from '@/lib/memory/plotli
 import { batchUpdateCharacterProfiles } from '@/lib/memory/character-memory'
 import * as storyState from './story-state'
 import type { ChapterCommitPayload } from './chapter-commit'
+import { rebuildProjectRAGIndex } from './rag-vector'
 
 export type ProjectionStatusMap = Record<string, string>
 
@@ -47,6 +48,7 @@ export async function runChapterProjectionWriters(
     story: 'pending',
     project: 'pending',
     audit: 'pending',
+    rag: 'pending',
   }
 
   const finalWordCount = countChineseWords(context.payload.content || '')
@@ -168,6 +170,13 @@ export async function runChapterProjectionWriters(
     projectionStatus.audit = 'done'
   } catch (error) {
     markFailure(projectionStatus, 'audit', error)
+  }
+
+  try {
+    await rebuildProjectRAGIndex(context.projectId)
+    projectionStatus.rag = 'done'
+  } catch (error) {
+    markFailure(projectionStatus, 'rag', error)
   }
 
   return { projectionStatus, finalWordCount }

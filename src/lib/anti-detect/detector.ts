@@ -13,7 +13,7 @@ import {
   scanForbiddenPatterns,
   scanWordsByLevel,
 } from '@/lib/knowledge/anti-ai'
-import type { ForbiddenWord, ForbiddenPattern } from '@/lib/knowledge/anti-ai'
+
 import { calculatePerplexity } from './perplexity'
 import type { PerplexityResult } from './perplexity'
 

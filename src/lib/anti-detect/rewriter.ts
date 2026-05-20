@@ -215,6 +215,43 @@ const SYNONYM_DICT: Record<string, string[]> = {
   '闭': ['合', '阖'],
   '抬': ['举', '提'],
   '放': ['搁', '置'],
+  '不禁': ['忍不住', '差点', '当下'],
+  '顿时': ['当时', '就', '便'],
+  '瞬间': ['刹那', '这一刻'],
+  '赫然': ['豁然', '突然'],
+  '蓦然': ['猛然', '忽地'],
+  '骤然': ['猛地', '霍地'],
+  '陡然': ['忽而', '一下'],
+  '悄然': ['偷偷', '默默'],
+  '旋即': ['接着', '随后'],
+  '缓缓': ['慢慢', '徐徐'],
+  '微微': ['稍稍', '略略'],
+  '淡淡': ['隐隐', '浅浅'],
+  '轻轻': ['小心', '缓缓地'],
+  '默默': ['不做声', '静静地'],
+  '深深': ['沉沉', '重重'],
+  '渐渐': ['一点一点', '慢慢'],
+  '竟': ['倒是', '倒'],
+  '竟然': ['居然', '倒'],
+  '不由': ['忍不住', '不禁'],
+  '下意识': ['本能', '习惯地'],
+  '感到': ['觉得', '觉着', '察觉'],
+  '觉得': ['感到', '觉着'],
+  '真正的': ['实在的', '实打实的'],
+  '无疑': ['显然', '很明显'],
+  '最重要': ['最要紧', '最关键的'],
+  '无比': ['特别', '非同一般'],
+  '人生': ['这一辈子', '这辈子'],
+  '一课': ['教训', '经验'],
+  '成长': ['长大', '懂事'],
+  '坚强': ['扛得住', '硬气'],
+  '内心': ['心里', '心底里'],
+  '一动': ['愣了一下', '滞了一下'],
+  '一紧': ['收紧', '缩了一下'],
+  '一亮': ['亮起来', '亮了'],
+  '一抽': ['抽了抽', '抽搐了一下'],
+  '一惊': ['惊了', '吓着了'],
+  '一皱': ['皱了皱', '拧了起来'],
 }
 
 const COLLOQUIAL_INJECTIONS: string[] = [
@@ -742,8 +779,17 @@ export function rewriteText(text: string, options?: RewriteOptions): RewriteResu
       break
   }
 
-  const shuffled = [...rewriteStrategies].sort(() => Math.random() - 0.5)
-  const selected = shuffled.slice(0, Math.min(strategyCount, shuffled.length))
+  const synonymStrategy = rewriteStrategies.find(s => s.name === '同义替换')!
+
+  const otherStrategies = rewriteStrategies.filter(s => s.name !== '同义替换')
+  const shuffled = [...otherStrategies].sort(() => Math.random() - 0.5)
+
+  let selected: RewriteStrategy[]
+  if (intensity === 'light') {
+    selected = shuffled.slice(0, Math.min(strategyCount, shuffled.length))
+  } else {
+    selected = [synonymStrategy, ...shuffled.slice(0, Math.min(strategyCount - 1, shuffled.length))]
+  }
 
   let result = text
   const allChanges: RewriteChange[] = []

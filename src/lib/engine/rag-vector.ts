@@ -2,8 +2,10 @@
  * RAG (Retrieval-Augmented Generation) 向量数据库系统
  * 为超长篇小说提供语义检索增强的上下文管理
  */
-import { CharacterRole, PlotlineStatus } from '@prisma/client'
+import { CharacterRole, PlotlineStatus, Prisma } from '@prisma/client'
+import { AIService } from '@/lib/ai/service'
 import { prisma } from '@/lib/prisma'
+import { parseAiJsonObject } from './ai-json'
 
 interface VectorConfig {
   provider: 'pinecone' | 'chroma' | 'qdrant' | 'local'
@@ -33,6 +35,28 @@ interface SearchResult {
   chunk: SemanticChunk
   score: number
   rerankedContent?: string
+}
+
+type RagSourceType =
+  | 'chapter'
+  | 'chapter_summary'
+  | 'volume_summary'
+  | 'book_summary'
+  | 'character'
+  | 'plotline'
+  | 'research'
+
+interface RagDocumentRow {
+  id: string
+  project_id: number
+  source_type: RagSourceType
+  source_id: string
+  chapter_no: number
+  chunk_no: number
+  title: string | null
+  content: string
+  metadata: Prisma.JsonValue
+  embedding_score?: number
 }
 
 const DEFAULT_CONFIG: VectorConfig = {
@@ -154,6 +178,88 @@ function deriveChunkType(content: string): ChunkMetadata['type'] {
   return 'plot'
 }
 
+function serializeVector(vector: number[]): string {
+  return `[${vector.map(v => Number.isFinite(v) ? v.toFixed(8) : '0').join(',')}]`
+}
+
+function buildDocumentText(title: string | null | undefined, content: string): string {
+  return [title || '', content || ''].filter(Boolean).join('\n')
+}
+
+async function upsertRagDocuments(
+  docs: Array<{
+    projectId: number
+    sourceType: RagSourceType
+    sourceId: string
+    chapterNo: number
+    chunkNo: number
+    title?: string | null
+    content: string
+    metadata?: Record<string, unknown>
+    embedding: number[]
+    embeddingModel?: string
+  }>
+): Promise<void> {
+  for (const doc of docs) {
+    await prisma.$executeRaw`
+      INSERT INTO rag_documents (
+        id,
+        project_id,
+        source_type,
+        source_id,
+        chapter_no,
+        chunk_no,
+        title,
+        content,
+        metadata,
+        embedding,
+        embedding_model,
+        created_at,
+        updated_at
+      ) VALUES (
+        ${`${doc.projectId}:${doc.sourceType}:${doc.sourceId}:${doc.chunkNo}`},
+        ${doc.projectId},
+        ${doc.sourceType},
+        ${doc.sourceId},
+        ${doc.chapterNo},
+        ${doc.chunkNo},
+        ${doc.title ?? null},
+        ${doc.content},
+        ${(doc.metadata || {}) as Prisma.InputJsonValue},
+        ${serializeVector(doc.embedding)}::vector,
+        ${doc.embeddingModel || 'local-hash-v1'},
+        NOW(),
+        NOW()
+      )
+      ON CONFLICT (project_id, source_type, source_id, chunk_no)
+      DO UPDATE SET
+        title = EXCLUDED.title,
+        content = EXCLUDED.content,
+        metadata = EXCLUDED.metadata,
+        embedding = EXCLUDED.embedding,
+        embedding_model = EXCLUDED.embedding_model,
+        chapter_no = EXCLUDED.chapter_no,
+        updated_at = NOW()
+    `
+  }
+}
+
+async function deleteRagDocumentsByProject(projectId: number): Promise<void> {
+  await prisma.$executeRaw`
+    DELETE FROM rag_documents
+    WHERE project_id = ${projectId}
+  `
+}
+
+async function countRagDocuments(projectId: number): Promise<number> {
+  const rows = await prisma.$queryRaw<Array<{ count: bigint }>>`
+    SELECT COUNT(*)::bigint AS count
+    FROM rag_documents
+    WHERE project_id = ${projectId}
+  `
+  return Number(rows[0]?.count || 0)
+}
+
 /**
  * 向量嵌入生成器
  */
@@ -236,36 +342,196 @@ async function semanticChunking(
   return chunks
 }
 
-/**
- * 内容类型分类器
- */
-async function classifyChunkType(
-  chunk: string,
-  projectId: number
-): Promise<ChunkMetadata['type']> {
-  void projectId
-  return deriveChunkType(chunk)
+async function searchIndexedRagDocuments(
+  projectId: number,
+  queryEmbedding: number[],
+  options: {
+    topK: number
+    filter?: Partial<ChunkMetadata>
+    maxChapterNo?: number
+  }
+): Promise<Array<SearchResult & { document: RagDocumentRow }>> {
+  const { topK, filter, maxChapterNo } = options
+  const candidateLimit = Math.max(topK * 6, 20)
+  const vectorLiteral = serializeVector(queryEmbedding)
+  const typeClause = filter?.type ? Prisma.sql`AND source_type = ${filter.type}` : Prisma.empty
+  const chapterClause = filter?.chapterNo !== undefined ? Prisma.sql`AND chapter_no = ${filter.chapterNo}` : Prisma.empty
+  const tagClause = filter?.tags?.length
+    ? Prisma.sql`AND EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements_text(COALESCE(metadata->'tags', '[]'::jsonb)) AS tag
+      WHERE tag IN (${Prisma.join(filter.tags)})
+    )`
+    : Prisma.empty
+  const chapterLimitClause = maxChapterNo !== undefined
+    ? Prisma.sql`AND (chapter_no = 0 OR chapter_no <= ${maxChapterNo})`
+    : Prisma.empty
+
+  const rows = await prisma.$queryRaw<RagDocumentRow[]>(Prisma.sql`
+    SELECT
+      id,
+      project_id,
+      source_type,
+      source_id,
+      chapter_no,
+      chunk_no,
+      title,
+      content,
+      metadata,
+      1 - (embedding <=> ${vectorLiteral}::vector) AS embedding_score
+    FROM rag_documents
+    WHERE project_id = ${projectId}
+      ${typeClause}
+      ${chapterClause}
+      ${tagClause}
+      ${chapterLimitClause}
+    ORDER BY embedding <=> ${vectorLiteral}::vector ASC
+    LIMIT ${candidateLimit}
+  `)
+
+  return rows.map(row => {
+    const metadata = row.metadata && typeof row.metadata === 'object' ? row.metadata as Record<string, unknown> : {}
+    const chunkType = (metadata.type as ChunkMetadata['type']) || (row.source_type === 'chapter' ? 'plot' : 'setting')
+    const importance = Number(metadata.importance ?? 1)
+    const chunk: SemanticChunk = {
+      id: row.id,
+      content: row.content,
+      embedding: queryEmbedding,
+      metadata: {
+        projectId: row.project_id,
+        chapterNo: row.chapter_no,
+        type: chunkType,
+        importance,
+        characters: Array.isArray(metadata.characters) ? metadata.characters.map(value => String(value)) : undefined,
+        tags: Array.isArray(metadata.tags) ? metadata.tags.map(value => String(value)) : undefined,
+      },
+    }
+
+    return {
+      chunk,
+      score: row.embedding_score ?? 0,
+      rerankedContent: row.title ? `${row.title}\n${row.content}` : row.content,
+      document: row,
+    }
+  })
 }
 
-/**
- * 语义检索
- */
-export async function semanticSearch(
+function rerankHeuristically(query: string, result: SearchResult): number {
+  const sourceBonus = result.chunk.metadata.importance * 0.1
+  const recencyBonus = result.chunk.metadata.chapterNo > 0 ? Math.max(0, 1 - result.chunk.metadata.chapterNo / 500) * 0.05 : 0
+  return (result.score * 0.8) + (keywordOverlapScore(query, result.chunk.content) * 0.15) + sourceBonus + recencyBonus
+}
+
+async function rerankWithAI(
   query: string,
   projectId: number,
-  options: {
-    topK?: number
-    filter?: Partial<ChunkMetadata>
-    useRerank?: boolean
-  } = {}
-): Promise<SearchResult[]> {
-  const { topK = 5, filter, useRerank = true } = options
+  results: SearchResult[]
+): Promise<SearchResult[] | null> {
+  if (results.length <= 1) return results
 
-  const queryEmbedding = await generateEmbedding(query)
-  const [chapters, chapterSummaries, volumeSummaries, bookSummary, characters, plotlines, researchRefs] = await Promise.all([
+  try {
+    const provider = await AIService.createProvider({
+      projectId,
+      usageType: 'RAG_RERANK',
+    })
+
+    const prompt = [
+      '你是小说检索重排器。请根据“查询”与“候选片段”的相关性进行严格重排。',
+      '只输出 JSON 对象，不要解释，不要代码块。',
+      '',
+      `查询：${query}`,
+      '',
+      '候选片段：',
+      ...results.map((result, index) => {
+        const snippet = result.chunk.content.slice(0, 500)
+        return `${index + 1}. id=${result.chunk.id}\nsource=${result.chunk.metadata.type}\nchapter=${result.chunk.metadata.chapterNo}\ncontent=${snippet}`
+      }),
+      '',
+      '返回格式：',
+      '{',
+      '  "ranked": [',
+      '    { "id": "片段id", "score": 0.0, "reason": "简短原因" }',
+      '  ]',
+      '}',
+    ].join('\n')
+
+    const response = await provider.generate(prompt, {
+      temperature: 0,
+      maxTokens: 800,
+      responseFormat: { type: 'json_object' },
+      timeoutMs: 15000,
+    })
+
+    const parsed = parseAiJsonObject<{ ranked?: Array<{ id: string; score?: number }> }>(response.content)
+    const ranking = parsed.ranked || []
+    if (ranking.length === 0) return null
+
+    const byId = new Map(results.map(result => [result.chunk.id, result]))
+    const rankedResults: SearchResult[] = []
+
+    for (const item of ranking) {
+      const found = byId.get(item.id)
+      if (!found) continue
+      rankedResults.push({
+        ...found,
+        score: Math.max(found.score, item.score ?? found.score),
+      })
+    }
+
+    if (rankedResults.length === 0) return null
+
+    const usedIds = new Set(rankedResults.map(item => item.chunk.id))
+    for (const result of results) {
+      if (!usedIds.has(result.chunk.id)) {
+        rankedResults.push(result)
+      }
+    }
+
+    return rankedResults.slice(0, results.length)
+  } catch {
+    return null
+  }
+}
+
+async function indexChapterSemanticChunks(
+  projectId: number,
+  chapterNo: number,
+  chapterTitle: string,
+  content: string
+): Promise<void> {
+  const chunks = await semanticChunking(content, { chunkSize: 1200, overlap: 120, splitBy: 'paragraph' })
+  const docs = await Promise.all(chunks.map(async (chunk, index) => ({
+    projectId,
+    sourceType: 'chapter' as const,
+    sourceId: `chapter:${chapterNo}`,
+    chapterNo,
+    chunkNo: index,
+    title: index === 0 ? chapterTitle : null,
+    content: chunk.text,
+    metadata: {
+      type: deriveChunkType(chunk.text),
+      importance: index === 0 ? 1 : 0.8,
+      tags: ['chapter', `chapter:${chapterNo}`],
+    },
+    embedding: await generateEmbedding(`${chapterTitle}\n${chunk.text}`),
+  })))
+
+  await upsertRagDocuments(docs)
+}
+
+export async function rebuildProjectRAGIndex(projectId: number): Promise<{ indexedCount: number; rebuiltAt: Date }> {
+  const [
+    chapters,
+    chapterSummaries,
+    volumeSummaries,
+    bookSummary,
+    characters,
+    plotlines,
+    researchRefs,
+  ] = await Promise.all([
     prisma.novelChapter.findMany({
       where: { projectId, content: { not: null } },
-      select: { chapterNumber: true, title: true, content: true, wordCount: true },
+      select: { chapterNumber: true, title: true, content: true },
       orderBy: { chapterNumber: 'asc' },
     }),
     prisma.chapterSummary.findMany({
@@ -275,7 +541,7 @@ export async function semanticSearch(
     }),
     prisma.volumeSummary.findMany({
       where: { projectId },
-      select: { volumeNumber: true, summary: true, keyEvents: true, plantedPlotlines: true, resolvedPlotlines: true, chapterOverview: true },
+      select: { volumeNumber: true, summary: true, keyEvents: true, plantedPlotlines: true, resolvedPlotlines: true },
       orderBy: { volumeNumber: 'asc' },
     }),
     prisma.bookSummary.findUnique({
@@ -292,26 +558,32 @@ export async function semanticSearch(
     }),
     prisma.researchRef.findMany({
       where: { projectId },
-      select: { topic: true, summary: true, keyFacts: true, creativeMaterials: true },
+      select: { id: true, topic: true, summary: true, keyFacts: true, creativeMaterials: true },
       orderBy: { createdAt: 'desc' },
     }),
   ])
 
-  const candidates: SemanticChunk[] = []
+  const docs: Array<Parameters<typeof upsertRagDocuments>[0][number]> = []
 
   for (const chapter of chapters) {
-    const content = chapter.content || ''
-    candidates.push({
-      id: `chapter-${chapter.chapterNumber}`,
-      content: `${chapter.title}\n${content.slice(0, 3000)}`,
-      embedding: await generateEmbedding(`${chapter.title}\n${content.slice(0, 2000)}`),
-      metadata: {
+    const chapterText = chapter.content || ''
+    const chunks = await semanticChunking(chapterText, { chunkSize: 1200, overlap: 120, splitBy: 'paragraph' })
+    for (const [index, chunk] of chunks.entries()) {
+      docs.push({
         projectId,
+        sourceType: 'chapter',
+        sourceId: `chapter:${chapter.chapterNumber}`,
         chapterNo: chapter.chapterNumber,
-        type: deriveChunkType(content),
-        importance: chapter.wordCount > 0 ? 0.9 : 0.5,
-      },
-    })
+        chunkNo: index,
+        title: index === 0 ? chapter.title : null,
+        content: chunk.text,
+        metadata: {
+          type: deriveChunkType(chunk.text),
+          importance: index === 0 ? 1 : 0.8,
+        },
+        embedding: await generateEmbedding(buildDocumentText(chapter.title, chunk.text)),
+      })
+    }
   }
 
   for (const summary of chapterSummaries) {
@@ -323,16 +595,16 @@ export async function semanticSearch(
       summary.resolvedPlotlines.length > 0 ? `回收伏笔：${summary.resolvedPlotlines.join('；')}` : '',
     ].filter(Boolean).join('\n')
 
-    candidates.push({
-      id: `chapter-summary-${summary.chapterNo}`,
+    docs.push({
+      projectId,
+      sourceType: 'chapter_summary',
+      sourceId: `chapter_summary:${summary.chapterNo}`,
+      chapterNo: summary.chapterNo,
+      chunkNo: 0,
+      title: `第${summary.chapterNo}章摘要`,
       content,
+      metadata: { type: 'plot', importance: 1, source: 'chapter_summary' },
       embedding: await generateEmbedding(content),
-      metadata: {
-        projectId,
-        chapterNo: summary.chapterNo,
-        type: 'plot',
-        importance: 1,
-      },
     })
   }
 
@@ -344,16 +616,16 @@ export async function semanticSearch(
       volume.resolvedPlotlines.length > 0 ? `回收伏笔：${volume.resolvedPlotlines.join('；')}` : '',
     ].filter(Boolean).join('\n')
 
-    candidates.push({
-      id: `volume-summary-${volume.volumeNumber}`,
+    docs.push({
+      projectId,
+      sourceType: 'volume_summary',
+      sourceId: `volume_summary:${volume.volumeNumber}`,
+      chapterNo: volume.volumeNumber * 1000,
+      chunkNo: 0,
+      title: `第${volume.volumeNumber}卷摘要`,
       content,
+      metadata: { type: 'plot', importance: 0.95, source: 'volume_summary' },
       embedding: await generateEmbedding(content),
-      metadata: {
-        projectId,
-        chapterNo: volume.volumeNumber * 1000,
-        type: 'plot',
-        importance: 0.95,
-      },
     })
   }
 
@@ -374,21 +646,19 @@ export async function semanticSearch(
       `主线：${bookSummary.mainPlot}`,
       bookSummary.thematicElements.length > 0 ? `主题：${bookSummary.thematicElements.join('；')}` : '',
       bookSummary.subPlots.length > 0 ? `副线：${bookSummary.subPlots.join('；')}` : '',
-      characterArcLines.length > 0
-        ? `人物弧线：${characterArcLines.join('；')}`
-        : '',
+      characterArcLines.length > 0 ? `人物弧线：${characterArcLines.join('；')}` : '',
     ].filter(Boolean).join('\n')
 
-    candidates.push({
-      id: 'book-summary',
+    docs.push({
+      projectId,
+      sourceType: 'book_summary',
+      sourceId: 'book_summary',
+      chapterNo: 0,
+      chunkNo: 0,
+      title: '全书摘要',
       content,
+      metadata: { type: 'plot', importance: 1, source: 'book_summary' },
       embedding: await generateEmbedding(content),
-      metadata: {
-        projectId,
-        chapterNo: 0,
-        type: 'plot',
-        importance: 1,
-      },
     })
   }
 
@@ -405,17 +675,21 @@ export async function semanticSearch(
       character.lastUpdated ? `最近更新：第${character.lastUpdated}章` : '',
     ].filter(Boolean).join('\n')
 
-    candidates.push({
-      id: `character-${character.name}`,
+    docs.push({
+      projectId,
+      sourceType: 'character',
+      sourceId: `character:${character.name}`,
+      chapterNo: character.lastUpdated || 0,
+      chunkNo: 0,
+      title: character.name,
       content,
-      embedding: await generateEmbedding(content),
       metadata: {
-        projectId,
-        chapterNo: character.lastUpdated || 0,
         type: 'character',
         characters: [character.name],
         importance: character.role === CharacterRole.PROTAGONIST ? 1 : 0.8,
+        source: 'character',
       },
+      embedding: await generateEmbedding(content),
     })
   }
 
@@ -428,17 +702,21 @@ export async function semanticSearch(
       `埋设章节：第${plotline.plantedAt}章`,
     ].filter(Boolean).join('\n')
 
-    candidates.push({
-      id: `plotline-${plotline.id}`,
+    docs.push({
+      projectId,
+      sourceType: 'plotline',
+      sourceId: `plotline:${plotline.id}`,
+      chapterNo: plotline.plantedAt,
+      chunkNo: 0,
+      title: plotline.description,
       content,
-      embedding: await generateEmbedding(content),
       metadata: {
-        projectId,
-        chapterNo: plotline.plantedAt,
         type: 'plot',
         importance: plotline.status === PlotlineStatus.RESOLVED ? 0.7 : 1,
         tags: [plotline.status],
+        source: 'plotline',
       },
+      embedding: await generateEmbedding(content),
     })
   }
 
@@ -450,33 +728,76 @@ export async function semanticSearch(
       ref.creativeMaterials.length > 0 ? `创作素材：${ref.creativeMaterials.join('；')}` : '',
     ].filter(Boolean).join('\n')
 
-    candidates.push({
-      id: `research-${ref.topic}`,
+    docs.push({
+      projectId,
+      sourceType: 'research',
+      sourceId: `research:${ref.id}`,
+      chapterNo: 0,
+      chunkNo: 0,
+      title: ref.topic,
       content,
-      embedding: await generateEmbedding(content),
       metadata: {
-        projectId,
-        chapterNo: 0,
         type: 'setting',
         importance: 0.7,
+        source: 'research',
       },
+      embedding: await generateEmbedding(content),
     })
   }
 
-  const filtered = candidates.filter(chunk => matchesFilter(chunk.metadata, filter))
-  const scored = filtered.map(chunk => {
-    const similarity = cosineSimilarity(queryEmbedding, chunk.embedding)
-    const overlap = keywordOverlapScore(query, chunk.content)
-    const score = (similarity * 0.72) + (overlap * 0.22) + (chunk.metadata.importance * 0.06)
-    return {
-      chunk,
-      score,
-      rerankedContent: useRerank ? chunk.content : undefined,
-    }
+  await deleteRagDocumentsByProject(projectId)
+  await upsertRagDocuments(docs)
+
+  return { indexedCount: docs.length, rebuiltAt: new Date() }
+}
+
+/**
+ * 语义检索
+ */
+export async function semanticSearch(
+  query: string,
+  projectId: number,
+  options: {
+    topK?: number
+    filter?: Partial<ChunkMetadata>
+    useRerank?: boolean
+    maxChapterNo?: number
+  } = {}
+): Promise<SearchResult[]> {
+  const { topK = 5, filter, useRerank = true, maxChapterNo } = options
+  const queryEmbedding = await generateEmbedding(query)
+
+  let candidates = await searchIndexedRagDocuments(projectId, queryEmbedding, {
+    topK,
+    filter,
+    maxChapterNo,
   })
 
-  scored.sort((a, b) => b.score - a.score)
-  return scored.slice(0, topK)
+  if (candidates.length === 0) {
+    await rebuildProjectRAGIndex(projectId)
+    candidates = await searchIndexedRagDocuments(projectId, queryEmbedding, {
+      topK,
+      filter,
+      maxChapterNo,
+    })
+  }
+
+  const heuristicScored = candidates.map(result => ({
+    ...result,
+    score: rerankHeuristically(query, result),
+  }))
+
+  const reranked = useRerank
+    ? await rerankWithAI(query, projectId, heuristicScored) || heuristicScored
+    : heuristicScored
+
+  reranked.sort((a, b) => b.score - a.score)
+
+  return reranked.slice(0, topK).map(item => ({
+    chunk: item.chunk,
+    score: item.score,
+    rerankedContent: item.rerankedContent,
+  }))
 }
 
 /**
@@ -501,6 +822,7 @@ export async function buildRAGContext(
   const searchResults = await semanticSearch(query, projectId, {
     topK: Math.max(maxChunks * 2, maxChunks),
     useRerank: rerank,
+    maxChapterNo: chapterNo,
   })
   const filteredResults = includeTypes?.length
     ? searchResults.filter(result => includeTypes.includes(result.chunk.metadata.type))
@@ -587,40 +909,16 @@ export async function indexChapterContent(
     overlap?: number
   } = {}
 ): Promise<{ chunkCount: number; indexedAt: Date }> {
-  // 1. 语义分块
+  const chapter = await prisma.novelChapter.findFirst({
+    where: { projectId, chapterNumber: chapterNo },
+    select: { title: true },
+  })
+  const chapterTitle = chapter?.title || `第${chapterNo}章`
+  await indexChapterSemanticChunks(projectId, chapterNo, chapterTitle, content)
+
   const chunks = await semanticChunking(content, options)
-
-  // 2. 为每个块生成向量并分类
-  const indexedChunks: SemanticChunk[] = []
-
-  for (let i = 0; i < chunks.length; i++) {
-    const chunk = chunks[i]
-    
-    // 生成向量
-    const embedding = await generateEmbedding(chunk.text)
-    
-    // 分类
-    const type = await classifyChunkType(chunk.text, projectId)
-
-    indexedChunks.push({
-      id: `${projectId}-${chapterNo}-${i}`,
-      content: chunk.text,
-      embedding,
-      metadata: {
-        projectId,
-        chapterNo,
-        type,
-        importance: i < 3 ? 1 : 0.5, // 前几段更重要
-      },
-    })
-  }
-
-  // 3. 存储到向量数据库
-  // TODO: 实现实际的向量数据库存储
-  // await vectorStore.upsert(projectId, indexedChunks)
-
   return {
-    chunkCount: indexedChunks.length,
+    chunkCount: chunks.length,
     indexedAt: new Date(),
   }
 }
@@ -677,6 +975,10 @@ export async function buildRAGPrompt(
   return ragContext
     ? basePrompt + '\n\n【相关背景信息】\n' + ragContext
     : basePrompt
+}
+
+export async function getRAGDocumentCount(projectId: number): Promise<number> {
+  return countRagDocuments(projectId)
 }
 
 export type { VectorConfig, ChunkMetadata, SemanticChunk, SearchResult }

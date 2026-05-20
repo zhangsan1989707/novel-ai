@@ -95,6 +95,7 @@ interface Project {
     openPlotlineCount: number
     resolvedPlotlineCount: number
     researchRefCount: number
+    ragDocumentCount: number
     chapterSummaryCoverage: number
     volumeSummaryCoverage: number
     memoryCoverageScore: number
@@ -479,6 +480,7 @@ export default function ProjectDetailPage() {
   const arcGroups = groupChaptersByArc(project)
   const liveChapter = pipeline?.runtime?.currentChapter || null
   const recentChapterRuns = pipeline?.runtime?.recentChapters || []
+  const hasBoundModel = Boolean(project.aiModelConfig)
 
   return (
     <>
@@ -577,7 +579,7 @@ export default function ProjectDetailPage() {
             size="sm"
             onClick={handleStartPipeline}
             loading={pipelineStarting}
-            disabled={pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING'}
+            disabled={pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING' || !hasBoundModel}
             className="gap-1.5"
           >
             <Rocket className="h-4 w-4" />
@@ -689,7 +691,7 @@ export default function ProjectDetailPage() {
                         size="sm"
                         onClick={handleStartPipeline}
                         loading={pipelineStarting}
-                        disabled={pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING'}
+                        disabled={pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING' || !hasBoundModel}
                         className="mt-4 gap-1.5"
                       >
                         <Rocket className="h-4 w-4" />
@@ -851,6 +853,23 @@ export default function ProjectDetailPage() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4 text-sm">
+                    {!project.preflight.hasModel && (
+                      <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">
+                        <div className="font-medium">先绑定 AI 模型，再启动主链路</div>
+                        <div className="mt-1 text-xs leading-5 text-amber-700 dark:text-amber-300">
+                          绑定方式很简单：如果你已经在“系统设置 → AI 配置”里创建过配置，就点“编辑项目”在 AI 模型配置里选择它；
+                          如果还没有配置，先去系统设置新增一个，再回来选择。
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Button size="sm" variant="primary" onClick={() => setShowEditModal(true)}>
+                            编辑项目
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => router.push('/settings')}>
+                            去系统设置
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                     <div className="grid grid-cols-2 gap-2 text-gray-600 dark:text-gray-400">
                       <div>模型：{project.preflight.hasModel ? '已绑定' : '未绑定'}</div>
                       <div>蓝图：{project.preflight.hasBlueprint ? '已生成' : '未生成'}</div>
@@ -864,6 +883,7 @@ export default function ProjectDetailPage() {
                       <div>角色档案：{project.preflight.characterCount} 条</div>
                       <div>伏笔：{project.preflight.plotlineCount} 条</div>
                       <div>研究资料：{project.preflight.researchRefCount} 条</div>
+                      <div>RAG 文档：{project.preflight.ragDocumentCount} 条</div>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
