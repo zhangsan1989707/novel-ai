@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button, Input, Select, Modal, Badge, Card, CardContent, Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui'
 import { AgentManager, WorkflowHooksPanel } from '@/components/ai'
-import { Plus, Trash2, Edit2, Check, Key, Shield, Play, Loader2, CheckCircle, XCircle, Bot, Workflow } from 'lucide-react'
+import { Plus, Trash2, Edit2, Check, Key, Shield, Play, Loader2, CheckCircle, XCircle, Bot, Workflow, Eye, EyeOff } from 'lucide-react'
 import { AIVendor } from '@/types'
 
 interface AIConfig {
@@ -73,6 +73,7 @@ export default function SettingsPage() {
     apiEndpoint: '',
     isDefault: false,
   })
+  const [showApiKey, setShowApiKey] = useState(false)
 
   const [activeTab, setActiveTab] = useState<'ai-configs' | 'agents' | 'hooks'>('ai-configs')
   const [loadedTabs, setLoadedTabs] = useState<Set<string>>(new Set(['ai-configs']))
@@ -103,6 +104,7 @@ export default function SettingsPage() {
 
   const openModal = (config?: AIConfig) => {
     setTestResult(null)
+    setShowApiKey(false)
     if (config) {
       setEditingConfig(config)
       setFormData({
@@ -128,8 +130,18 @@ export default function SettingsPage() {
   }
 
   const handleTest = async () => {
-    if (!formData.modelId || !formData.apiKey) {
+    if (!formData.modelId || (!formData.apiKey && !editingConfig)) {
       setTestResult({ success: false, message: '请先填写模型 ID 和 API Key' })
+      return
+    }
+
+    // 如果是编辑模式且没有输入新的API Key，我们需要获取完整的API Key来测试
+    let apiKeyToUse = formData.apiKey
+    if (editingConfig && !formData.apiKey) {
+      // 这里我们需要一个API来获取完整的API Key用于测试
+      // 但是考虑到安全性，我们暂时使用后端的 test/{id} 接口
+      // 不过这需要修改逻辑，先跳过这里，我们稍后调整
+      setTestResult({ success: false, message: '编辑时测试功能暂时不可用，请重新输入 API Key' })
       return
     }
 
@@ -163,8 +175,12 @@ export default function SettingsPage() {
   }
 
   const handleSubmit = async () => {
-    if (!formData.name || !formData.modelId || !formData.apiKey) {
+    if (!formData.name || !formData.modelId) {
       setTestResult({ success: false, message: '请填写必填字段' })
+      return
+    }
+    if (!editingConfig && !formData.apiKey) {
+      setTestResult({ success: false, message: '请填写 API Key' })
       return
     }
 
@@ -177,7 +193,11 @@ export default function SettingsPage() {
         ? `/api/novel/ai-configs/${editingConfig.id}`
         : '/api/novel/ai-configs'
       const body = editingConfig
-        ? { ...formData, id: editingConfig.id }
+        ? { 
+            ...formData, 
+            id: editingConfig.id,
+            apiKey: formData.apiKey.trim() || undefined 
+          }
         : formData
 
       const res = await fetch(url, {
@@ -464,10 +484,19 @@ export default function SettingsPage() {
 
           <Input
             label="API Key"
-            type="password"
-            placeholder="请输入您的 API Key"
+            type={showApiKey ? "text" : "password"}
+            placeholder={editingConfig ? "留空则保持不变，或输入新的 API Key" : "请输入您的 API Key"}
             value={formData.apiKey}
             onChange={(e) => setFormData({ ...formData, apiKey: e.target.value })}
+            rightAction={
+              <button
+                type="button"
+                onClick={() => setShowApiKey(!showApiKey)}
+                className="text-gray-500 hover:text-gray-700 focus:outline-none"
+              >
+                {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            }
           />
 
           <Input
