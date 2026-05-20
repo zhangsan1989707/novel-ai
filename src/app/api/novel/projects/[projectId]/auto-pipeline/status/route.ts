@@ -37,12 +37,35 @@ export async function GET(
 
     return NextResponse.json({
       success: true,
-      data: {
-        isRunning,
-        progress: progress || null,
-        latestChapter: latestChapter || null,
-        totalWordCount: project?.currentWordCount || 0,
-      },
+      data: progress
+        ? {
+            ...progress,
+            status: progress.status.toUpperCase(),
+            isRunning,
+            latestChapter: latestChapter || null,
+            totalWordCount: project?.currentWordCount || 0,
+          }
+        : {
+            jobId: 0,
+            currentChapter: 0,
+            totalChapters: 0,
+            startChapter: 0,
+            endChapter: 0,
+            status: 'IDLE',
+            completedChapters: 0,
+            failedChapters: 0,
+            startTime: 0,
+            elapsedMs: 0,
+            currentStep: '',
+            total: 0,
+            completed: 0,
+            failed: 0,
+            chapters: [],
+            startedAt: new Date().toISOString(),
+            isRunning,
+            latestChapter: latestChapter || null,
+            totalWordCount: project?.currentWordCount || 0,
+          },
     })
   } catch (error) {
     console.error('Auto pipeline status error:', error)

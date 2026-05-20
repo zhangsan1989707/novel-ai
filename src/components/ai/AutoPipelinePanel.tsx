@@ -1,12 +1,12 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Button, Input, Card, CardContent, CardHeader, CardTitle, Badge, Progress, toast } from '@/components/ui'
-import { Rocket, Play, Zap, Scale, Sparkles, Loader2, CheckCircle2, XCircle, Clock, Settings, AlertCircle, Shield } from 'lucide-react'
+import { Button, Input, Card, CardContent, CardHeader, CardTitle, Progress, toast } from '@/components/ui'
+import { Rocket, Play, Pause, Zap, Scale, Sparkles, Loader2, CheckCircle2, XCircle, Clock, Settings, AlertCircle, Shield } from 'lucide-react'
 
 interface PipelineProgress {
-  jobId: string
-  status: 'RUNNING' | 'COMPLETED' | 'FAILED' | 'IDLE'
+  jobId: number
+  status: 'RUNNING' | 'PAUSED' | 'COMPLETED' | 'FAILED' | 'IDLE'
   startChapter: number
   endChapter: number
   total: number
@@ -20,6 +20,10 @@ interface PipelineProgress {
     status: 'completed' | 'failed' | 'pending' | 'generating'
     error?: string
   }>
+  totalChapters?: number
+  completedChapters?: number
+  failedChapters?: number
+  elapsedMs?: number
 }
 
 interface AutoPipelinePanelProps {
@@ -92,6 +96,8 @@ export function AutoPipelinePanel({ projectId, maxChapter, onClose }: AutoPipeli
         } else if (p.status === 'FAILED') {
           setRunning(false)
           toast.error('全自动流水线执行失败')
+        } else if (p.status === 'PAUSED') {
+          setRunning(false)
         }
       }
     } catch {
@@ -129,30 +135,8 @@ export function AutoPipelinePanel({ projectId, maxChapter, onClose }: AutoPipeli
   }, [running, fetchStatus])
 
   useEffect(() => {
-    if (!running || !startTime) {
-      setElapsedMs(0)
-      if (timerRef.current) {
-        clearInterval(timerRef.current)
-        timerRef.current = null
-      }
-      return
-    }
-
-    setElapsedMs(Date.now() - startTime.getTime())
-    timerRef.current = setInterval(() => {
-      setElapsedMs(Date.now() - startTime.getTime())
-    }, 1000)
-
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current)
-        timerRef.current = null
-      }
-    }
-  }, [running, fetchStatus])
-
-  useEffect(() => {
     if (running && startTime) {
+      setElapsedMs(Date.now() - startTime.getTime())
       timerRef.current = setInterval(() => {
         setElapsedMs(Date.now() - startTime.getTime())
       }, 500)
@@ -160,9 +144,6 @@ export function AutoPipelinePanel({ projectId, maxChapter, onClose }: AutoPipeli
       if (timerRef.current) {
         clearInterval(timerRef.current)
         timerRef.current = null
-      }
-      if (!running) {
-        setElapsedMs(0)
       }
     }
     return () => {
@@ -214,8 +195,44 @@ export function AutoPipelinePanel({ projectId, maxChapter, onClose }: AutoPipeli
     }
   }
 
-  const active = running || (progress !== null && progress.status === 'RUNNING')
+  const handlePause = async () => {
+    try {
+      const res = await fetch(`/api/novel/projects/${projectId}/auto-pipeline/pause`, {
+        method: 'POST',
+      })
+      const data = await res.json()
+      if (data.success) {
+        setRunning(false)
+        setProgress((prev) => (prev ? { ...prev, status: 'PAUSED' } : prev))
+        toast.success('全自动流水线已暂停')
+      } else {
+        toast.error(data.error?.message || '暂停失败')
+      }
+    } catch {
+      toast.error('暂停失败')
+    }
+  }
+
+  const handleResume = async () => {
+    try {
+      const res = await fetch(`/api/novel/projects/${projectId}/auto-pipeline/resume`, {
+        method: 'POST',
+      })
+      const data = await res.json()
+      if (data.success) {
+        setRunning(true)
+        toast.success('全自动流水线已恢复')
+      } else {
+        toast.error(data.error?.message || '恢复失败')
+      }
+    } catch {
+      toast.error('恢复失败')
+    }
+  }
+
+  const active = running || (progress !== null && (progress.status === 'RUNNING' || progress.status === 'PAUSED'))
   const finished = progress !== null && (progress.status === 'COMPLETED' || progress.status === 'FAILED')
+  const paused = progress !== null && progress.status === 'PAUSED'
   const doneCount = progress ? (progress.completed + progress.failed) : 0
   const progressPercent = progress && progress.total > 0
     ? Math.round((doneCount / progress.total) * 100)
@@ -368,8 +385,12 @@ export function AutoPipelinePanel({ projectId, maxChapter, onClose }: AutoPipeli
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />
-              全自动流水线运行中
+              {paused ? (
+                <Pause className="h-5 w-5 text-amber-600" />
+              ) : (
+                <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />
+              )}
+              {paused ? '全自动流水线已暂停' : '全自动流水线运行中'}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -446,6 +467,25 @@ export function AutoPipelinePanel({ projectId, maxChapter, onClose }: AutoPipeli
               已运行 {formatElapsed(elapsedMs)}
               {progress && progress.total > 0 && doneCount < progress.total && (
                 <> · 预计剩余 {estimateRemaining(progress.completed, progress.failed, progress.total, elapsedMs)}</>
+              )}
+            </div>
+
+            <div className="flex gap-3">
+              {progress?.status === 'RUNNING' ? (
+                <Button variant="outline" onClick={handlePause} className="flex-1 gap-2">
+                  <Pause className="h-4 w-4" />
+                  暂停
+                </Button>
+              ) : progress?.status === 'PAUSED' ? (
+                <Button variant="primary" onClick={handleResume} className="flex-1 gap-2">
+                  <Play className="h-4 w-4" />
+                  继续运行
+                </Button>
+              ) : null}
+              {onClose && (
+                <Button variant="outline" onClick={onClose}>
+                  关闭
+                </Button>
               )}
             </div>
           </CardContent>

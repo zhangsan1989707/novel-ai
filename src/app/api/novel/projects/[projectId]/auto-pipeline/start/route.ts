@@ -40,7 +40,8 @@ export async function POST(
       )
     }
 
-    if (autoPipelineScheduler.isRunning(pid)) {
+    const activeProgress = autoPipelineScheduler.getProgress(pid)
+    if (activeProgress && (activeProgress.status === 'running' || activeProgress.status === 'paused')) {
       return NextResponse.json(
         { success: false, error: { code: 'ALREADY_RUNNING', message: '该项目已有流水线在运行中' } },
         { status: 409 }

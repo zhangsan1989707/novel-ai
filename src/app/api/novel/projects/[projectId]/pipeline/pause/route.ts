@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { resumeJob } from '@/lib/engine/generation-job'
-import { runProductionPipeline } from '@/lib/engine/production-pipeline'
+import { pauseJob } from '@/lib/engine/generation-job'
 
 export async function POST(
   _request: NextRequest,
@@ -21,25 +20,37 @@ export async function POST(
     const project = await prisma.novelProject.findUnique({ where: { id: projectId } })
     if (!project || !project.pipelineJobId) {
       return NextResponse.json(
-        { success: false, error: { code: 'NOT_FOUND', message: '没有可恢复的流水线任务' } },
+        { success: false, error: { code: 'NOT_FOUND', message: '没有可暂停的流水线任务' } },
         { status: 404 }
       )
     }
 
-    const resumed = await resumeJob(project.pipelineJobId)
-    if (!resumed) {
+    const job = await prisma.generationJob.findUnique({
+      where: { id: project.pipelineJobId },
+      select: { status: true },
+    })
+    if (!job || job.status === 'COMPLETED' || job.status === 'FAILED') {
       return NextResponse.json(
-        { success: false, error: { code: 'RESUME_FAILED', message: '恢复任务失败，任务可能不在失败或暂停状态' } },
+        { success: false, error: { code: 'INVALID_STATE', message: '当前任务不能暂停' } },
         { status: 400 }
       )
     }
-    void runProductionPipeline(project.pipelineJobId)
 
-    return NextResponse.json({ success: true, data: { jobId: project.pipelineJobId, status: 'pending' } })
+    if (job.status !== 'PAUSED') {
+      await pauseJob(project.pipelineJobId)
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        jobId: project.pipelineJobId,
+        status: 'paused',
+      },
+    })
   } catch (error) {
-    console.error('Pipeline resume error:', error)
+    console.error('Pipeline pause error:', error)
     return NextResponse.json(
-      { success: false, error: { code: 'INTERNAL_ERROR', message: '恢复流水线失败' } },
+      { success: false, error: { code: 'INTERNAL_ERROR', message: '暂停流水线失败' } },
       { status: 500 }
     )
   }

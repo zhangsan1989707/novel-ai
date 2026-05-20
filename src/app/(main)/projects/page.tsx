@@ -95,7 +95,7 @@ export default function ProjectsPage() {
         }
       }
     } catch (error) {
-      console.error('获取项目列表失败:', error)
+      console.error('获取小说列表失败:', error)
     } finally {
       setLoading(false)
     }
@@ -117,12 +117,12 @@ export default function ProjectsPage() {
         setShowDeleteModal(false)
         setDeleteProjectId(null)
         fetchProjects()
-        toast.success('项目已删除')
+        toast.success('小说已删除')
       } else {
         toast.error(result.error?.message || '删除失败')
       }
     } catch (error) {
-      console.error('删除项目失败:', error)
+      console.error('删除小说失败:', error)
       toast.error('删除失败，请重试')
     } finally {
       setSubmitting(false)
@@ -135,7 +135,7 @@ export default function ProjectsPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-foreground">我的小说</h1>
-          <p className="text-sm text-muted-foreground">{total} 个项目</p>
+          <p className="text-sm text-muted-foreground">{total} 部小说</p>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => setShowAnalyzeModal(true)}>
@@ -156,7 +156,7 @@ export default function ProjectsPage() {
           <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="搜索项目..."
+              placeholder="搜索小说..."
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value)
@@ -208,7 +208,7 @@ export default function ProjectsPage() {
         )}
       </div>
 
-      {/* 项目列表 */}
+      {/* 小说列表 */}
       {loading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {[...Array(8)].map((_, i) => (
@@ -274,8 +274,8 @@ export default function ProjectsPage() {
       <Modal
         open={showDeleteModal}
         onClose={() => setShowDeleteModal(false)}
-        title="删除项目"
-        description="确定要删除这个项目吗？此操作不可撤销，所有章节内容也将被删除。"
+        title="删除小说"
+        description="确定要删除这本小说吗？此操作不可撤销，所有章节内容也将被删除。"
       >
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={() => setShowDeleteModal(false)}>

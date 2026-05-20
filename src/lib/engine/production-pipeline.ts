@@ -42,6 +42,14 @@ type ArcPlanOutput = {
   keyEvents?: string[]
 }
 
+async function isJobPaused(jobId: number): Promise<boolean> {
+  const job = await prisma.generationJob.findUnique({
+    where: { id: jobId },
+    select: { status: true },
+  })
+  return job?.status === 'PAUSED'
+}
+
 export async function createProjectProvider(projectId: number): Promise<AIProvider> {
   const project = await prisma.novelProject.findUnique({
     where: { id: projectId },
@@ -565,8 +573,18 @@ export async function runProductionPipeline(jobId: number): Promise<void> {
     })
     await saveCheckpoint(jobId, 'chapter_list' as PipelineStep, { projectId }, { chapters: outlines })
 
+    if (await isJobPaused(jobId)) {
+      await updateJobRuntime(jobId, runtime)
+      return
+    }
+
     let completed = 0
     for (const outline of outlines) {
+      if (await isJobPaused(jobId)) {
+        await updateJobRuntime(jobId, runtime)
+        return
+      }
+
       await updateJobStep(jobId, 'write' as PipelineStep, 4, outlines.length, completed + 1)
       setCurrentChapter(outline.chapterNumber, outline.title)
       const result = await runChapterGenerationPipeline(projectId, outline.chapterNumber, handlePipelineEvent)
@@ -588,6 +606,11 @@ export async function runProductionPipeline(jobId: number): Promise<void> {
         { chapterNumber: outline.chapterNumber },
         { chapterId: result.chapterId, completed }
       )
+    }
+
+    if (await isJobPaused(jobId)) {
+      await updateJobRuntime(jobId, runtime)
+      return
     }
 
     await updateJobStep(jobId, 'summarize' as PipelineStep, 8, outlines.length, completed)

@@ -6,7 +6,7 @@ import { Button, Card, CardContent, CardHeader, CardTitle, Badge, Progress, Moda
 import { BlueprintConsole, ProjectBaseInfoForm, ProjectBaseInfoFormData } from '@/components/project'
 import { Toolbox, AutoPipelinePanel } from '@/components/ai'
 import { CoverGenerator, PlotAnalyzer, ResearchPanel, ReviewPanel, DeslopPanel, ExportPanel } from '@/components/ai'
-import { BookOpen, Clock, Target, Users, Layers, Search, ClipboardList, Rocket, Shield, Sparkles, ChevronRight, ChevronDown, Wrench, Eye, Play, AlertCircle, CheckCircle2, Loader2, Download } from 'lucide-react'
+import { BookOpen, Clock, Target, Users, Layers, Search, ClipboardList, Rocket, Shield, Sparkles, ChevronRight, ChevronDown, Wrench, Eye, Play, Pause, AlertCircle, CheckCircle2, Loader2, Download } from 'lucide-react'
 import type { ProjectStatus } from '@/types'
 import type { PipelineRuntimeState } from '@/lib/engine/pipeline-runtime'
 import type { BlueprintConsoleSnapshot } from '@/lib/engine/blueprint-console'
@@ -401,6 +401,23 @@ export default function ProjectDetailPage() {
     }
   }
 
+  const handlePausePipeline = async () => {
+    try {
+      const res = await fetch(`/api/novel/projects/${projectId}/pipeline/pause`, {
+        method: 'POST',
+      })
+      const data = await res.json()
+      if (data.success) {
+        toast.success('流水线已暂停')
+        fetchProject()
+      } else {
+        toast.error(data.error?.message || '暂停失败')
+      }
+    } catch {
+      toast.error('暂停失败')
+    }
+  }
+
   const handleStartPipeline = async () => {
     setPipelineStarting(true)
     try {
@@ -538,19 +555,41 @@ export default function ProjectDetailPage() {
       </div>
 
       {/* Pipeline Progress Panel */}
-      {pipeline && (pipeline.status === 'RUNNING' || pipeline.status === 'PENDING') && (
-        <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 dark:border-blue-900/60 dark:bg-blue-900/20">
+      {pipeline && (pipeline.status === 'RUNNING' || pipeline.status === 'PENDING' || pipeline.status === 'PAUSED') && (
+        <div className={`mb-4 rounded-lg px-4 py-3 ${
+          pipeline.status === 'PAUSED'
+            ? 'border border-amber-200 bg-amber-50 dark:border-amber-900/60 dark:bg-amber-900/20'
+            : 'border border-blue-200 bg-blue-50 dark:border-blue-900/60 dark:bg-blue-900/20'
+        }`}>
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
-              <Loader2 className={`h-4 w-4 text-blue-600 ${pipeline.status === 'RUNNING' ? 'animate-spin' : ''}`} />
-              <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
-                {pipeline.status === 'PENDING' ? '流水线准备中' : `流水线${getPipelineStatusLabel(pipeline.status)}`}
+              <Loader2
+                className={`h-4 w-4 ${
+                  pipeline.status === 'PAUSED'
+                    ? 'text-amber-600'
+                    : 'text-blue-600'
+                } ${pipeline.status === 'RUNNING' ? 'animate-spin' : ''}`}
+              />
+              <span className={`text-sm font-medium ${
+                pipeline.status === 'PAUSED'
+                  ? 'text-amber-700 dark:text-amber-300'
+                  : 'text-blue-700 dark:text-blue-300'
+              }`}>
+                {pipeline.status === 'PENDING'
+                  ? '流水线准备中'
+                  : pipeline.status === 'PAUSED'
+                    ? '流水线已暂停'
+                    : `流水线${getPipelineStatusLabel(pipeline.status)}`}
               </span>
             </div>
-            <span className="text-xs text-blue-500">{pipeline.progress}%</span>
+            <span className={`text-xs ${pipeline.status === 'PAUSED' ? 'text-amber-500' : 'text-blue-500'}`}>{pipeline.progress}%</span>
           </div>
           <Progress value={pipeline.progress} max={100} size="sm" />
-          <div className="flex items-center justify-between mt-2 text-xs text-blue-600 dark:text-blue-400">
+          <div className={`flex items-center justify-between mt-2 text-xs ${
+            pipeline.status === 'PAUSED'
+              ? 'text-amber-600 dark:text-amber-400'
+              : 'text-blue-600 dark:text-blue-400'
+          }`}>
             <span>
               <span className="font-medium">{getPipelineStepLabel(pipeline.currentStep)}</span>
             </span>
@@ -559,7 +598,11 @@ export default function ProjectDetailPage() {
             </span>
           </div>
           {liveChapter && (
-            <div className="mt-3 rounded-md bg-blue-50/80 px-3 py-2 text-xs text-blue-700 dark:bg-blue-950/30 dark:text-blue-300">
+            <div className={`mt-3 rounded-md px-3 py-2 text-xs ${
+              pipeline.status === 'PAUSED'
+                ? 'bg-amber-50/80 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300'
+                : 'bg-blue-50/80 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300'
+            }`}>
               <div className="flex items-center justify-between gap-3">
                 <span>当前章节：第 {liveChapter.chapterNumber} 章 {liveChapter.title || ''}</span>
                 <span>{getPipelineStepLabel(liveChapter.currentPhase || liveChapter.currentAgent || 'WRITE')}</span>
@@ -573,6 +616,19 @@ export default function ProjectDetailPage() {
               )}
             </div>
           )}
+          <div className="mt-3 flex items-center gap-2">
+            {pipeline.status === 'RUNNING' || pipeline.status === 'PENDING' ? (
+              <Button variant="outline" size="sm" onClick={handlePausePipeline} className="gap-1.5">
+                <Pause className="h-3.5 w-3.5" />
+                暂停
+              </Button>
+            ) : (
+              <Button variant="primary" size="sm" onClick={handleResumePipeline} className="gap-1.5">
+                <Play className="h-3.5 w-3.5" />
+                继续运行
+              </Button>
+            )}
+          </div>
         </div>
       )}
 
@@ -620,7 +676,7 @@ export default function ProjectDetailPage() {
             size="sm"
             onClick={handleStartPipeline}
             loading={pipelineStarting}
-            disabled={pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING' || !hasBoundModel}
+            disabled={pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING' || pipeline?.status === 'PAUSED' || !hasBoundModel}
             className="gap-1.5"
           >
             <Rocket className="h-4 w-4" />
@@ -750,7 +806,7 @@ export default function ProjectDetailPage() {
                         size="sm"
                         onClick={handleStartPipeline}
                         loading={pipelineStarting}
-                        disabled={pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING' || !hasBoundModel}
+                        disabled={pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING' || pipeline?.status === 'PAUSED' || !hasBoundModel}
                         className="mt-4 gap-1.5"
                       >
                         <Rocket className="h-4 w-4" />

@@ -190,7 +190,7 @@ export async function resumeJob(jobId: number): Promise<boolean> {
     include: { checkpoints: { orderBy: { createdAt: 'desc' }, take: 1 } },
   })
 
-  if (!job || job.status !== 'FAILED') return false
+  if (!job || (job.status !== 'FAILED' && job.status !== 'PAUSED')) return false
 
   const lastCheckpoint = job.checkpoints[0]
   const stepIndex = lastCheckpoint ? job.stepIndex : 0
@@ -200,7 +200,7 @@ export async function resumeJob(jobId: number): Promise<boolean> {
     data: {
       status: 'PENDING',
       stepIndex,
-      retryCount: job.retryCount + 1,
+      retryCount: job.status === 'FAILED' ? job.retryCount + 1 : job.retryCount,
       errorMessage: null,
     },
   })
