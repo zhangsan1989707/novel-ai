@@ -5,6 +5,7 @@ import { createProviderFromDefaultConfig, buildPlotAnalysisPrompt } from '@/lib/
 import { getVolumeChapterRange } from '@/lib/ai/context-manager'
 import { prisma } from '@/lib/prisma'
 import { AIVendor, AnalysisDimension, AnalysisType } from '@/types'
+import { buildChapterMemoryPack, buildMemorySnapshotPack } from '@/lib/memory'
 import { getChapterSummariesInRange, saveChapterSummary } from '@/lib/memory/chapter-summary'
 import { logger, logError } from '@/lib/logger'
 
@@ -262,7 +263,8 @@ async function generateLayeredAnalysis(
   recentChapters: { chapterNumber: number; title: string; content: string }[],
   dimensions: AnalysisDimension[],
   provider: Awaited<ReturnType<typeof createProviderFromDefaultConfig>>,
-  temperature: number
+  temperature: number,
+  memoryContext?: string
 ): Promise<string> {
   // 构建摘要文本
   const summaryText = summaries
@@ -317,6 +319,8 @@ async function generateLayeredAnalysis(
 
 【基础信息】
 类型: ${genre || '未知'}
+
+${memoryContext ? `【记忆编排上下文】\n${memoryContext}\n` : ''}
 
 【章节摘要汇总】
 ${summaryText}
@@ -444,6 +448,16 @@ export async function POST(request: NextRequest) {
 
     // 获取 AI Provider - 优先使用数据库默认配置
     const provider = await createProviderFromDefaultConfig()
+    const targetChapterNo = chaptersToAnalyze.length > 0
+      ? chaptersToAnalyze[chaptersToAnalyze.length - 1].chapterNumber
+      : (project.chapters[project.chapters.length - 1]?.chapterNumber || 1)
+    const memoryPack = await buildChapterMemoryPack(projectId, targetChapterNo, {
+      recentChapterCount: Math.max(3, contextChapterCount),
+      recentVolumeCount: 3,
+      characterLimit: 10,
+      plotlineLimit: 10,
+      researchLimit: 3,
+    })
 
     // 决定使用哪种分析模式
     const useLayeredAnalysis = chapters.length > LAYERED_ANALYSIS_THRESHOLD
@@ -494,7 +508,8 @@ export async function POST(request: NextRequest) {
         recentChapters,
         dimensions as AnalysisDimension[],
         provider,
-        temperature
+        temperature,
+        memoryPack.summarizerContext
       )
     } else {
       // 直接分析（章节数较少时）
@@ -507,6 +522,7 @@ export async function POST(request: NextRequest) {
           protagonistProfile: project.protagonistProfile || undefined,
           antagonistSetting: project.antagonistSetting || undefined,
           previousChapters: chapters,
+          memoryContext: memoryPack.summarizerContext,
         },
         {
           dimensions: dimensions as AnalysisDimension[],
@@ -577,6 +593,13 @@ export async function POST(request: NextRequest) {
         analysisId: results[0]?.dimension || 'unknown',
         results,
         layeredAnalysis: useLayeredAnalysis,
+        memoryPack: buildMemorySnapshotPack(memoryPack),
+        contexts: {
+          planner: memoryPack.plannerContext,
+          writer: memoryPack.writerContext,
+          validator: memoryPack.validatorContext,
+          summarizer: memoryPack.summarizerContext,
+        },
       },
     })
   } catch (error) {

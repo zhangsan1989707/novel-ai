@@ -118,6 +118,7 @@ export async function buildPromptContext(
     contextChapterCount: number
     includeStageOutline: boolean
     maxCharsPerChapter?: number
+    memoryContext?: string
   }
 ): Promise<PromptContext> {
   const maxCharsPerChapter = options.maxCharsPerChapter || 600
@@ -173,6 +174,7 @@ export async function buildPromptContext(
     currentChapterNumber: currentChapter.chapterNumber,
     currentChapterTitle: currentChapter.title,
     currentChapterSummary: currentChapter.summary || undefined,
+    memoryContext: options.memoryContext,
     previousChapters: processedPreviousChapters.length > 0 ? processedPreviousChapters : undefined,
     stageOutline,
     virtualWriterStyle,

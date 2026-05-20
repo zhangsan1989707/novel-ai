@@ -11,6 +11,7 @@ interface SummarizerInput {
   chapterNo: number
   chapterTitle: string
   chapterContent: string
+  memoryContext?: string
   worldSetting?: string | null
   protagonistProfile?: string | null
   provider?: AIProvider
@@ -32,6 +33,7 @@ export async function summarizerAgent(
     chapterNo,
     chapterTitle,
     chapterContent,
+    memoryContext: input.memoryContext,
     worldSetting,
     protagonistProfile,
   })

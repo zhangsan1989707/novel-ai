@@ -13,6 +13,7 @@ interface ValidatorInput {
   newChapterContent: string
   characterProfiles: CharacterProfile[]
   recentSummaries: { chapterNo: number; summary: string }[]
+  memoryContext?: string
   worldSetting?: string | null
   openPlotlines: PlotlineData[]
   chapterTitle?: string
@@ -51,6 +52,7 @@ export async function validatorAgent(
     chapterNo,
     newChapterContent,
     characterProfiles: characterProfilesStr,
+    memoryContext: input.memoryContext,
     recentSummaries: recentSummaries.map(s => `第${s.chapterNo}章：${s.summary}`).join('\n'),
     worldSetting,
     openPlotlines: plotlinesStr,

@@ -8,6 +8,7 @@ import { prisma } from '@/lib/prisma'
 import { createProviderFromEnv } from '@/lib/ai'
 import { getVolumeSummary, saveVolumeSummary, buildVolumeSummaryFromChapterSummaries, calculateVolume } from '@/lib/memory/volume-summary'
 import { getBookSummary, saveBookSummary, buildBookSummaryFromVolumeSummaries } from '@/lib/memory/book-summary'
+import { buildChapterMemoryPack, buildMemorySnapshotPack } from '@/lib/memory'
 import { AIVendor } from '@/types'
 import { getChapterSummariesInRange } from '@/lib/memory/chapter-summary'
 
@@ -82,6 +83,13 @@ export async function generateVolumeSummary(
     const endChapter = Math.min(volumeNumber * chaptersPerVolume, totalChapters)
 
     const summaries = await getChapterSummariesInRange(projectId, startChapter, endChapter)
+    const memoryPack = await buildChapterMemoryPack(projectId, endChapter, {
+      recentChapterCount: 5,
+      recentVolumeCount: 2,
+      characterLimit: 8,
+      plotlineLimit: 8,
+      researchLimit: 3,
+    })
 
     // 构建 AI 提示词
     const provider = createProviderFromEnv(vendor)
@@ -94,6 +102,9 @@ export async function generateVolumeSummary(
 
 【章节摘要汇总】
 ${summaries.map(s => `第${s.chapterNo}章: ${s.summary}`).join('\n')}
+
+【记忆编排上下文】
+${memoryPack.summarizerContext}
 
 【本卷关键事件】
 ${volumeData.keyEvents.join('\n') || '暂无记录'}
@@ -164,6 +175,18 @@ export async function generateBookSummary(
 
     // 构建全书摘要基础数据
     const bookData = await buildBookSummaryFromVolumeSummaries(projectId, project.totalVolumes)
+    const lastChapter = await prisma.novelChapter.findFirst({
+      where: { projectId, status: 'COMPLETED' },
+      orderBy: { chapterNumber: 'desc' },
+      select: { chapterNumber: true },
+    })
+    const memoryPack = await buildChapterMemoryPack(projectId, lastChapter?.chapterNumber || 1, {
+      recentChapterCount: 5,
+      recentVolumeCount: 3,
+      characterLimit: 10,
+      plotlineLimit: 10,
+      researchLimit: 3,
+    })
 
     // 构建 AI 提示词
     const provider = createProviderFromEnv(vendor)
@@ -177,6 +200,9 @@ export async function generateBookSummary(
 
 【各卷摘要】
 ${volumeSummaries.map(v => `第${v.volumeNumber}卷:\n${v.summary}`).join('\n\n')}
+
+【记忆编排上下文】
+${memoryPack.summarizerContext}
 
 【伏笔统计】
 - 总伏笔数: ${bookData.totalPlotlines}
@@ -297,42 +323,33 @@ export async function getHierarchicalContext(
   chapterSummaries: { chapterNo: number; summary: string }[]
   volumeSummary: string | null
   bookSummary: string | null
+  memoryPack: ReturnType<typeof buildMemorySnapshotPack>
+  contexts: {
+    planner: string
+    writer: string
+    validator: string
+    summarizer: string
+  }
 }> {
-  const project = await prisma.novelProject.findUnique({
-    where: { id: projectId },
-    select: { totalVolumes: true },
+  const memoryPack = await buildChapterMemoryPack(projectId, currentChapter, {
+    recentChapterCount: 5,
+    recentVolumeCount: 2,
   })
 
-  if (!project) {
-    return { chapterSummaries: [], volumeSummary: null, bookSummary: null }
-  }
-
-  // 1. 获取最近章节摘要（最近 3-5 章）
-  const recentSummaries = await prisma.chapterSummary.findMany({
-    where: { projectId },
-    orderBy: { chapterNo: 'desc' },
-    take: 5,
-  })
-  recentSummaries.sort((a, b) => a.chapterNo - b.chapterNo)
-
-  // 2. 获取卷摘要
-  let volumeSummary: string | null = null
-  if (options.includeVolumeSummary) {
-    const currentVolume = calculateVolume(currentChapter, project.totalVolumes, 100)
-    const volSummary = await getVolumeSummary(projectId, currentVolume)
-    volumeSummary = volSummary?.summary || null
-  }
-
-  // 3. 获取全书摘要
-  let bookSummary: string | null = null
-  if (options.includeBookSummary) {
-    const book = await getBookSummary(projectId)
-    bookSummary = book?.summary || null
-  }
+  const currentVolumeSummary = memoryPack.volumeSummaries.find(volume => volume.volumeNumber === memoryPack.currentVolume)?.summary || null
+  const volumeSummary = options.includeVolumeSummary ? currentVolumeSummary : null
+  const bookSummary = options.includeBookSummary ? memoryPack.bookSummary?.summary || null : null
 
   return {
-    chapterSummaries: recentSummaries.map(s => ({ chapterNo: s.chapterNo, summary: s.summary })),
+    chapterSummaries: memoryPack.recentChapterSummaries.map(s => ({ chapterNo: s.chapterNo, summary: s.summary })),
     volumeSummary,
     bookSummary,
+    memoryPack: buildMemorySnapshotPack(memoryPack),
+    contexts: {
+      planner: memoryPack.plannerContext,
+      writer: memoryPack.writerContext,
+      validator: memoryPack.validatorContext,
+      summarizer: memoryPack.summarizerContext,
+    },
   }
 }

@@ -6,6 +6,7 @@ interface PlannerPromptInput {
   projectTitle: string
   genre?: string | null
   writingStyle?: string | null
+  memoryContext?: string
   worldSetting?: string | null
   powerSystem?: string | null
   protagonistProfile?: string | null
@@ -41,6 +42,11 @@ export function buildPlannerPrompt(input: PlannerPromptInput): string {
   parts.push(`- 目标字数：${input.targetWordCount}字`)
   if (input.genre) parts.push(`- 小说类型：${input.genre}`)
   if (input.writingStyle) parts.push(`- 写作风格：${input.writingStyle}`)
+
+  if (input.memoryContext) {
+    parts.push(`\n## 记忆编排上下文`)
+    parts.push(input.memoryContext)
+  }
 
   if (input.worldSetting) {
     parts.push(`\n## 世界观设定`)

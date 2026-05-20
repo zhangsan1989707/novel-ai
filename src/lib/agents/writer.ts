@@ -12,6 +12,7 @@ interface WriterInput extends AgentContext {
   characterProfiles: CharacterProfile[]
   recentSummaries: { chapterNo: number; summary: string }[]
   targetWordCount: number
+  memoryContext?: string
   useEnhancedPrompt?: boolean
   provider?: AIProvider
 }
@@ -41,6 +42,7 @@ export async function writerAgent(
     projectTitle: context.projectTitle,
     genre: context.genre,
     writingStyle: context.writingStyle,
+    memoryContext: input.memoryContext,
     worldSetting: context.worldSetting,
     powerSystem: context.powerSystem,
     chapterNo,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { logError } from '@/lib/logger'
+import { buildChapterMemoryPack, buildMemorySnapshotPack } from '@/lib/memory'
 
 /**
  * GET /api/novel/ai/chapter-rhythm/[projectId]
@@ -63,6 +64,13 @@ export async function GET(
     const avgEmotionalIntensity = rhythmData.length > 0
       ? Math.round(rhythmData.reduce((sum, d) => sum + d.emotionalIntensity, 0) / rhythmData.length)
       : 50
+    const memoryPack = await buildChapterMemoryPack(projectIdNum, rhythmData[rhythmData.length - 1]?.chapterNo || 1, {
+      recentChapterCount: 5,
+      recentVolumeCount: 2,
+      characterLimit: 8,
+      plotlineLimit: 8,
+      researchLimit: 3,
+    })
 
     return NextResponse.json({
       success: true,
@@ -73,6 +81,13 @@ export async function GET(
           totalWordCount,
           avgWordCount,
           avgEmotionalIntensity,
+        },
+        memoryPack: buildMemorySnapshotPack(memoryPack),
+        contexts: {
+          planner: memoryPack.plannerContext,
+          writer: memoryPack.writerContext,
+          validator: memoryPack.validatorContext,
+          summarizer: memoryPack.summarizerContext,
         },
       },
     })

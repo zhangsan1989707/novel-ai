@@ -7,6 +7,7 @@ interface ValidatorPromptInput {
   newChapterContent: string
   characterProfiles: string
   recentSummaries: string
+  memoryContext?: string
   worldSetting?: string | null
   openPlotlines: string
   chapterTitle?: string
@@ -49,6 +50,11 @@ export function buildValidatorPrompt(input: ValidatorPromptInput): string {
   if (input.characterProfiles) {
     parts.push(`\n## 角色档案`)
     parts.push(input.characterProfiles)
+  }
+
+  if (input.memoryContext) {
+    parts.push(`\n## 记忆编排上下文`)
+    parts.push(input.memoryContext)
   }
 
   if (input.recentSummaries) {

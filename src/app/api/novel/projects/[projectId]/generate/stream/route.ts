@@ -8,6 +8,8 @@ import { AIVendor } from '@/types'
 import { logError } from '@/lib/logger'
 import { aiGenerationLimiter } from '@/lib/middleware/rate-limit'
 import { toProjectDTO, toChapterDTO } from '@/types/dto'
+import { recordAndApplyChapterCommit } from '@/lib/engine/chapter-commit'
+import { buildChapterMemoryPack } from '@/lib/memory'
 
 // ============================================
 // Schema 验证
@@ -111,6 +113,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     })
 
     // 构建提示词上下文
+    const memoryPack = await buildChapterMemoryPack(projectIdNum, chapter.chapterNumber, {
+      recentChapterCount: contextChapterCount,
+      recentVolumeCount: 2,
+      characterLimit: 10,
+      plotlineLimit: 10,
+      researchLimit: 3,
+    })
     const context = await buildPromptContext(
       project,
       chapter,
@@ -119,6 +128,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         useContext,
         contextChapterCount,
         includeStageOutline: true,
+        memoryContext: memoryPack.writerContext,
       }
     )
 
@@ -222,36 +232,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             wordCount = countChineseWords(extractedContent)
           }
 
-          // 保存生成内容
           const minimumWordCount = getMinimumChapterWordCount(targetWordCount, chapter.chapterNumber)
           const chapterReady = isChapterWordCountSufficient(wordCount, targetWordCount, chapter.chapterNumber)
-
-          const updateData: Record<string, unknown> = {
+          await recordAndApplyChapterCommit(projectIdNum as number, chapterId as number, {
+            chapterNo: chapter.chapterNumber,
+            chapterTitle: extractedTitle || chapter.title,
             content: extractedContent,
-            wordCount,
-            status: chapterReady ? 'COMPLETED' : 'REVIEWING',
-          }
-          if (extractedTitle) {
-            updateData.title = extractedTitle
-          }
-
-          await prisma.novelChapter.update({
-            where: { id: chapterId },
-            data: updateData,
-          })
-
-          // 更新项目总字数
-          const totalWordCount = await prisma.novelChapter.aggregate({
-            where: { projectId: projectIdNum as number, status: 'COMPLETED' },
-            _sum: { wordCount: true },
-          })
-
-          await prisma.novelProject.update({
-            where: { id: projectIdNum as number },
-            data: {
-              currentWordCount: totalWordCount._sum.wordCount || 0,
-            },
-          })
+            qualityStatus: chapterReady ? 'completed' : 'reviewing',
+            warning: chapterReady ? undefined : buildChapterWordCountWarning(wordCount, targetWordCount, chapter.chapterNumber),
+            targetWordCount,
+            currentWordCount: wordCount,
+            agentType: 'WRITER',
+            emittedAt: new Date().toISOString(),
+          }, 'generate-stream')
 
           // 发送完成事件
           sendEvent('done', {

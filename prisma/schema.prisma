@@ -255,6 +255,7 @@ model NovelProject {
   coverDesigns        CoverDesign[]
   reviewReports       ReviewReport[]
   shortStory          ShortStory?
+  chapterCommits      ChapterCommit[]
 
   pipelineJobs        GenerationJob[]
   bookBlueprint       BookBlueprint?
@@ -300,6 +301,7 @@ model NovelChapter {
   virtualWriter       VirtualWriter?  @relation(fields: [virtualWriterId], references: [id])
 
   versions            ChapterVersion[]
+  chapterCommits      ChapterCommit[]
 
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
@@ -308,6 +310,29 @@ model NovelChapter {
   @@index([projectId])
   @@index([projectId, status])
   @@map("novel_chapters")
+}
+
+model ChapterCommit {
+  id              String       @id @default(cuid())
+  projectId       Int
+  project         NovelProject  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  chapterId       Int?
+  chapter         NovelChapter? @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+
+  chapterNo       Int
+  source          String       @default("pipeline")
+  status          String       @default("accepted")
+  payload         Json         @default("{}")
+  projectionStatus Json        @default("{}")
+  replayCount     Int          @default(0)
+  appliedAt       DateTime?
+
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([projectId])
+  @@index([projectId, chapterNo])
+  @@map("chapter_commits")
 }
 
 model VirtualWriter {

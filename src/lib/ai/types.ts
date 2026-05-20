@@ -110,6 +110,7 @@ export interface PromptContext {
   currentChapterNumber: number
   currentChapterTitle: string
   currentChapterSummary?: string
+  memoryContext?: string
   previousChapters?: {
     chapterNumber: number
     title: string

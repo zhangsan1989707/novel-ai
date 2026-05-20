@@ -12,11 +12,12 @@ import { writerAgent } from '../agents/writer'
 import { polisherAgent } from '../agents/polisher'
 import { validatorAgent } from '../agents/validator'
 import { summarizerAgent } from '../agents/summarizer'
-import * as memory from '../memory'
+import { buildChapterMemoryPack } from '../memory'
 import * as storyState from './story-state'
 import { hookRegistry } from '../hooks/registry'
 import { directChapter } from '../agents/narrative-director'
 import { chapterDeslopper } from '../agents/deslopper'
+import { recordAndApplyChapterCommit } from './chapter-commit'
 import type {
   ChapterOutline,
   ValidationReport,
@@ -81,15 +82,24 @@ export async function runChapterGenerationPipeline(
   await storyState.initStoryState(projectId, project.totalVolumes * 25)
   const directorContext = await directChapter(chapterNo, projectId).catch(() => null)
   const directorDirective = directorContext?.fullDirective || ''
-
-  // 获取上下文数据（并行查询）
-    const [characterProfiles, openPlotlines, recentSummaries, currentState] = await Promise.all([
-      memory.getCharacterProfilesForChapter(projectId, chapterNo),
-      memory.getOpenPlotlines(projectId),
-      memory.getRecentChapterSummaries(projectId, 2),
-      storyState.getStoryState(projectId),
-    ])
-  const emotionalArc = currentState?.emotionalArc || []
+  const memoryPack = await buildChapterMemoryPack(projectId, chapterNo, {
+    recentChapterCount: 3,
+    recentVolumeCount: 2,
+    characterLimit: 10,
+    plotlineLimit: 10,
+    researchLimit: 3,
+  })
+  const emotionalArc = memoryPack.storyState?.emotionalArc || []
+  const plannerMemoryContext = [memoryPack.plannerContext, directorDirective ? `## 导演指令\n${directorDirective}` : '']
+    .filter(Boolean)
+    .join('\n\n')
+  const writerMemoryContext = [memoryPack.writerContext, directorDirective ? `## 导演指令\n${directorDirective}` : '']
+    .filter(Boolean)
+    .join('\n\n')
+  const validatorMemoryContext = [memoryPack.validatorContext, directorDirective ? `## 导演指令\n${directorDirective}` : '']
+    .filter(Boolean)
+    .join('\n\n')
+  const summarizerMemoryContext = memoryPack.summarizerContext
 
   // 更新章节状态
   const chapter = await prisma.novelChapter.upsert({
@@ -148,20 +158,22 @@ export async function runChapterGenerationPipeline(
           chapterNo,
           projectTitle: project.title,
           genre: project.genre,
-          writingStyle: [project.writingStyle, directorDirective].filter(Boolean).join('\n\n'),
-          worldSetting: [project.worldSetting, directorDirective].filter(Boolean).join('\n\n'),
+          writingStyle: project.writingStyle,
+          memoryContext: plannerMemoryContext,
+          worldSetting: project.worldSetting,
           powerSystem: project.powerSystem,
           protagonistProfile: project.protagonistProfile,
           antagonistSetting: project.antagonistSetting,
           targetWordCount: project.chapterWordCount || 3000,
-          characterProfiles: characterProfiles.map(c => ({
+          characterProfiles: memoryPack.characterProfiles.map(c => ({
             name: c.name,
             role: c.role,
             description: `${c.appearance || ''} ${c.personality || ''}`,
           })),
-          openPlotlines: openPlotlines.map(p => ({ id: p.id, description: p.description })),
+          openPlotlines: memoryPack.openPlotlines.map(p => ({ id: p.id, description: p.description })),
           emotionalArc,
-          recentChapterCount: 2,
+          recentChapterSummaries: memoryPack.recentChapterSummaries,
+          recentChapterCount: memoryPack.recentChapterSummaries.length,
           provider: sharedProvider,
         })
 
@@ -196,19 +208,10 @@ export async function runChapterGenerationPipeline(
       })
     }
 
-    // ========== Phase 1.5: 研究 Agent (可选) ==========
-    const existingRefs = await prisma.researchRef.findMany({
-      where: { projectId },
-      select: { topic: true, summary: true, keyFacts: true, creativeMaterials: true },
-    })
-
-    if (existingRefs.length > 0) {
-      emit({ type: 'research', data: { refsCount: existingRefs.length } })
+    // ========== Phase 1.5: 研究资料 ==========
+    if (memoryPack.researchRefs.length > 0) {
+      emit({ type: 'research', data: { refsCount: memoryPack.researchRefs.length } })
     }
-
-    const researchContext = existingRefs
-      .map(r => `【${r.topic}】${r.summary}\n关键事实: ${r.keyFacts.join('; ')}\n创作素材: ${r.creativeMaterials.join('; ')}`)
-      .join('\n\n')
 
     // ========== Phase 2: 写作 Agent ==========
     let draftContent = ''
@@ -223,18 +226,15 @@ export async function runChapterGenerationPipeline(
           projectTitle: project.title,
           genre: project.genre,
           writingStyle: project.writingStyle,
-          worldSetting: [
-            project.worldSetting,
-            directorDirective,
-            researchContext ? `【研究参考资料】\n${researchContext}` : '',
-          ].filter(Boolean).join('\n\n'),
+          memoryContext: writerMemoryContext,
+          worldSetting: project.worldSetting,
           powerSystem: project.powerSystem,
           protagonistProfile: project.protagonistProfile,
           antagonistSetting: project.antagonistSetting,
           targetWordCount: project.chapterWordCount || 3000,
           outline,
-          characterProfiles,
-          recentSummaries,
+          characterProfiles: memoryPack.characterProfiles,
+          recentSummaries: memoryPack.recentChapterSummaries,
           provider: sharedProvider,
         },
         (token) => {
@@ -284,10 +284,11 @@ export async function runChapterGenerationPipeline(
           projectId,
           chapterNo,
           newChapterContent: polishedContent,
-          characterProfiles,
-          recentSummaries,
+          memoryContext: validatorMemoryContext,
+          characterProfiles: memoryPack.characterProfiles,
+          recentSummaries: memoryPack.recentChapterSummaries,
           worldSetting: project.worldSetting,
-          openPlotlines,
+          openPlotlines: memoryPack.openPlotlines,
           provider: sharedProvider,
         })
 
@@ -405,46 +406,12 @@ export async function runChapterGenerationPipeline(
           chapterNo,
           chapterTitle: outline.chapterTitle,
           chapterContent: finalContent,
+          memoryContext: summarizerMemoryContext,
           worldSetting: project.worldSetting,
           protagonistProfile: project.protagonistProfile,
           provider: sharedProvider,
         })
 
-        // 保存摘要
-        await memory.saveChapterSummary(projectId, chapterNo, summaryData)
-
-        // 处理伏笔
-        if (summaryData.plantedPlotlines.length > 0) {
-          await memory.batchCreatePlotlines(
-            projectId,
-            summaryData.plantedPlotlines.map((desc) => ({
-              description: desc,
-              plantedAt: chapterNo,
-              type: 'FORESHADOW',
-            }))
-          )
-        }
-
-        if (summaryData.resolvedPlotlines.length > 0) {
-          await memory.batchResolvePlotlines(summaryData.resolvedPlotlines, chapterNo)
-        }
-
-        // 更新角色档案
-        if (Object.keys(validationReport.characterUpdates).length > 0) {
-          await memory.batchUpdateCharacterProfiles(
-            projectId,
-            validationReport.characterUpdates,
-            chapterNo
-          )
-        }
-
-        // 更新故事状态
-        const emotionalValue = summaryData.emotionalTone === '紧张' ? 80 :
-          summaryData.emotionalTone === '温馨' ? 40 :
-            summaryData.emotionalTone === '悲伤' ? 30 :
-              summaryData.emotionalTone === '高潮' ? 95 : 60
-
-        await storyState.updateEmotionalArc(projectId, chapterNo, emotionalValue)
         await storyState.updateChapterProgress(projectId, chapterNo)
       })
     } else {
@@ -466,35 +433,26 @@ export async function runChapterGenerationPipeline(
     emit({ type: 'wordCount', data: { count: finalWordCount } })
 
     await runPhase('db_write', async () => {
-      await storyState.recordStoryEvent(
-        projectId,
-        'CHAPTER_COMPLETED',
-        `第${chapterNo}章生成完成，字数${finalWordCount}`,
-        chapterNo
-      )
+      const emotionalValue = summaryData.emotionalTone === '紧张' ? 80 :
+        summaryData.emotionalTone === '温馨' ? 40 :
+          summaryData.emotionalTone === '悲伤' ? 30 :
+            summaryData.emotionalTone === '高潮' ? 95 : 60
 
-      await prisma.novelChapter.update({
-        where: { id: chapter.id },
-        data: {
-          title: outline.chapterTitle,
-          content: finalContent,
-          summary: summaryData.summary,
-          status: chapterReady ? ChapterStatus.COMPLETED : ChapterStatus.REVIEWING,
-          validationReport: validationReport as any,
-          wordCount: finalWordCount,
-          lastAgentType: speedMode === 'quality' ? 'POLISHER' : 'WRITER',
-        },
-      })
-
-      const totalWordCount = await prisma.novelChapter.aggregate({
-        where: { projectId, status: ChapterStatus.COMPLETED },
-        _sum: { wordCount: true },
-      })
-
-      await prisma.novelProject.update({
-        where: { id: projectId },
-        data: { currentWordCount: totalWordCount._sum.wordCount || 0 },
-      })
+      await recordAndApplyChapterCommit(projectId, chapter.id, {
+        chapterNo,
+        chapterTitle: outline.chapterTitle,
+        content: finalContent,
+        summaryData,
+        validationReport,
+        outline,
+        qualityStatus: chapterReady ? 'completed' : 'reviewing',
+        warning: chapterReady ? undefined : buildChapterWordCountWarning(finalWordCount, project.chapterWordCount || 3000, chapterNo),
+        targetWordCount: project.chapterWordCount || 3000,
+        currentWordCount: finalWordCount,
+        emotionalValue,
+        agentType: speedMode === 'quality' ? 'POLISHER' : 'WRITER',
+        emittedAt: new Date().toISOString(),
+      }, 'pipeline')
 
       await hookRegistry.execute('chapter_generate_end', {
         projectId,

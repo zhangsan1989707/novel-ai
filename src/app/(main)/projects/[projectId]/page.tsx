@@ -66,6 +66,45 @@ interface Project {
   mysteryDensity?: number
   chapters: Chapter[]
   arcPlans?: ArcPlan[]
+  recentCommits?: Array<{
+    id: string
+    chapterNo: number
+    source: string
+    status: string
+    projectionStatus: Record<string, string>
+    replayCount: number
+    appliedAt?: string | null
+    createdAt: string
+  }>
+  preflight?: {
+    ready: boolean
+    hasModel: boolean
+    hasBlueprint: boolean
+    hasArcPlans: boolean
+    totalChapters: number
+    completedChapters: number
+    reviewingChapters: number
+    draftChapters: number
+    emptyCompletedChapters: number
+    recentCommitFailures: number
+    chapterSummaryCount: number
+    volumeSummaryCount: number
+    bookSummaryCount: number
+    characterCount: number
+    plotlineCount: number
+    openPlotlineCount: number
+    resolvedPlotlineCount: number
+    researchRefCount: number
+    chapterSummaryCoverage: number
+    volumeSummaryCoverage: number
+    memoryCoverageScore: number
+    strandScore: number
+    issues: Array<{
+      severity: 'error' | 'warning' | 'info'
+      code: string
+      message: string
+    }>
+  }
   createdAt: string
   updatedAt: string
 }
@@ -761,6 +800,120 @@ export default function ProjectDetailPage() {
                             </div>
                           </div>
                         ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {project.recentCommits && project.recentCommits.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <Clock className="h-5 w-5 text-blue-600" />
+                      章节提交
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    {project.recentCommits.map((commit) => (
+                      <div key={commit.id} className="rounded-md border border-gray-200 px-3 py-2 text-xs dark:border-gray-800">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="font-medium text-gray-900 dark:text-gray-100">
+                            第 {commit.chapterNo} 章
+                          </span>
+                          <Badge variant={commit.status === 'accepted' ? 'success' : commit.status === 'replayed' ? 'primary' : 'warning'}>
+                            {commit.status}
+                          </Badge>
+                        </div>
+                        <div className="mt-1 flex items-center justify-between gap-3 text-gray-500 dark:text-gray-400">
+                          <span>来源：{commit.source}</span>
+                          <span>重放：{commit.replayCount}</span>
+                        </div>
+                        <div className="mt-1 text-gray-500 dark:text-gray-400">
+                          {commit.appliedAt ? `已应用：${new Date(commit.appliedAt).toLocaleString()}` : '待应用'}
+                        </div>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
+
+              {project.preflight && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      {project.preflight.ready ? (
+                        <CheckCircle2 className="h-5 w-5 text-green-600" />
+                      ) : (
+                        <AlertCircle className="h-5 w-5 text-amber-600" />
+                      )}
+                      项目预检
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4 text-sm">
+                    <div className="grid grid-cols-2 gap-2 text-gray-600 dark:text-gray-400">
+                      <div>模型：{project.preflight.hasModel ? '已绑定' : '未绑定'}</div>
+                      <div>蓝图：{project.preflight.hasBlueprint ? '已生成' : '未生成'}</div>
+                      <div>阶段规划：{project.preflight.hasArcPlans ? '已生成' : '未生成'}</div>
+                      <div>已完成：{project.preflight.completedChapters} 章</div>
+                      <div>待审稿：{project.preflight.reviewingChapters} 章</div>
+                      <div>未写作：{project.preflight.draftChapters} 章</div>
+                      <div>章节摘要：{project.preflight.chapterSummaryCount} 条</div>
+                      <div>卷摘要：{project.preflight.volumeSummaryCount} 条</div>
+                      <div>全书摘要：{project.preflight.bookSummaryCount > 0 ? '已生成' : '未生成'}</div>
+                      <div>角色档案：{project.preflight.characterCount} 条</div>
+                      <div>伏笔：{project.preflight.plotlineCount} 条</div>
+                      <div>研究资料：{project.preflight.researchRefCount} 条</div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                      <div className="rounded-md border border-gray-200 px-3 py-2 dark:border-gray-800">
+                        <div className="text-gray-500 dark:text-gray-400">章节摘要覆盖</div>
+                        <div className="mt-1 text-base font-semibold text-gray-900 dark:text-gray-100">
+                          {project.preflight.chapterSummaryCoverage}%
+                        </div>
+                      </div>
+                      <div className="rounded-md border border-gray-200 px-3 py-2 dark:border-gray-800">
+                        <div className="text-gray-500 dark:text-gray-400">记忆覆盖</div>
+                        <div className="mt-1 text-base font-semibold text-gray-900 dark:text-gray-100">
+                          {project.preflight.memoryCoverageScore}/100
+                        </div>
+                      </div>
+                      <div className="rounded-md border border-gray-200 px-3 py-2 dark:border-gray-800">
+                        <div className="text-gray-500 dark:text-gray-400">追读稳定度</div>
+                        <div className="mt-1 text-base font-semibold text-gray-900 dark:text-gray-100">
+                          {project.preflight.strandScore}/100
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-md border border-gray-200 px-3 py-2 dark:border-gray-800">
+                      <span className="text-gray-500 dark:text-gray-400">状态</span>
+                      <Badge variant={project.preflight.ready ? 'success' : 'warning'}>
+                        {project.preflight.ready ? '可继续生产' : '存在风险'}
+                      </Badge>
+                    </div>
+
+                    {project.preflight.issues.length > 0 ? (
+                      <div className="space-y-2">
+                        {project.preflight.issues.slice(0, 4).map(issue => (
+                          <div
+                            key={issue.code}
+                            className={`rounded-md border px-3 py-2 ${
+                              issue.severity === 'error'
+                                ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300'
+                                : issue.severity === 'warning'
+                                  ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300'
+                                  : 'border-gray-200 bg-gray-50 text-gray-600 dark:border-gray-800 dark:bg-gray-900/20 dark:text-gray-300'
+                            }`}
+                          >
+                            {issue.message}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="rounded-md border border-green-200 bg-green-50 px-3 py-2 text-green-700 dark:border-green-900/40 dark:bg-green-950/20 dark:text-green-300">
+                        预检未发现阻断项
                       </div>
                     )}
                   </CardContent>

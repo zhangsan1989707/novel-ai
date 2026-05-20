@@ -7,6 +7,7 @@ interface SummarizerPromptInput {
   chapterNo: number
   chapterTitle: string
   chapterContent: string
+  memoryContext?: string
   worldSetting?: string | null
   protagonistProfile?: string | null
 }
@@ -18,6 +19,11 @@ export function buildSummarizerPrompt(input: SummarizerPromptInput): string {
 
   parts.push(`\n【章节信息】`)
   parts.push(`第${input.chapterNo}章 "${input.chapterTitle}"`)
+
+  if (input.memoryContext) {
+    parts.push(`\n【记忆编排上下文】`)
+    parts.push(input.memoryContext)
+  }
 
   if (input.worldSetting) {
     parts.push(`\n【世界观】`)

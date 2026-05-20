@@ -19,6 +19,11 @@ export function buildNovelGenerationPrompt(
   if (context.genre) parts.push(`类型：${context.genre}`)
   if (context.writingStyle) parts.push(`写作风格：${context.writingStyle}`)
 
+  if (context.memoryContext) {
+    parts.push(`\n【记忆编排上下文】`)
+    parts.push(context.memoryContext)
+  }
+
   // 【设定】
   if (context.worldSetting) {
     parts.push(`\n【设定 - 世界观】`)

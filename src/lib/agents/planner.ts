@@ -13,8 +13,10 @@ interface PlannerInput extends AgentContext {
   characterProfiles: { name: string; role: string; description: string }[]
   openPlotlines: { id: string; description: string }[]
   emotionalArc: { chapterNo: number; value: number }[]
+  recentChapterSummaries?: { chapterNo: number; summary: string }[]
   recentChapterCount: number
   targetWordCount: number
+  memoryContext?: string
   useEnhancedPrompt?: boolean
   provider?: AIProvider
 }
@@ -67,8 +69,8 @@ export async function plannerAgent(
     usageType: 'PLANNER',
   })
 
-  // 获取前 N 章摘要
-  const recentChapters = await prisma.chapterSummary.findMany({
+  // 获取前 N 章摘要（优先复用编排器传入的记忆包）
+  const recentChapters = input.recentChapterSummaries || await prisma.chapterSummary.findMany({
     where: { projectId },
     orderBy: { chapterNo: 'desc' },
     take: input.recentChapterCount || 3,
@@ -78,6 +80,7 @@ export async function plannerAgent(
   const prompt = buildPlannerPrompt({
     ...context,
     chapterNo,
+    memoryContext: input.memoryContext,
     recentChapterSummaries: recentChapters.map(ch => ({
       chapterNo: ch.chapterNo,
       summary: ch.summary,

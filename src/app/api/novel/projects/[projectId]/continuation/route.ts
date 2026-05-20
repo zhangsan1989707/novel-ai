@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { createProviderFromDefaultConfig } from '@/lib/ai'
 import { buildNovelGenerationPrompt, buildEndingPrompt, buildRevisionPrompt } from '@/lib/ai/prompts'
 import { buildPromptContext } from '@/lib/ai/context-manager'
+import { buildChapterMemoryPack } from '@/lib/memory'
 import { countChineseWords } from '@/lib/utils'
 import { getMinimumChapterWordCount, isChapterWordCountSufficient } from '@/lib/ai/chapter-quality'
 import { logError } from '@/lib/logger'
@@ -158,11 +159,23 @@ export async function POST(
         ? toChapterDTO({ ...lastChapter, chapterNumber, title: chapterTitle })
         : toChapterDTO({ id: 0, projectId: projectIdNum, chapterNumber, title: chapterTitle, content: '', wordCount: 0, status: 'DRAFT' as const, sortOrder: chapterNumber, summary: null, generationPrompt: null, generationParams: null, generationCount: 0, lastGeneratedTime: null, chapterOutline: null, validationReport: null, retryCount: 0, lastAgentType: null, virtualWriterId: null, createdAt: new Date(), updatedAt: new Date(), virtualWriter: null })
 
+      const memoryPack = await buildChapterMemoryPack(projectIdNum, chapterNumber, {
+        recentChapterCount: 5,
+        recentVolumeCount: 2,
+        characterLimit: 8,
+        plotlineLimit: 8,
+        researchLimit: 3,
+      })
       const context = await buildPromptContext(
         project,
         currentChapter,
         [],
-        { useContext: false, contextChapterCount: 3, includeStageOutline: false }
+        {
+          useContext: false,
+          contextChapterCount: 3,
+          includeStageOutline: false,
+          memoryContext: memoryPack.writerContext,
+        }
       )
 
       // 构建结局提示词
@@ -191,11 +204,23 @@ export async function POST(
         ? toChapterDTO({ ...lastChapter, chapterNumber, title: chapterTitle })
         : toChapterDTO({ id: 0, projectId: projectIdNum, chapterNumber, title: chapterTitle, content: '', wordCount: 0, status: 'DRAFT' as const, sortOrder: chapterNumber, summary: null, generationPrompt: null, generationParams: null, generationCount: 0, lastGeneratedTime: null, chapterOutline: null, validationReport: null, retryCount: 0, lastAgentType: null, virtualWriterId: null, createdAt: new Date(), updatedAt: new Date(), virtualWriter: null })
 
+      const memoryPack = await buildChapterMemoryPack(projectIdNum, chapterNumber, {
+        recentChapterCount: Math.max(3, contextChapterCount),
+        recentVolumeCount: 2,
+        characterLimit: 10,
+        plotlineLimit: 10,
+        researchLimit: 3,
+      })
       const context = await buildPromptContext(
         project,
         currentChapterForContinue,
         contextChapters,
-        { useContext, contextChapterCount, includeStageOutline: true }
+        {
+          useContext,
+          contextChapterCount,
+          includeStageOutline: true,
+          memoryContext: memoryPack.writerContext,
+        }
       )
 
       prompt = buildNovelGenerationPrompt(context, {
@@ -223,11 +248,23 @@ export async function POST(
         ? toChapterDTO({ ...lastChapter, chapterNumber, title: chapterTitle })
         : toChapterDTO({ id: 0, projectId: projectIdNum, chapterNumber, title: chapterTitle, content: '', wordCount: 0, status: 'DRAFT' as const, sortOrder: chapterNumber, summary: null, generationPrompt: null, generationParams: null, generationCount: 0, lastGeneratedTime: null, chapterOutline: null, validationReport: null, retryCount: 0, lastAgentType: null, virtualWriterId: null, createdAt: new Date(), updatedAt: new Date(), virtualWriter: null })
 
+      const memoryPack = await buildChapterMemoryPack(projectIdNum, chapterNumber, {
+        recentChapterCount: Math.max(3, contextChapterCount),
+        recentVolumeCount: 2,
+        characterLimit: 10,
+        plotlineLimit: 10,
+        researchLimit: 3,
+      })
       const context = await buildPromptContext(
         project,
         currentChapterForRewrite,
         rewriteContextChapters,
-        { useContext: false, contextChapterCount: 3, includeStageOutline: false }
+        {
+          useContext: false,
+          contextChapterCount: 3,
+          includeStageOutline: false,
+          memoryContext: memoryPack.writerContext,
+        }
       )
 
       // 使用 revision continue 类型

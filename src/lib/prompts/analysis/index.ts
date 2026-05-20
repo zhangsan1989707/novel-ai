@@ -10,6 +10,7 @@ interface PlotAnalysisInput {
   powerSystem?: string
   protagonistProfile?: string
   antagonistSetting?: string
+  memoryContext?: string
   previousChapters?: { chapterNumber: number; title: string; content: string }[]
 }
 
@@ -58,6 +59,11 @@ export function buildPlotAnalysisPrompt(
   if (context.antagonistSetting) {
     parts.push(`\n【设定 - 反派设定】`)
     parts.push(context.antagonistSetting)
+  }
+
+  if (context.memoryContext) {
+    parts.push(`\n【记忆编排上下文】`)
+    parts.push(context.memoryContext)
   }
 
   // 【待分析内容】
