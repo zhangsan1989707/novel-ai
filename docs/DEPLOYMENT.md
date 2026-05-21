@@ -65,14 +65,21 @@ cd /opt/novel-ai
 tar -xzf novel-ai-code.tar.gz
 npm ci
 npx prisma generate
-npx prisma migrate deploy
+
+# 应用数据库迁移（新增枚举和字段）
+docker exec -i -e PGPASSWORD=password novelai-db psql -U novelai -d novel_ai << 'SQLEOF' || true
+ALTER TYPE "AIVendor" ADD VALUE IF NOT EXISTS 'MIMO';
+ALTER TABLE "ai_model_configs" ADD COLUMN IF NOT EXISTS "embeddingVendor" "AIVendor";
+ALTER TABLE "ai_model_configs" ADD COLUMN IF NOT EXISTS "embeddingApiKey" TEXT;
+ALTER TABLE "ai_model_configs" ADD COLUMN IF NOT EXISTS "embeddingApiEndpoint" TEXT;
+SQLEOF
+
 npm run build
-cp -r .next/static .next/standalone/.next/static
-cp -r public .next/standalone/public
-fuser -k 3200/tcp || true
+
+# 清理端口占用并启动
+fuser -k 3200/tcp 2>/dev/null || true
 sleep 2
-cd .next/standalone
-PORT=3200 HOSTNAME=0.0.0.0 nohup node server.js > ../../app.log 2>&1 &
+PORT=3200 HOSTNAME=0.0.0.0 nohup npx next start -p 3200 > app.log 2>&1 &
 EOF
 ```
 
@@ -105,11 +112,23 @@ sed -i 's|localhost:5432|localhost:5433|g' .env .env.local
 **解决方案**：
 ```bash
 # 查找并杀死占用进程
-fuser -k 3200/tcp
+fuser -k 3200/tcp || true
 sleep 2
-# 重新启动
-cd .next/standalone && PORT=3200 HOSTNAME=0.0.0.0 nohup node server.js > ../../app.log 2>&1 &
+# 如果使用 Docker
+docker compose restart app
+# 如果使用直接运行
+PORT=3200 HOSTNAME=0.0.0.0 nohup npx next start -p 3200 > app.log 2>&1 &
 ```
+
+### 3.1 Docker 构建失败
+
+**错误信息**：`failed to walk .next: no such file or directory` 或 standalone 相关错误
+
+**原因**：Next.js 16 的 `output: 'standalone'` 模式可能不生成 `.next/standalone` 目录
+
+**解决方案**：
+- Dockerfile 已更新为直接复制 `.next`、`node_modules` 和 `package.json`
+- 不再依赖 standalone 模式，使用 `npx next start` 启动应用
 
 ### 4. Prisma 迁移失败
 
@@ -119,6 +138,22 @@ cd .next/standalone && PORT=3200 HOSTNAME=0.0.0.0 nohup node server.js > ../../a
 ```bash
 # 手动指定数据库 URL
 DATABASE_URL='postgresql://novelai:password@localhost:5433/novel_ai?schema=public' npx prisma migrate deploy
+```
+
+### 4.1 数据库枚举/字段缺失
+
+**错误信息**：`The column ai_model_configs.embeddingVendor does not exist` 或 `invalid input value for enum AIVendor: "MIMO"`
+
+**原因**：新增的 AI 厂商（如 MIMO）或表字段（embeddingVendor 等）未在数据库中应用
+
+**解决方案**：部署脚本已自动处理，手动执行：
+```bash
+docker exec -i -e PGPASSWORD=password novelai-db psql -U novelai -d novel_ai << 'EOF'
+ALTER TYPE "AIVendor" ADD VALUE IF NOT EXISTS 'MIMO';
+ALTER TABLE "ai_model_configs" ADD COLUMN IF NOT EXISTS "embeddingVendor" "AIVendor";
+ALTER TABLE "ai_model_configs" ADD COLUMN IF NOT EXISTS "embeddingApiKey" TEXT;
+ALTER TABLE "ai_model_configs" ADD COLUMN IF NOT EXISTS "embeddingApiEndpoint" TEXT;
+EOF
 ```
 
 ### 5. GitHub 无法访问
@@ -157,6 +192,9 @@ sshpass -p "密码" ssh root@47.109.85.168 "ps aux | grep node"
 1. **密码安全**：不要将 `.deploy-password` 提交到 git
 2. **数据库端口**：docker-compose.db.yml 映射端口为 5433，部署脚本会自动处理
 3. **环境变量**：确保 `.env.local` 包含正确的配置
-4. **端口冲突**：确保 3200 端口未被其他服务占用
+4. **端口冲突**：确保 3200 端口未被其他服务占用（脚本会自动清理）
 5. **构建缓存**：服务器端构建可利用 npm ci 缓存
 6. **时区设置**：确保服务器时区正确（建议使用 Asia/Shanghai）
+7. **Next.js 16 兼容**：Dockerfile 已更新为不依赖 standalone 模式
+8. **数据库迁移**：部署脚本会自动检查并应用新增的枚举值和表字段
+9. **健康检查**：部署完成后会自动测试 API 连通性

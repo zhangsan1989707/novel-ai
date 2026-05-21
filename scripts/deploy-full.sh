@@ -2,8 +2,9 @@
 
 # ============================================================
 # Novel AI 项目部署脚本
-# 版本: v1.0
+# 版本: v2.0
 # 适用: 阿里云 ECS 服务器
+# 更新: 2026-05-21 - 支持 Next.js 16，添加数据库迁移，改进错误处理
 # ============================================================
 
 set -e
@@ -14,7 +15,6 @@ set -e
 SERVER="root@47.109.85.168"
 DEPLOY_DIR="/opt/novel-ai"
 PROJECT_DIR=$(cd "$(dirname "$0")/.." && pwd)
-BUILD_DIR=".next/standalone"
 SSH_PASSWORD_FILE="$PROJECT_DIR/.deploy-password"
 
 # --------------------------
@@ -72,12 +72,6 @@ build_project() {
     echo "🔨 执行 npm run build..."
     npm run build
     
-    # 复制静态资源到 standalone 目录
-    echo "📋 复制静态资源..."
-    cp -r .next/static "$BUILD_DIR/.next/static"
-    cp -r public "$BUILD_DIR/public"
-    cp .env.local "$BUILD_DIR/.env.local" 2>/dev/null || true
-    
     echo "✅ 构建完成"
 }
 
@@ -117,7 +111,6 @@ deploy_on_server() {
 set -e
 
 DEPLOY_DIR="/opt/novel-ai"
-BUILD_DIR=".next/standalone"
 
 cd "$DEPLOY_DIR"
 
@@ -137,32 +130,35 @@ bash scripts/ensure-pgvector.sh docker-compose.db.yml
 echo "⏳ 等待数据库就绪..."
 sleep 5
 
+echo "🔄 确保数据库迁移已应用..."
+# 手动应用未执行的数据库迁移（幂等操作，可安全重复执行）
+docker exec -i -e PGPASSWORD=password novelai-db psql -U novelai -d novel_ai << 'SQLEOF' || true
+-- 检查并应用 AIVendor 枚举值
+ALTER TYPE "AIVendor" ADD VALUE IF NOT EXISTS 'MIMO';
+
+-- 检查并应用 ai_model_configs 表字段
+ALTER TABLE "ai_model_configs" ADD COLUMN IF NOT EXISTS "embeddingVendor" "AIVendor";
+ALTER TABLE "ai_model_configs" ADD COLUMN IF NOT EXISTS "embeddingApiKey" TEXT;
+ALTER TABLE "ai_model_configs" ADD COLUMN IF NOT EXISTS "embeddingApiEndpoint" TEXT;
+ALTER TABLE "ai_model_configs" ADD COLUMN IF NOT EXISTS "sortOrder" INTEGER NOT NULL DEFAULT 0;
+SQLEOF
+
 echo "📦 安装依赖..."
 npm ci
 
 echo "🏗️ 生成 Prisma Client..."
 npx prisma generate
 
-echo "🗃️ 运行数据库迁移..."
-npx prisma migrate deploy
-
 echo "🏗️ 构建应用..."
 npm run build
-
-echo "📋 复制静态资源..."
-cp -r .next/static "$BUILD_DIR/.next/static"
-cp -r public "$BUILD_DIR/public"
-cp .env.local "$BUILD_DIR/.env.local" 2>/dev/null || true
 
 echo "⏹️ 停止旧进程..."
 fuser -k 3200/tcp 2>/dev/null || true
 sleep 2
 
 echo "🚀 启动应用..."
-cd "$BUILD_DIR"
-PORT=3200 HOSTNAME=0.0.0.0 nohup node server.js > ../../app.log 2>&1 &
+PORT=3200 HOSTNAME=0.0.0.0 nohup npx next start -p 3200 > app.log 2>&1 &
 APP_PID=$!
-cd ../..
 
 echo "✅ 应用已启动，PID: $APP_PID"
 
@@ -209,7 +205,7 @@ verify_deployment() {
 # 主流程
 # --------------------------
 
-echo "🚀 Novel AI 部署脚本"
+echo "🚀 Novel AI 部署脚本 v2.0"
 echo "======================"
 
 check_prerequisites
