@@ -54,6 +54,8 @@ const globalState = globalThis as typeof globalThis & {
   __novelAiMaintenanceWorkerState?: MaintenanceWorkerState
 }
 
+const TASK_STALE_MS = 45_000
+
 function getState(): MaintenanceWorkerState {
   if (!globalState.__novelAiMaintenanceWorkerState) {
     globalState.__novelAiMaintenanceWorkerState = {
@@ -131,7 +133,36 @@ async function startWorker() {
   logger.info('Project maintenance worker started')
 }
 
+async function recycleStaleRunningTasks(projectId?: number): Promise<number> {
+  const staleBefore = new Date(Date.now() - TASK_STALE_MS)
+  const where: Prisma.ProjectMaintenanceTaskWhereInput = {
+    status: 'RUNNING',
+    OR: [
+      { lockedAt: { lt: staleBefore } },
+      { updatedAt: { lt: staleBefore } },
+    ],
+  }
+
+  if (projectId !== undefined) {
+    where.projectId = projectId
+  }
+
+  const result = await prisma.projectMaintenanceTask.updateMany({
+    where,
+    data: {
+      status: 'PENDING',
+      nextRunAt: now(),
+      lockedAt: null,
+      startedAt: null,
+    },
+  })
+
+  return result.count
+}
+
 async function claimNextTask(): Promise<ProjectMaintenanceTaskRecord | null> {
+  await recycleStaleRunningTasks()
+
   const candidate = await prisma.projectMaintenanceTask.findFirst({
     where: {
       status: 'PENDING',
@@ -247,6 +278,10 @@ export async function queueRagRebuild(
 
 export async function getProjectMaintenanceSummary(projectId: number): Promise<MaintenanceSummary> {
   void startWorker()
+  const recycled = await recycleStaleRunningTasks(projectId)
+  if (recycled > 0) {
+    void drainQueue()
+  }
   const tasks = await prisma.projectMaintenanceTask.findMany({
     where: { projectId },
     orderBy: [

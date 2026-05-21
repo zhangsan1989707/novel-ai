@@ -84,7 +84,7 @@ export default function SettingsPage() {
   const [showModal, setShowModal] = useState(false)
   const [editingConfig, setEditingConfig] = useState<AIConfig | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const [testing, setTesting] = useState(false)
+  const [testingConfigId, setTestingConfigId] = useState<number | null>(null)
   const [defaultingConfigId, setDefaultingConfigId] = useState<number | null>(null)
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
 
@@ -160,22 +160,23 @@ export default function SettingsPage() {
   }
 
   const handleTest = async () => {
-    if (!formData.modelId || (!formData.apiKey && !editingConfig)) {
-      setTestResult({ success: false, message: '请先填写模型 ID 和 API Key' })
+    if (!formData.modelId) {
+      setTestResult({ success: false, message: '请先填写模型 ID' })
       return
     }
 
-    // 如果是编辑模式且没有输入新的API Key，我们需要获取完整的API Key来测试
-    const apiKeyToUse = formData.apiKey
-    if (editingConfig && !formData.apiKey) {
-      // 这里我们需要一个API来获取完整的API Key用于测试
-      // 但是考虑到安全性，我们暂时使用后端的 test/{id} 接口
-      // 不过这需要修改逻辑，先跳过这里，我们稍后调整
-      setTestResult({ success: false, message: '编辑时测试功能暂时不可用，请重新输入 API Key' })
+    if (!editingConfig && !formData.apiKey) {
+      setTestResult({ success: false, message: '请填写 API Key' })
       return
     }
 
-    setTesting(true)
+    // 编辑模式且有配置 ID，直接调用单个配置的测试接口
+    if (editingConfig) {
+      await handleTestConfig(editingConfig)
+      return
+    }
+
+    setTestingConfigId(-1) // -1 表示新配置测试
     setTestResult(null)
 
     try {
@@ -207,7 +208,7 @@ export default function SettingsPage() {
     } catch (error) {
       setTestResult({ success: false, message: '网络错误，请重试' })
     } finally {
-      setTesting(false)
+      setTestingConfigId(null)
     }
   }
 
@@ -312,21 +313,36 @@ export default function SettingsPage() {
   }
 
   const handleTestConfig = async (config: AIConfig) => {
-    setTesting(true)
+    setTestingConfigId(config.id)
     try {
       const res = await fetch(`/api/novel/ai-configs/${config.id}/test`, {
         method: 'POST',
       })
       const data = await res.json()
       if (data.success) {
-        alert('测试成功！')
+        // 如果是在模态框内测试，设置 testResult 显示在模态框内
+        if (editingConfig?.id === config.id) {
+          setTestResult({ success: true, message: data.data.response || '测试成功！' })
+        } else {
+          alert('测试成功！')
+        }
       } else {
-        alert('测试失败: ' + (data.error?.message || '未知错误'))
+        const errorMsg = data.error?.message || '未知错误'
+        if (editingConfig?.id === config.id) {
+          setTestResult({ success: false, message: errorMsg })
+        } else {
+          alert('测试失败: ' + errorMsg)
+        }
       }
     } catch (error) {
-      alert('网络错误，请重试')
+      const errorMsg = '网络错误，请重试'
+      if (editingConfig?.id === config.id) {
+        setTestResult({ success: false, message: errorMsg })
+      } else {
+        alert(errorMsg)
+      }
     } finally {
-      setTesting(false)
+      setTestingConfigId(null)
     }
   }
 
@@ -407,9 +423,9 @@ export default function SettingsPage() {
                         variant="outline"
                         size="sm"
                         onClick={() => handleTestConfig(config)}
-                        disabled={testing}
+                        disabled={testingConfigId !== null}
                       >
-                        {testing ? (
+                        {testingConfigId === config.id ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
                         ) : (
                           <Play className="h-4 w-4" />
@@ -581,15 +597,15 @@ export default function SettingsPage() {
           )}
 
           <div className="flex gap-3 justify-end">
-            <Button type="button" variant="outline" onClick={handleTest} disabled={testing || submitting}>
-              {testing ? (
+            <Button type="button" variant="outline" onClick={handleTest} disabled={testingConfigId !== null || submitting}>
+              {(testingConfigId === -1 || (editingConfig && testingConfigId === editingConfig.id)) ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               ) : (
                 <Play className="h-4 w-4 mr-2" />
               )}
               测试连接
             </Button>
-            <Button type="button" variant="primary" onClick={handleSubmit} disabled={submitting || testing}>
+            <Button type="button" variant="primary" onClick={handleSubmit} disabled={submitting || testingConfigId !== null}>
               {submitting ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               ) : null}

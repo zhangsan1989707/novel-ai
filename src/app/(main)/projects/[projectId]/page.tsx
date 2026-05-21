@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Button, Card, CardContent, CardHeader, CardTitle, Badge, Progress, Modal, toast, MoreActionsMenu } from '@/components/ui'
 import { BlueprintConsole, ProjectBaseInfoForm, ProjectBaseInfoFormData } from '@/components/project'
@@ -213,6 +213,8 @@ export default function ProjectDetailPage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [activeTab, setActiveTab] = useState<DashboardTab>('dashboard')
+  const bootstrapRecoveryRef = useRef<string | null>(null)
+  const [recoveryClockMs, setRecoveryClockMs] = useState(0)
   const maintenanceActive = Boolean(
     project?.maintenanceSummary?.bootstrapQueued ||
     project?.maintenanceSummary?.bootstrapRunning ||
@@ -221,6 +223,36 @@ export default function ProjectDetailPage() {
   )
   const bootstrapProgress = project?.maintenanceSummary?.bootstrapProgress || null
   const ragProgress = project?.maintenanceSummary?.ragProgress || null
+  const bootstrapProgressUpdatedAtMs = bootstrapProgress?.updatedAt
+    ? new Date(bootstrapProgress.updatedAt).getTime()
+    : 0
+  const bootstrapProgressStale = Boolean(
+    project?.maintenanceSummary?.bootstrapRunning &&
+    bootstrapProgressUpdatedAtMs > 0 &&
+    recoveryClockMs > 0 &&
+    recoveryClockMs - bootstrapProgressUpdatedAtMs > 45_000
+  )
+  const bootstrapStateMissing = Boolean(
+    project &&
+    (
+      !project.preflight?.hasBlueprint ||
+      !project.preflight?.hasArcPlans ||
+      !project.preflight?.hasStoryState ||
+      !project.preflight?.hasWorldState
+    )
+  )
+  const bootstrapNeedsDirectRecovery = Boolean(
+    project?.preflight?.hasModel &&
+    bootstrapStateMissing &&
+    (
+      project?.maintenanceSummary?.bootstrapFailed ||
+      bootstrapProgressStale ||
+      (
+        !project?.maintenanceSummary?.bootstrapQueued &&
+        !project?.maintenanceSummary?.bootstrapRunning
+      )
+    )
+  )
   const projectInitializing = Boolean(
     project && (
       !project.preflight?.ready ||
@@ -244,6 +276,7 @@ export default function ProjectDetailPage() {
     } catch {
       setError('获取小说详情失败')
     } finally {
+      setRecoveryClockMs(Date.now())
       setLoading(false)
     }
   }, [projectId])
@@ -262,6 +295,49 @@ export default function ProjectDetailPage() {
     }, 3000)
     return () => window.clearInterval(timer)
   }, [fetchProject, projectInitializing])
+
+  useEffect(() => {
+    if (!project || !bootstrapNeedsDirectRecovery) {
+      bootstrapRecoveryRef.current = null
+      return
+    }
+
+    const recoveryKey = [
+      project.id,
+      bootstrapProgress?.phase || 'idle',
+      bootstrapProgress?.updatedAt || 'none',
+      project.maintenanceSummary?.bootstrapFailed ? 'failed' : 'pending',
+    ].join(':')
+
+    if (bootstrapRecoveryRef.current === recoveryKey) return
+    bootstrapRecoveryRef.current = recoveryKey
+
+    let cancelled = false
+
+    const recoverBootstrap = async () => {
+      try {
+        const res = await fetch(`/api/novel/projects/${projectId}/bootstrap`, {
+          method: 'POST',
+        })
+        const data = await res.json()
+
+        if (cancelled) return
+
+        if (data.success) {
+          toast.success('已接管初始化，正在继续补齐创作配置')
+          void fetchProject()
+        }
+      } catch {
+        // keep silent here; the polling banner already reflects current state
+      }
+    }
+
+    void recoverBootstrap()
+
+    return () => {
+      cancelled = true
+    }
+  }, [project, projectId, fetchProject, bootstrapNeedsDirectRecovery, bootstrapProgress?.phase, bootstrapProgress?.updatedAt])
 
 
 
@@ -385,8 +461,6 @@ export default function ProjectDetailPage() {
   const completedChapters = project.chapters.filter(c => c.status === 'COMPLETED').length
   const reviewingChapters = project.chapters.filter(c => c.status === 'REVIEWING').length
   const arcGroups = groupChaptersByArc(project)
-  const hasBoundModel = Boolean(project.aiModelConfig)
-
   return (
     <>
       {/* Breadcrumb */}
@@ -683,11 +757,13 @@ export default function ProjectDetailPage() {
                     {project.preflight.hasModel && (maintenanceActive || !project.preflight.hasBlueprint || !project.preflight.hasArcPlans || !project.preflight.hasStoryState || !project.preflight.hasWorldState) && (
                       <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-blue-800 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-200">
                         <div className="font-medium">
-                        {project.maintenanceSummary?.bootstrapQueued || project.maintenanceSummary?.bootstrapRunning
-                            ? 'AI 正在自动补齐创作配置'
-                            : project.maintenanceSummary?.ragQueued || project.maintenanceSummary?.ragRunning
-                              ? 'AI 正在自动重建 RAG 索引'
-                              : '系统会自动补齐创作配置'}
+                        {bootstrapNeedsDirectRecovery
+                            ? '初始化卡住，正在直接补齐创作配置'
+                            : project.maintenanceSummary?.bootstrapQueued || project.maintenanceSummary?.bootstrapRunning
+                              ? 'AI 正在自动补齐创作配置'
+                              : project.maintenanceSummary?.ragQueued || project.maintenanceSummary?.ragRunning
+                                ? 'AI 正在自动重建 RAG 索引'
+                                : '系统会自动补齐创作配置'}
                         </div>
                         <div className="mt-1 text-xs leading-5 text-blue-700 dark:text-blue-300">
                           系统会自动补齐 Book Blueprint、阶段规划、世界状态、故事状态以及 RAG 索引。完成前请勿开始 AI 生成。页面会自动刷新，无需手动刷新。
