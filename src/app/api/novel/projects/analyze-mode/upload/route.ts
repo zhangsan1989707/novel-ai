@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import JSZip from 'jszip'
 import { logError } from '@/lib/logger'
+import { ProjectMode } from '@/types'
+import { getCurrentUserId } from '@/lib/auth'
 
 interface EpubChapter {
   title: string
@@ -288,62 +290,97 @@ export async function POST(request: NextRequest) {
 
     let savedSourceNovel = null
     let chaptersCreated = 0
+    let projectIdToReturn: number | null = null
 
-    if (projectIdStr) {
-      const projectId = parseInt(projectIdStr, 10)
-      if (!isNaN(projectId)) {
-        // 保存原始文本
-        savedSourceNovel = await prisma.sourceNovel.upsert({
-          where: { projectId },
-          update: {
-            originalText,
-            wordCount,
-            sourceName,
-          },
-          create: {
-            projectId,
-            originalText,
-            wordCount,
-            sourceName,
+    let projectId = projectIdStr ? parseInt(projectIdStr, 10) : null
+
+    // 如果没有提供 projectId，自动创建项目
+    if (!projectId || isNaN(projectId)) {
+      let creatorId = getCurrentUserId()
+      const user = await prisma.user.findUnique({ where: { id: creatorId } })
+      if (!user) {
+        const newUser = await prisma.user.create({
+          data: {
+            email: 'dev@example.com',
+            name: '开发者',
+            password: 'hashed_password_placeholder',
           },
         })
-
-        // 智能分章
-        const chapters = splitIntoChapters(originalText)
-
-        // 删除旧的章节（如果有）
-        await prisma.novelChapter.deleteMany({
-          where: { projectId },
-        })
-
-        // 批量创建章节
-        const chapterData = chapters.map((ch, idx) => ({
-          projectId,
-          chapterNumber: idx + 1,
-          title: ch.title,
-          content: ch.content,
-          wordCount: ch.content.replace(/\s/g, '').length,
-          status: 'REVIEWING' as const,
-        }))
-
-        if (chapterData.length > 0) {
-          await prisma.novelChapter.createMany({
-            data: chapterData,
-          })
-          chaptersCreated = chapterData.length
-        }
+        creatorId = newUser.id
       }
+
+      const project = await prisma.novelProject.create({
+        data: {
+          title: sourceName || file.name.replace(/\.(txt|epub)$/i, ''),
+          description: `拆解自《${sourceName || '未知来源'}》`,
+          projectMode: ProjectMode.ANALYZE,
+          creatorId,
+          totalVolumes: 4,
+          chapterWordCount: 3000,
+          outline: `【拆解分析】
+
+来源：${sourceName || '未知'}
+字数：${wordCount.toLocaleString()} 字
+
+本项目为拆解分析项目，用于分析小说结构，为后续续写做准备。
+`,
+        },
+      })
+      projectId = project.id
+    }
+
+    projectIdToReturn = projectId
+
+    // 保存原始文本
+    savedSourceNovel = await prisma.sourceNovel.upsert({
+      where: { projectId },
+      update: {
+        originalText,
+        wordCount,
+        sourceName,
+      },
+      create: {
+        projectId,
+        originalText,
+        wordCount,
+        sourceName,
+      },
+    })
+
+    // 智能分章
+    const chapters = splitIntoChapters(originalText)
+
+    // 删除旧的章节（如果有）
+    await prisma.novelChapter.deleteMany({
+      where: { projectId },
+    })
+
+    // 批量创建章节
+    const chapterData = chapters.map((ch, idx) => ({
+      projectId,
+      chapterNumber: idx + 1,
+      title: ch.title,
+      content: ch.content,
+      wordCount: ch.content.replace(/\s/g, '').length,
+      status: 'REVIEWING' as const,
+    }))
+
+    if (chapterData.length > 0) {
+      await prisma.novelChapter.createMany({
+        data: chapterData,
+      })
+      chaptersCreated = chapterData.length
     }
 
     return NextResponse.json({
       success: true,
       data: {
+        projectId: projectIdToReturn,
         fileName: file.name,
         sourceName,
         wordCount,
         previewLength: Math.min(500, originalText.length),
         preview: originalText.slice(0, 500),
-        hasProjectId: !!projectIdStr,
         savedId: savedSourceNovel?.id || null,
         chaptersCreated,
       },
