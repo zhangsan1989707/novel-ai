@@ -29,6 +29,8 @@ interface PipelineProgress {
 interface AutoPipelinePanelProps {
   projectId: number
   maxChapter: number
+  blocked?: boolean
+  blockedMessage?: string
   onClose?: () => void
 }
 
@@ -68,7 +70,7 @@ function estimateRemaining(completed: number, failed: number, total: number, ela
   return formatElapsed(Math.round(remainingMs))
 }
 
-export function AutoPipelinePanel({ projectId, maxChapter, onClose }: AutoPipelinePanelProps) {
+export function AutoPipelinePanel({ projectId, maxChapter, blocked = false, blockedMessage, onClose }: AutoPipelinePanelProps) {
   const defaultStart = maxChapter > 0 ? maxChapter + 1 : 1
   const [startChapter, setStartChapter] = useState(defaultStart)
   const [endChapter, setEndChapter] = useState(defaultStart + 2)
@@ -155,6 +157,11 @@ export function AutoPipelinePanel({ projectId, maxChapter, onClose }: AutoPipeli
   }, [running, startTime])
 
   const handleStart = async () => {
+    if (blocked) {
+      toast.error(blockedMessage || '创作系统仍在初始化，请完成后再启动全自动流水线')
+      return
+    }
+
     if (startChapter < 1) {
       toast.error('起始章节必须大于0')
       return
@@ -240,6 +247,15 @@ export function AutoPipelinePanel({ projectId, maxChapter, onClose }: AutoPipeli
 
   return (
     <div className="space-y-6">
+      {blocked && !active && !finished && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-200">
+          <div className="font-medium">创作系统正在初始化</div>
+          <div className="mt-1 text-xs leading-5">
+            {blockedMessage || '请等待蓝图、阶段规划、世界状态与故事状态完成初始化后再启动全自动流水线。'}
+          </div>
+        </div>
+      )}
+
       {!active && !finished && (
         <>
           <Card>
@@ -364,14 +380,15 @@ export function AutoPipelinePanel({ projectId, maxChapter, onClose }: AutoPipeli
           </Card>
 
           <div className="flex gap-3">
-            <Button
-              variant="primary"
-              onClick={handleStart}
-              className="flex-1 gap-2"
-            >
-              <Play className="h-4 w-4" />
-              一键启动全自动流水线
-            </Button>
+              <Button
+                variant="primary"
+                onClick={handleStart}
+                className="flex-1 gap-2"
+                disabled={blocked}
+              >
+                <Play className="h-4 w-4" />
+              {blocked ? '初始化中' : '一键启动全自动流水线'}
+              </Button>
             {onClose && (
               <Button variant="outline" onClick={onClose}>
                 取消

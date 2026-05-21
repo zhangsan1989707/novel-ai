@@ -125,6 +125,22 @@ interface Project {
     bootstrapFailed: boolean
     ragFailed: boolean
     queuedTaskCount: number
+    bootstrapProgress?: {
+      phase: string
+      message: string
+      stepIndex: number
+      stepTotal: number
+      percent: number
+      updatedAt: string
+    } | null
+    ragProgress?: {
+      phase: string
+      message: string
+      stepIndex: number
+      stepTotal: number
+      percent: number
+      updatedAt: string
+    } | null
   }
   blueprintConsole?: BlueprintConsoleSnapshot
   createdAt: string
@@ -263,6 +279,24 @@ export default function ProjectDetailPage() {
   const [pipeline, setPipeline] = useState<PipelineStatus | null>(null)
   const lastPipelineStatusRef = useRef<PipelineStatus['status'] | null>(null)
   const pipelineStreamRef = useRef<EventSource | null>(null)
+  const maintenanceActive = Boolean(
+    project?.maintenanceSummary?.bootstrapQueued ||
+    project?.maintenanceSummary?.bootstrapRunning ||
+    project?.maintenanceSummary?.ragQueued ||
+    project?.maintenanceSummary?.ragRunning
+  )
+  const bootstrapProgress = project?.maintenanceSummary?.bootstrapProgress || null
+  const ragProgress = project?.maintenanceSummary?.ragProgress || null
+  const projectInitializing = Boolean(
+    project && (
+      !project.preflight?.ready ||
+      maintenanceActive ||
+      !project.preflight?.hasBlueprint ||
+      !project.preflight?.hasArcPlans ||
+      !project.preflight?.hasStoryState ||
+      !project.preflight?.hasWorldState
+    )
+  )
 
   const fetchProject = useCallback(async () => {
     try {
@@ -301,6 +335,14 @@ export default function ProjectDetailPage() {
     }, 0)
     return () => window.clearTimeout(timer)
   }, [fetchProject])
+
+  useEffect(() => {
+    if (!projectInitializing) return
+    const timer = window.setInterval(() => {
+      void fetchProject()
+    }, 3000)
+    return () => window.clearInterval(timer)
+  }, [fetchProject, projectInitializing])
 
   useEffect(() => {
     let timer: ReturnType<typeof setInterval> | null = null
@@ -427,6 +469,11 @@ export default function ProjectDetailPage() {
   }
 
   const handleStartPipeline = async () => {
+    if (projectInitializing) {
+      toast.error('创作系统仍在初始化，请完成后再启动流水线')
+      return
+    }
+
     setPipelineStarting(true)
     try {
       const res = await fetch(`/api/novel/projects/${projectId}/pipeline/start`, {
@@ -664,11 +711,11 @@ export default function ProjectDetailPage() {
             size="sm"
             onClick={handleStartPipeline}
             loading={pipelineStarting}
-            disabled={pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING' || pipeline?.status === 'PAUSED' || !hasBoundModel}
+            disabled={pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING' || pipeline?.status === 'PAUSED' || !hasBoundModel || projectInitializing}
             className="gap-1.5"
           >
             <Rocket className="h-4 w-4" />
-            启动 AI 生产
+            {projectInitializing ? '初始化中' : '启动 AI 生产'}
           </Button>
           <Button
             variant="outline"
@@ -794,11 +841,11 @@ export default function ProjectDetailPage() {
                         size="sm"
                         onClick={handleStartPipeline}
                         loading={pipelineStarting}
-                        disabled={pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING' || pipeline?.status === 'PAUSED' || !hasBoundModel}
+                        disabled={pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING' || pipeline?.status === 'PAUSED' || !hasBoundModel || projectInitializing}
                         className="mt-4 gap-1.5"
                       >
                         <Rocket className="h-4 w-4" />
-                        启动 AI 生产
+                        {projectInitializing ? '初始化中' : '启动 AI 生产'}
                       </Button>
                     </div>
                   ) : (
@@ -995,16 +1042,52 @@ export default function ProjectDetailPage() {
                         </div>
                       </div>
                     )}
-                    {project.preflight.hasModel && (!project.preflight.hasBlueprint || !project.preflight.hasArcPlans || !project.preflight.hasStoryState || !project.preflight.hasWorldState) && (
+                    {project.preflight.hasModel && (maintenanceActive || !project.preflight.hasBlueprint || !project.preflight.hasArcPlans || !project.preflight.hasStoryState || !project.preflight.hasWorldState) && (
                       <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-blue-800 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-200">
                         <div className="font-medium">
-                          {project.maintenanceSummary?.bootstrapQueued || project.maintenanceSummary?.bootstrapRunning
+                        {project.maintenanceSummary?.bootstrapQueued || project.maintenanceSummary?.bootstrapRunning
                             ? 'AI 正在自动初始化创作系统'
-                            : '系统会自动补齐创作系统'}
+                            : project.maintenanceSummary?.ragQueued || project.maintenanceSummary?.ragRunning
+                              ? 'AI 正在自动重建 RAG 索引'
+                              : '系统会自动补齐创作系统'}
                         </div>
                         <div className="mt-1 text-xs leading-5 text-blue-700 dark:text-blue-300">
-                          系统会自动补齐 Book Blueprint、阶段规划、世界状态和故事状态，完成后会进入可继续生产状态。
+                          系统会自动补齐 Book Blueprint、阶段规划、世界状态、故事状态以及 RAG 索引。完成前请勿启动流水线。页面会自动刷新，无需手动刷新。
                         </div>
+                        {(bootstrapProgress || ragProgress) && (
+                          <div className="mt-3 space-y-2">
+                            {bootstrapProgress && (
+                              <div className="rounded-md border border-blue-100 bg-white/70 px-3 py-2 dark:border-blue-900/40 dark:bg-blue-950/30">
+                                <div className="flex items-center justify-between gap-3 text-xs">
+                                  <span className="font-medium text-blue-800 dark:text-blue-200">初始化进度</span>
+                                  <span className="text-blue-600 dark:text-blue-300">{bootstrapProgress.percent}%</span>
+                                </div>
+                                <div className="mt-1 text-xs text-blue-700 dark:text-blue-300">
+                                  {bootstrapProgress.message}
+                                </div>
+                                <Progress value={bootstrapProgress.percent} max={100} size="sm" className="mt-2" />
+                                <div className="mt-1 text-[11px] text-blue-600 dark:text-blue-400">
+                                  第 {bootstrapProgress.stepIndex} / {bootstrapProgress.stepTotal} 步 · {bootstrapProgress.phase}
+                                </div>
+                              </div>
+                            )}
+                            {ragProgress && (
+                              <div className="rounded-md border border-blue-100 bg-white/70 px-3 py-2 dark:border-blue-900/40 dark:bg-blue-950/30">
+                                <div className="flex items-center justify-between gap-3 text-xs">
+                                  <span className="font-medium text-blue-800 dark:text-blue-200">RAG 重建进度</span>
+                                  <span className="text-blue-600 dark:text-blue-300">{ragProgress.percent}%</span>
+                                </div>
+                                <div className="mt-1 text-xs text-blue-700 dark:text-blue-300">
+                                  {ragProgress.message}
+                                </div>
+                                <Progress value={ragProgress.percent} max={100} size="sm" className="mt-2" />
+                                <div className="mt-1 text-[11px] text-blue-600 dark:text-blue-400">
+                                  {ragProgress.phase}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
                     <div className="grid grid-cols-2 gap-2 text-gray-600 dark:text-gray-400">
@@ -1459,6 +1542,8 @@ export default function ProjectDetailPage() {
         <AutoPipelinePanel
           projectId={projectId}
           maxChapter={project.chapters.length}
+          blocked={projectInitializing}
+          blockedMessage="创作系统正在自动初始化，请完成后再启动全自动流水线"
           onClose={() => setShowAutoPipelineModal(false)}
         />
       </Modal>

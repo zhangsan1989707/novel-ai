@@ -37,6 +37,13 @@ export interface BlueprintConsoleSnapshot {
   generatedAt?: string
 }
 
+type BlueprintConsoleProgress = {
+  phase: string
+  message: string
+  stepIndex: number
+  stepTotal: number
+}
+
 function getArcStageLabel(stage?: string | null) {
   switch ((stage || '').toUpperCase()) {
     case 'OPENING':
@@ -268,7 +275,11 @@ function toProjectSettingText(snapshot: BlueprintConsoleSnapshot) {
   }
 }
 
-export async function refreshBlueprintConsole(projectId: number, guidance?: string) {
+export async function refreshBlueprintConsole(
+  projectId: number,
+  guidance?: string,
+  onProgress?: (progress: BlueprintConsoleProgress) => Promise<void> | void
+) {
   let project = await loadProjectForBlueprintConsole(projectId)
   if (!project) {
     throw new Error('项目不存在')
@@ -276,11 +287,15 @@ export async function refreshBlueprintConsole(projectId: number, guidance?: stri
 
   const provider = await createProjectProvider(projectId)
 
+  await onProgress?.({ phase: 'load_project', message: '正在读取项目与现有内容', stepIndex: 1, stepTotal: 7 })
   await ensureBlueprint(projectId, provider)
+  await onProgress?.({ phase: 'generate_blueprint', message: '正在生成或刷新 Book Blueprint', stepIndex: 2, stepTotal: 7 })
   await ensureArcPlans(projectId, provider)
+  await onProgress?.({ phase: 'generate_arc_plans', message: '正在补齐阶段规划与长篇结构', stepIndex: 3, stepTotal: 7 })
   if (!project.worldState) {
     await initWorldState(projectId)
   }
+  await onProgress?.({ phase: 'init_world_state', message: '正在初始化世界状态', stepIndex: 4, stepTotal: 7 })
   if (!project.storyState) {
     const totalPlanned = Math.max(
       25,
@@ -289,6 +304,7 @@ export async function refreshBlueprintConsole(projectId: number, guidance?: stri
     )
     await initStoryState(projectId, totalPlanned)
   }
+  await onProgress?.({ phase: 'init_story_state', message: '正在初始化故事状态', stepIndex: 5, stepTotal: 7 })
 
   project = await loadProjectForBlueprintConsole(projectId)
   if (!project) {
@@ -296,6 +312,7 @@ export async function refreshBlueprintConsole(projectId: number, guidance?: stri
   }
 
   const prompt = buildRefreshPrompt(project, guidance)
+  await onProgress?.({ phase: 'generate_snapshot', message: '正在生成 AI 动态设定中枢', stepIndex: 6, stepTotal: 7 })
   const result = await provider.generate(prompt, {
     temperature: 0.35,
     maxTokens: 2400,
@@ -337,6 +354,7 @@ export async function refreshBlueprintConsole(projectId: number, guidance?: stri
 
   const projectSettings = toProjectSettingText(snapshot)
 
+  await onProgress?.({ phase: 'persist_snapshot', message: '正在回写设定中枢与世界状态', stepIndex: 7, stepTotal: 7 })
   await prisma.$transaction(async (tx) => {
     await tx.novelProject.update({
       where: { id: projectId },
@@ -405,5 +423,6 @@ export async function refreshBlueprintConsole(projectId: number, guidance?: stri
     })
   })
 
+  await onProgress?.({ phase: 'completed', message: '初始化完成', stepIndex: 7, stepTotal: 7 })
   return snapshot
 }

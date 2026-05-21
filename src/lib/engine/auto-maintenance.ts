@@ -6,6 +6,15 @@ import { refreshBlueprintConsole } from './blueprint-console'
 
 type MaintenanceTaskType = 'BOOTSTRAP_PROJECT' | 'REBUILD_RAG_INDEX'
 
+type MaintenanceTaskProgress = {
+  phase: string
+  message: string
+  stepIndex: number
+  stepTotal: number
+  percent: number
+  updatedAt: string
+}
+
 interface ProjectMaintenanceTaskRecord {
   id: string
   projectId: number
@@ -31,6 +40,8 @@ export interface MaintenanceSummary {
   bootstrapFailed: boolean
   ragFailed: boolean
   queuedTaskCount: number
+  bootstrapProgress?: MaintenanceTaskProgress | null
+  ragProgress?: MaintenanceTaskProgress | null
 }
 
 type MaintenanceWorkerState = {
@@ -60,6 +71,44 @@ function now(): Date {
 
 function toJson(value: Record<string, unknown> = {}): Prisma.InputJsonValue {
   return value as Prisma.InputJsonValue
+}
+
+function readTaskProgress(task: ProjectMaintenanceTaskRecord | null | undefined): MaintenanceTaskProgress | null {
+  if (!task?.payload || typeof task.payload !== 'object') return null
+  const payload = task.payload as Record<string, unknown>
+  const progress = payload.progress
+  if (!progress || typeof progress !== 'object') return null
+
+  const candidate = progress as Record<string, unknown>
+  const phase = typeof candidate.phase === 'string' ? candidate.phase : ''
+  const message = typeof candidate.message === 'string' ? candidate.message : ''
+  const stepIndex = typeof candidate.stepIndex === 'number' ? candidate.stepIndex : 0
+  const stepTotal = typeof candidate.stepTotal === 'number' ? candidate.stepTotal : 0
+  const percent = typeof candidate.percent === 'number' ? candidate.percent : 0
+  const updatedAt = typeof candidate.updatedAt === 'string' ? candidate.updatedAt : new Date().toISOString()
+
+  if (!phase && !message && stepTotal === 0 && percent === 0) return null
+
+  return { phase, message, stepIndex, stepTotal, percent, updatedAt }
+}
+
+async function updateTaskProgress(
+  taskId: string,
+  progress: Omit<MaintenanceTaskProgress, 'updatedAt'>,
+  extra: Record<string, unknown> = {}
+): Promise<void> {
+  await prisma.projectMaintenanceTask.update({
+    where: { id: taskId },
+    data: {
+      payload: {
+        ...extra,
+        progress: {
+          ...progress,
+          updatedAt: now().toISOString(),
+        },
+      } as any,
+    },
+  })
 }
 
 function isTaskActive(task: ProjectMaintenanceTaskRecord): boolean {
@@ -209,6 +258,8 @@ export async function getProjectMaintenanceSummary(projectId: number): Promise<M
   const bootstrapTasks = tasks.filter(task => task.taskType === 'BOOTSTRAP_PROJECT')
   const ragTasks = tasks.filter(task => task.taskType === 'REBUILD_RAG_INDEX')
   const queuedTaskCount = tasks.filter(isTaskActive).length
+  const bootstrapRunningTask = bootstrapTasks.find(task => task.status === 'RUNNING') || bootstrapTasks.find(task => task.status === 'PENDING')
+  const ragRunningTask = ragTasks.find(task => task.status === 'RUNNING') || ragTasks.find(task => task.status === 'PENDING')
 
   return {
     bootstrapQueued: bootstrapTasks.some(task => task.status === 'PENDING'),
@@ -218,12 +269,27 @@ export async function getProjectMaintenanceSummary(projectId: number): Promise<M
     bootstrapFailed: bootstrapTasks.some(task => task.status === 'FAILED'),
     ragFailed: ragTasks.some(task => task.status === 'FAILED'),
     queuedTaskCount,
+    bootstrapProgress: readTaskProgress(bootstrapRunningTask),
+    ragProgress: readTaskProgress(ragRunningTask),
   }
 }
 
 async function runTask(task: ProjectMaintenanceTaskRecord): Promise<Record<string, unknown>> {
   switch (task.taskType as MaintenanceTaskType) {
     case 'BOOTSTRAP_PROJECT': {
+      const totalSteps = 8
+      const setProgress = async (stepIndex: number, phase: string, message: string) => {
+        await updateTaskProgress(task.id, {
+          phase,
+          message,
+          stepIndex,
+          stepTotal: totalSteps,
+          percent: Math.round((stepIndex / totalSteps) * 100),
+        }, task.payload && typeof task.payload === 'object'
+          ? (task.payload as Record<string, unknown>)
+          : {})
+      }
+
       const { title, chapterWordCount, totalVolumes, chapters, chapterSummaries, volumeSummaries, bookSummary } =
         await prisma.novelProject.findUniqueOrThrow({
           where: { id: task.projectId },
@@ -238,16 +304,33 @@ async function runTask(task: ProjectMaintenanceTaskRecord): Promise<Record<strin
           },
         })
 
-      const snapshot = await refreshBlueprintConsole(task.projectId, '系统正在自动初始化创作系统，请补齐蓝图、阶段规划、世界状态与故事状态。')
+      const snapshot = await refreshBlueprintConsole(
+        task.projectId,
+        '系统正在自动初始化创作系统，请补齐蓝图、阶段规划、世界状态与故事状态。',
+        async (progress) => {
+          await updateTaskProgress(task.id, {
+            phase: progress.phase,
+            message: progress.message,
+            stepIndex: progress.stepIndex,
+            stepTotal: totalSteps,
+            percent: Math.round((progress.stepIndex / totalSteps) * 100),
+          }, task.payload && typeof task.payload === 'object'
+            ? (task.payload as Record<string, unknown>)
+            : {})
+        }
+      )
 
       const shouldQueueRag = chapters.length > 0 || chapterSummaries.length > 0 || volumeSummaries.length > 0 || Boolean(bookSummary)
       if (shouldQueueRag) {
+        await setProgress(8, 'queue_rag', '正在排队重建 RAG 索引')
         await queueRagRebuild(task.projectId, {
           source: 'bootstrap',
           title,
           chapterWordCount,
           totalVolumes,
         })
+      } else {
+        await setProgress(8, 'done', '初始化完成，暂无可重建的 RAG 内容')
       }
 
       return {
@@ -256,6 +339,15 @@ async function runTask(task: ProjectMaintenanceTaskRecord): Promise<Record<strin
       }
     }
     case 'REBUILD_RAG_INDEX': {
+      await updateTaskProgress(task.id, {
+        phase: 'rebuild_rag',
+        message: '正在重建 RAG 索引',
+        stepIndex: 1,
+        stepTotal: 1,
+        percent: 100,
+      }, task.payload && typeof task.payload === 'object'
+        ? (task.payload as Record<string, unknown>)
+        : {})
       const result = await rebuildProjectRAGIndex(task.projectId)
       return {
         indexedCount: result.indexedCount,
