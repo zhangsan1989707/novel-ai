@@ -149,6 +149,9 @@ npm ci
 echo "🏗️ 生成 Prisma Client..."
 npx prisma generate
 
+echo "🔄 应用数据库迁移..."
+npx prisma migrate deploy
+
 echo "🏗️ 构建应用..."
 npm run build
 
