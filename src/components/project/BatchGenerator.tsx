@@ -39,6 +39,9 @@ const CONTEXT_OPTIONS = [
 interface BatchGeneratorProps {
   projectId: number
   chapters: Chapter[]
+  buttonLabel?: string
+  buttonVariant?: 'default' | 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger'
+  buttonSize?: 'sm' | 'md' | 'lg'
   onGenerate: (options: {
     chapterIds?: number[]
     useContext: boolean
@@ -48,7 +51,14 @@ interface BatchGeneratorProps {
   }) => void
 }
 
-export function BatchGenerator({ projectId, chapters, onGenerate }: BatchGeneratorProps) {
+export function BatchGenerator({
+  projectId,
+  chapters,
+  buttonLabel = '启动 AI 生产',
+  buttonVariant = 'primary',
+  buttonSize = 'sm',
+  onGenerate,
+}: BatchGeneratorProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [showCostModal, setShowCostModal] = useState(false)
   const [generationType, setGenerationType] = useState<'all' | 'selected'>('all')
@@ -104,20 +114,17 @@ export function BatchGenerator({ projectId, chapters, onGenerate }: BatchGenerat
     )
   }
 
-  if (pendingChapters.length === 0) {
-    return null
-  }
-
   return (
     <>
       <Button
-        variant="primary"
-        size="sm"
+        variant={buttonVariant}
+        size={buttonSize}
         onClick={handleOpen}
-        disabled={chapters.length === 0}
+        disabled={chapters.length === 0 || pendingChapters.length === 0}
+        title={pendingChapters.length === 0 ? '暂无待写章节' : undefined}
       >
         <Sparkles className="h-4 w-4 mr-2" />
-        批量生成剩余章节 ({pendingChapters.length})
+        {pendingChapters.length > 0 ? `${buttonLabel} (${pendingChapters.length})` : '暂无待写章节'}
       </Button>
 
       <Modal
@@ -126,7 +133,7 @@ export function BatchGenerator({ projectId, chapters, onGenerate }: BatchGenerat
         title={
           <div className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-blue-500" />
-            <span>批量生成待写章节</span>
+            <span>{buttonLabel}</span>
           </div>
         }
         className="max-w-lg"
