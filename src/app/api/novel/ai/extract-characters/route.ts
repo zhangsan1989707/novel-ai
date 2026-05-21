@@ -69,6 +69,8 @@ ${contentToAnalyze.slice(0, 8000)}
 5. background - 背景故事（如果有）
 6. catchphrases - 口头禅（数组，最多3个）
 7. aliases - 别名/绰号（数组）
+8. relationships - 与其他角色的关系（对象，key为其他角色名，value为关系描述如"师徒"、"恋人"、"敌对"等）
+9. currentState - 角色在故事中的当前状态/处境（对象，可以包含 position、goal、status 等字段）
 
 【输出格式】
 请严格按照以下 JSON 格式输出：
@@ -81,7 +83,9 @@ ${contentToAnalyze.slice(0, 8000)}
       "personality": "性格特点",
       "background": "背景故事",
       "catchphrases": ["口头禅1"],
-      "aliases": ["别名1"]
+      "aliases": ["别名1"],
+      "relationships": {"角色名": "师徒"},
+      "currentState": {"position": "位置", "goal": "目标"}
     }
   ]
 }
@@ -89,7 +93,7 @@ ${contentToAnalyze.slice(0, 8000)}
 注意：
 - 最多提取10个最重要的角色
 - 确保主角排在最前面
-- 如果某个字段没有足够信息，可以留空字符串
+- 如果某个字段没有足够信息，relationships 和 currentState 留空对象 {}
 - 不要输出任何额外文字，只输出 JSON`
 
     const result = await provider.generate(prompt, { temperature: 0.7 })
@@ -103,6 +107,8 @@ ${contentToAnalyze.slice(0, 8000)}
         background?: string
         catchphrases?: string[]
         aliases?: string[]
+        relationships?: Record<string, string>
+        currentState?: Record<string, string>
       }>
     } | null
 
@@ -132,8 +138,8 @@ ${contentToAnalyze.slice(0, 8000)}
           background: char.background || null,
           catchphrases: char.catchphrases?.slice(0, 3) || [],
           aliases: char.aliases || [],
-          relationships: {},
-          currentState: {},
+          relationships: char.relationships || {},
+          currentState: char.currentState || {},
           firstChapter: 1,
           lastUpdated: 1,
         })

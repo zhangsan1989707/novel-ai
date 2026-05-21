@@ -1246,6 +1246,24 @@ export default function ProjectDetailPage() {
             </>
           )}
 
+          {activeTab === 'analysis' && project.projectMode === 'ANALYZE' && (
+            <BookAnalysisPanel projectId={projectId} />
+          )}
+
+          {activeTab === 'characters' && project.projectMode === 'ANALYZE' && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Users className="h-5 w-5 text-purple-500" />
+                  角色档案
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <CharacterPanel projectId={projectId} />
+              </CardContent>
+            </Card>
+          )}
+
           {activeTab === 'settings' && project.blueprintConsole && (
             <BlueprintConsole
               projectId={projectId}
