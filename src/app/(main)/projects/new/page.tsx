@@ -155,7 +155,7 @@ export default function NewProjectPage() {
             </button>
             <div>
               <h1 className="text-xl font-semibold text-gray-950 dark:text-white">新建小说</h1>
-              <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">只提供方向，小说创建后由 AI 自动生成并维护全书设定中枢</p>
+              <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">只提供方向，创建后即可开始 AI 生成，并自动维护全书设定</p>
             </div>
           </div>
         </div>

@@ -3,9 +3,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Button, Card, CardContent, CardHeader, CardTitle, Badge, Progress, Modal, toast, MoreActionsMenu } from '@/components/ui'
-import { BlueprintConsole, ProjectBaseInfoForm, ProjectBaseInfoFormData, BookAnalysisPanel } from '@/components/project'
+import { BlueprintConsole, ProjectBaseInfoForm, ProjectBaseInfoFormData } from '@/components/project'
 import { Toolbox, CharacterPanel } from '@/components/ai'
-import { CoverGenerator, PlotAnalyzer, ResearchPanel, ReviewPanel, DeslopPanel, ExportPanel, AnalysisTaskPanel } from '@/components/ai'
+import { CoverGenerator, ResearchPanel, ReviewPanel, DeslopPanel, ExportPanel, AnalysisWorkbench } from '@/components/ai'
 import { BookOpen, Clock, Target, Users, Layers, Search, ClipboardList, Rocket, Shield, Sparkles, ChevronRight, ChevronDown, Wrench, Eye, Play, Pause, AlertCircle, CheckCircle2, Loader2, Download } from 'lucide-react'
 import type { ProjectStatus } from '@/types'
 import type { PipelineRuntimeState } from '@/lib/engine/pipeline-runtime'
@@ -521,10 +521,16 @@ export default function ProjectDetailPage() {
     },
     {
       id: 'plotAnalyzer',
-      label: '剧情分析',
-      description: '分析剧情结构和发展',
+      label: project?.projectMode === 'ANALYZE' ? '拆书工作台' : '剧情分析',
+      description: project?.projectMode === 'ANALYZE' ? '查看拆书结论与发起分析任务' : '分析剧情结构和发展',
       icon: <ClipboardList className="h-4 w-4" />,
-      onClick: () => setShowPlotAnalysisModal(true),
+      onClick: () => {
+        if (project?.projectMode === 'ANALYZE') {
+          setActiveTab('analysis')
+          return
+        }
+        setShowPlotAnalysisModal(true)
+      },
     },
     {
       id: 'review',
@@ -1247,7 +1253,7 @@ export default function ProjectDetailPage() {
           )}
 
           {activeTab === 'analysis' && project.projectMode === 'ANALYZE' && (
-            <BookAnalysisPanel projectId={projectId} />
+            <AnalysisWorkbench projectId={projectId} totalVolumes={project.totalVolumes} />
           )}
 
           {activeTab === 'characters' && project.projectMode === 'ANALYZE' && (
@@ -1515,17 +1521,10 @@ export default function ProjectDetailPage() {
       <Modal
         open={showPlotAnalysisModal}
         onClose={() => setShowPlotAnalysisModal(false)}
-        title="剧情分析"
+        title="拆书分析"
         className="max-w-4xl"
       >
-        <div className="space-y-4">
-          <AnalysisTaskPanel projectId={projectId} onTaskComplete={() => {}} compact={false} />
-          <PlotAnalyzer
-            projectId={projectId}
-            projectTitle={project.title}
-            totalVolumes={project.totalVolumes}
-          />
-        </div>
+        <AnalysisWorkbench projectId={projectId} totalVolumes={project.totalVolumes} />
       </Modal>
 
       {/* Review Modal */}

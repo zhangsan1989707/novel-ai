@@ -177,14 +177,14 @@ export function ProjectForm({ defaultValues, onSubmit, onCancel, loading, submit
       const data = await res.json()
       if (data.success && data.data.title) {
         setValue('title', data.data.title)
-        toast.success(`已应用「${inspiration.title}」灵感，AI 已生成书名`)
+        toast.success(`已应用「${inspiration.title}」灵感，已自动生成书名`)
       } else {
         setValue('title', inspiration.sampleTitle)
         toast.success(`已应用「${inspiration.title}」灵感`)
       }
     } catch {
       setValue('title', inspiration.sampleTitle)
-      toast.success(`已应用「${inspiration.title}」灵感`)
+        toast.success(`已应用「${inspiration.title}」灵感`)
     } finally {
       setGeneratingTitle(false)
     }
@@ -503,7 +503,7 @@ export function ProjectForm({ defaultValues, onSubmit, onCancel, loading, submit
                 ) : (
                   <>
                     <Wand2 className="h-4 w-4 mr-2" />
-                    一键生成设定
+                    自动生成设定
                   </>
                 )}
               </Button>

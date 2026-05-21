@@ -333,7 +333,7 @@ export async function refreshBlueprintConsole(
     try {
       parsed = parseAiJsonObject<BlueprintConsoleSnapshot>(retry.content)
     } catch {
-      throw new Error(`AI 控制台刷新失败：${error instanceof Error ? error.message : 'JSON 解析失败'}`)
+      throw new Error(`蓝图中枢刷新失败：${error instanceof Error ? error.message : 'JSON 解析失败'}`)
     }
   }
 

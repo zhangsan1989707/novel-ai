@@ -21,7 +21,7 @@ export async function GET(
   } catch (error) {
     console.error('Get blueprint console error:', error)
     return NextResponse.json(
-      { success: false, error: { code: 'INTERNAL_ERROR', message: '获取 AI 控制台失败' } },
+      { success: false, error: { code: 'INTERNAL_ERROR', message: '获取蓝图中枢失败' } },
       { status: 500 }
     )
   }
@@ -50,7 +50,7 @@ export async function POST(
   } catch (error) {
     console.error('Refresh blueprint console error:', error)
     return NextResponse.json(
-      { success: false, error: { code: 'INTERNAL_ERROR', message: error instanceof Error ? error.message : '刷新 AI 控制台失败' } },
+      { success: false, error: { code: 'INTERNAL_ERROR', message: error instanceof Error ? error.message : '刷新蓝图中枢失败' } },
       { status: 500 }
     )
   }

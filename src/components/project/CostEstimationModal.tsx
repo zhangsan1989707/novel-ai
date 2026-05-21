@@ -171,7 +171,7 @@ export function CostEstimationModal({
             </Card>
             
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              注：以上预估为基于 Agent 流水线的估算，实际成本可能因内容复杂度有所不同。价格以百万 tokens 为单位（输入/输出分别计费）。
+              注：以上预估为基于完整 Agent 流程的估算，实际成本可能因内容复杂度有所不同。价格以百万 tokens 为单位（输入/输出分别计费）。
             </p>
           </>
         ) : null}

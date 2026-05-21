@@ -55,8 +55,8 @@ export async function POST(
           error: {
             code: 'INITIALIZING',
             message: bootstrapRunning || ragRunning
-              ? 'AI 正在初始化创作系统或重建 RAG 索引，请完成后再启动流水线'
-              : '创作系统尚未初始化完成，请稍后再启动流水线',
+              ? 'AI 正在初始化创作系统或重建 RAG 索引，请完成后再开始生成'
+              : '创作系统尚未初始化完成，请稍后再开始生成',
           },
         },
         { status: 409 }
@@ -88,7 +88,7 @@ export async function POST(
   } catch (error) {
     console.error('Pipeline start error:', error)
     return NextResponse.json(
-      { success: false, error: { code: 'INTERNAL_ERROR', message: '启动流水线失败' } },
+      { success: false, error: { code: 'INTERNAL_ERROR', message: '启动 AI 生产失败' } },
       { status: 500 }
     )
   }

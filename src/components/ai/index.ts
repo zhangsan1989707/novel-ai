@@ -6,6 +6,7 @@ export { SuggestionButtons } from './SuggestionButtons'
 export { PlotAnalyzer } from './PlotAnalyzer'
 export { BookAnalysisPanel } from './BookAnalysisPanel'
 export { AnalysisTaskPanel } from './AnalysisTaskPanel'
+export { AnalysisWorkbench } from './AnalysisWorkbench'
 // 续写功能
 export { ContinuationPanel } from './ContinuationPanel'
 export { ContinuationResults } from './ContinuationResults'

@@ -8,6 +8,7 @@ import { AIVendor, AnalysisDimension, AnalysisType } from '@/types'
 import { buildChapterMemoryPack, buildMemorySnapshotPack } from '@/lib/memory'
 import { getChapterSummariesInRange, saveChapterSummary } from '@/lib/memory/chapter-summary'
 import { logger, logError } from '@/lib/logger'
+import { ANALYSIS_DIMENSION_LABELS, ANALYSIS_FORMAT_TEMPLATES } from '@/lib/analysis/config'
 
 // ============================================
 // 常量配置
@@ -40,7 +41,7 @@ const analyzePlotSchema = z.object({
     'PLOT_LINE',
     'FORESHADOWING',
     'CHAPTER_STRUCTURE',
-    'WORLD_SETTING'
+    'WORLD_SETTING',
   ]),
   // 上下文: 使用前N章作为上下文
   contextChapterCount: z.number().int().min(1).max(10).default(3),
@@ -280,41 +281,6 @@ async function generateLayeredAnalysis(
     .join('\n')
 
   // 构建提示词
-  const dimensionLabels: Record<string, AnalysisDimension> = {
-    '人物关系': AnalysisDimension.CHARACTER_RELATION,
-    '剧情线': AnalysisDimension.PLOT_LINE,
-    '伏笔': AnalysisDimension.FORESHADOWING,
-    '章节结构': AnalysisDimension.CHAPTER_STRUCTURE,
-    '世界观': AnalysisDimension.WORLD_SETTING,
-  }
-
-  const formatTemplates: Record<AnalysisDimension, string> = {
-    [AnalysisDimension.CHARACTER_RELATION]: `{
-  "characters": [
-    { "name": "角色名", "role": "protagonist|antagonist|supporting|minor", "description": "角色描述", "relationships": [{ "target": "相关角色", "type": "关系类型", "description": "关系描述" }] }
-  ],
-  "summary": "人物关系整体概述"
-}`,
-    [AnalysisDimension.PLOT_LINE]: `{
-  "mainPlot": [{ "title": "主线标题", "keyEvents": ["关键事件"], "emotionalArc": "情感弧线" }],
-  "subPlots": [{ "title": "副线标题", "keyEvents": ["关键事件"], "relationship": "与主线关联" }],
-  "timeline": [{ "event": "事件", "chapter": 章节号, "significance": "major|minor" }]
-}`,
-    [AnalysisDimension.FORESHADOWING]: `{
-  "items": [{ "setup": "伏笔内容", "description": "描述", "payoff": "回收情况", "chapter": 章节号, "importance": "major|minor", "type": "plot|character" }],
-  "unresolved": ["未解伏笔列表"]
-}`,
-    [AnalysisDimension.CHAPTER_STRUCTURE]: `{
-  "chapters": [{ "number": 章节号, "title": "章节名", "function": "setup|development|climax|resolution", "keyEvents": ["事件"], "emotionalBeat": "情感基调" }],
-  "arcAnalysis": "整体结构分析",
-  "pacingAssessment": "节奏评估"
-}`,
-    [AnalysisDimension.WORLD_SETTING]: `{
-  "settings": [{ "name": "设定名称", "description": "描述", "rules": ["规则1"], "firstAppear": "首次出现章节" }],
-  "locations": [{ "name": "地点", "description": "描述", "significance": "major|minor" }]
-}`,
-  }
-
   const prompt = `你是一位专业的小说分析师。请对小说《${projectTitle}》进行全面的拆书分析。
 
 【基础信息】
@@ -335,8 +301,8 @@ ${recentChapters.map(ch => `第${ch.chapterNumber}章 "${ch.title}":\n${ch.conte
 请对以下 ${dimensions.length} 个维度进行深入分析：
 
 ${dimensions.map(dim => {
-    const label = Object.keys(dimensionLabels).find(k => dimensionLabels[k] === dim) || dim
-    return `### 【${label}】\n\`\`\`json\n${formatTemplates[dim]}\n\`\`\``
+    const label = ANALYSIS_DIMENSION_LABELS[dim] || dim
+    return `### 【${label}】\n\`\`\`json\n${ANALYSIS_FORMAT_TEMPLATES[dim]}\n\`\`\``
   }).join('\n\n')}
 
 【重要说明】

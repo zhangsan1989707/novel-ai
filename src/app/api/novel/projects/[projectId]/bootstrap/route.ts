@@ -67,7 +67,7 @@ export async function POST(
 
     await initWorldState(projectId)
     await initStoryState(projectId, totalPlanned)
-    await refreshBlueprintConsole(projectId, '项目初始化完成，请同步生成当前 AI 动态设定中枢。')
+    await refreshBlueprintConsole(projectId, '项目初始化完成，请继续同步当前 AI 动态设定中枢。')
 
     const report = await loadProjectHealthReport(projectId)
     if (report) {

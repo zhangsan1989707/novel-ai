@@ -6,6 +6,14 @@ import { Button, Card, CardHeader, CardTitle, CardContent, toast } from '@/compo
 import { ProjectForm, type ProjectFormData } from '@/components/project'
 import { BookOpen, Sparkles, FileText, CheckCircle, Upload, File, Loader2 } from 'lucide-react'
 import { BookAnalysisPanel, AnalysisTaskPanel } from '@/components/ai'
+import { AnalyzeChapterPreparation } from './AnalyzeChapterPreparation'
+import {
+  type ChapterReviewItem,
+  mergeChapterItems,
+  moveChapterItem,
+  normalizeChapterReviewItems,
+  splitChapterItem,
+} from '@/lib/analysis/chapter-utils'
 
 type WizardStep = 'upload' | 'uploading' | 'confirm' | 'analyzing' | 'complete'
 
@@ -22,6 +30,8 @@ export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
   const [charactersCount, setCharactersCount] = useState(0)
   const [taskId, setTaskId] = useState<string | null>(null)
   const [taskPollingActive, setTaskPollingActive] = useState(false)
+  const [chapterDrafts, setChapterDrafts] = useState<ChapterReviewItem[]>([])
+  const [chapterDraftsLoading, setChapterDraftsLoading] = useState(false)
   const [extractedMeta, setExtractedMeta] = useState<{
     title: string
     genre?: string
@@ -33,6 +43,10 @@ export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
     totalVolumes?: number
     targetAudience?: 'MALE' | 'FEMALE'
     chapterCount?: number
+    worldSetting?: string
+    powerSystem?: string
+    protagonistProfile?: string
+    antagonistSetting?: string
   } | null>(null)
 
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -115,7 +129,23 @@ export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
           totalVolumes: p.totalVolumes || 4,
           targetAudience: p.targetAudience || undefined,
           chapterCount: uploadData.data.chapterCount,
+          worldSetting: p.worldSetting || undefined,
+          powerSystem: p.powerSystem || undefined,
+          protagonistProfile: p.protagonistProfile || undefined,
+          antagonistSetting: p.antagonistSetting || undefined,
         })
+      }
+
+      setChapterDraftsLoading(true)
+      const chapterRes = await fetch(`/api/novel/projects/${newProjectId}/chapters?includeContent=true`)
+      const chapterData = await chapterRes.json()
+      if (chapterData.success) {
+        setChapterDrafts(normalizeChapterReviewItems(
+          chapterData.data.map((chapter: { title: string; content?: string }) => ({
+            title: chapter.title,
+            content: chapter.content || '',
+          }))
+        ))
       }
 
       setStep('confirm')
@@ -124,6 +154,8 @@ export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
       setError('操作失败，请重试')
       setStep('upload')
       setSubmitting(false)
+    } finally {
+      setChapterDraftsLoading(false)
     }
   }
 
@@ -197,6 +229,24 @@ export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
     setError('')
 
     try {
+      const normalizedChapters = chapterDrafts.map(chapter => ({
+        title: chapter.title,
+        content: chapter.content,
+      }))
+
+      const normalizeRes = await fetch(`/api/novel/projects/${projectId}/chapters/normalize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chapters: normalizedChapters }),
+      })
+      const normalizeData = await normalizeRes.json()
+      if (!normalizeData.success) {
+        setError(normalizeData.error?.message || '保存切章校正失败')
+        setStep('confirm')
+        setSubmitting(false)
+        return
+      }
+
       const updateRes = await fetch(`/api/novel/projects/${projectId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -446,6 +496,31 @@ export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
             </div>
           </div>
 
+          {chapterDraftsLoading ? (
+            <div className="mb-6 rounded-2xl border border-gray-200 bg-white p-6 text-center text-sm text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400">
+              正在加载章节校验列表...
+            </div>
+          ) : (
+            <AnalyzeChapterPreparation
+              chapters={chapterDrafts}
+              onTitleChange={(index, title) => setChapterDrafts(prev => normalizeChapterReviewItems(
+                prev.map((item, itemIndex) => ({
+                  title: itemIndex === index ? title : item.title,
+                  content: item.content,
+                }))
+              ))}
+              onMergeNext={(index) => setChapterDrafts(prev => mergeChapterItems(prev, index))}
+              onSplit={(index) => setChapterDrafts(prev => splitChapterItem(prev, index))}
+              onMove={(index, direction) => setChapterDrafts(prev => moveChapterItem(prev, index, direction))}
+              onDelete={(index) => setChapterDrafts(prev => normalizeChapterReviewItems(
+                prev.filter((_, itemIndex) => itemIndex !== index).map(item => ({
+                  title: item.title,
+                  content: item.content,
+                }))
+              ))}
+            />
+          )}
+
           <ProjectForm
             defaultValues={{
               title: extractedMeta.title,
@@ -456,11 +531,11 @@ export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
               chapterWordCount: extractedMeta.chapterWordCount || 3000,
               totalVolumes: extractedMeta.totalVolumes || 4,
               targetAudience: extractedMeta.targetAudience,
-              worldSetting: '',
-              powerSystem: '',
-              protagonistProfile: '',
+              worldSetting: extractedMeta.worldSetting || '',
+              powerSystem: extractedMeta.powerSystem || '',
+              protagonistProfile: extractedMeta.protagonistProfile || '',
               protagonistGoal: '',
-              antagonistSetting: '',
+              antagonistSetting: extractedMeta.antagonistSetting || '',
               endingPlan: '',
               writingPrompt: '',
             }}

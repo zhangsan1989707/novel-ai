@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { logError } from '@/lib/logger'
+import { AnalysisDimension } from '@/types'
 
 // ============================================
 // Schema 验证
@@ -9,14 +10,7 @@ import { logError } from '@/lib/logger'
 
 const getAnalysisSchema = z.object({
   volumeNumber: z.string().optional().transform(v => v ? parseInt(v, 10) : undefined),
-  dimension: z.enum([
-    'CHARACTER_RELATION',
-    'PLOT_LINE',
-    'FORESHADOWING',
-    'CHAPTER_STRUCTURE',
-    'WORLD_SETTING',
-    'all'
-  ]).optional().transform(v => v || 'all'),
+  dimension: z.union([z.nativeEnum(AnalysisDimension), z.literal('all')]).optional().transform(v => v || 'all'),
 })
 
 // ============================================

@@ -48,11 +48,14 @@ export enum AIVendor {
 
 // 拆书分析维度
 export enum AnalysisDimension {
+  STORY_OVERVIEW = 'STORY_OVERVIEW',           // 故事总览/大纲骨架
   CHARACTER_RELATION = 'CHARACTER_RELATION',   // 人物关系
+  CHARACTER_ARC = 'CHARACTER_ARC',             // 角色成长
   PLOT_LINE = 'PLOT_LINE',                     // 剧情线
   FORESHADOWING = 'FORESHADOWING',             // 伏笔悬念
   CHAPTER_STRUCTURE = 'CHAPTER_STRUCTURE',     // 章节结构
-  WORLD_SETTING = 'WORLD_SETTING'             // 世界观设定
+  READING_EXPERIENCE = 'READING_EXPERIENCE',   // 阅读体验
+  WORLD_SETTING = 'WORLD_SETTING'              // 世界观设定
 }
 
 // 分析类型

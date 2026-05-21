@@ -38,10 +38,13 @@ const statusConfig = {
 }
 
 const dimensionLabels: Record<string, string> = {
+  STORY_OVERVIEW: '故事总览',
   CHARACTER_RELATION: '人物关系',
+  CHARACTER_ARC: '角色成长',
   PLOT_LINE: '剧情线',
   FORESHADOWING: '伏笔悬念',
   CHAPTER_STRUCTURE: '章节结构',
+  READING_EXPERIENCE: '阅读体验',
   WORLD_SETTING: '世界观设定',
 }
 

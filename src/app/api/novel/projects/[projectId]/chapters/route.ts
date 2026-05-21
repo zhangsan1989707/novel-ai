@@ -39,6 +39,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       )
     }
 
+    const includeContent = new URL(request.url).searchParams.get('includeContent') === 'true'
+
     const chapters = await prisma.novelChapter.findMany({
       where: { projectId: projectIdNum },
       orderBy: [{ sortOrder: 'asc' }, { chapterNumber: 'asc' }],
@@ -49,6 +51,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         wordCount: true,
         status: true,
         summary: true,
+        content: includeContent,
         sortOrder: true,
         virtualWriterId: true,
         createdAt: true,

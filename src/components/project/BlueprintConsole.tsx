@@ -51,7 +51,7 @@ export function BlueprintConsole({ projectId, initialData, steeringValues, onRef
       }
       setSnapshot(result.data)
       setGuidance('')
-      toast.success(inputGuidance ? '方向已微调并同步到 AI 控制台' : 'AI 控制台已刷新')
+      toast.success(inputGuidance ? '方向已微调并同步到蓝图中枢' : '蓝图状态已刷新')
       onRefreshed?.()
     } catch {
       toast.error('刷新失败')
@@ -68,7 +68,7 @@ export function BlueprintConsole({ projectId, initialData, steeringValues, onRef
             <div className="space-y-3">
               <div className="inline-flex items-center gap-2 rounded-full bg-white/12 px-3 py-1 text-xs font-medium tracking-wide text-blue-100">
                 <Sparkles className="h-3.5 w-3.5" />
-                AI Book Blueprint
+                AI 蓝图中枢
               </div>
               <div>
                 <p className="text-sm text-blue-100/90">这是一本</p>
@@ -82,7 +82,7 @@ export function BlueprintConsole({ projectId, initialData, steeringValues, onRef
             <div className="flex flex-wrap gap-2">
               {onEditBaseInfo && (
                 <Button variant="outline" size="sm" onClick={onEditBaseInfo} className="border-white/20 bg-white/10 text-white hover:bg-white/20">
-                  编辑标题
+                  编辑基础信息
                 </Button>
               )}
               <Button
@@ -93,7 +93,7 @@ export function BlueprintConsole({ projectId, initialData, steeringValues, onRef
                 className="border-white/20 bg-white/10 text-white hover:bg-white/20"
               >
                 <RefreshCw className="h-4 w-4" />
-                刷新 AI 状态
+                刷新蓝图状态
               </Button>
             </div>
           </div>

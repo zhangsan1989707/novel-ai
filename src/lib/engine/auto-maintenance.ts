@@ -306,7 +306,7 @@ async function runTask(task: ProjectMaintenanceTaskRecord): Promise<Record<strin
 
       const snapshot = await refreshBlueprintConsole(
         task.projectId,
-        '系统正在自动初始化创作系统，请补齐蓝图、阶段规划、世界状态与故事状态。',
+        '系统正在自动补齐创作配置，请等待蓝图、阶段规划、世界状态与故事状态完成生成。',
         async (progress) => {
           await updateTaskProgress(task.id, {
             phase: progress.phase,
@@ -330,7 +330,7 @@ async function runTask(task: ProjectMaintenanceTaskRecord): Promise<Record<strin
           totalVolumes,
         })
       } else {
-        await setProgress(8, 'done', '初始化完成，暂无可重建的 RAG 内容')
+        await setProgress(8, 'done', '补齐完成，暂无可重建的 RAG 内容')
       }
 
       return {

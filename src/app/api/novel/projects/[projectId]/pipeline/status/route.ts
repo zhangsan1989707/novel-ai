@@ -90,7 +90,7 @@ export async function GET(
   } catch (error) {
     console.error('Pipeline status error:', error)
     return NextResponse.json(
-      { success: false, error: { code: 'INTERNAL_ERROR', message: '查询流水线失败' } },
+      { success: false, error: { code: 'INTERNAL_ERROR', message: '查询生成状态失败' } },
       { status: 500 }
     )
   }

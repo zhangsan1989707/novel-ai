@@ -111,7 +111,7 @@ type HealthSummary = Omit<ProjectHealthReport, 'primaryAction' | 'recommendation
 
 function buildPrimaryAction(report: HealthSummary): string {
   if (!report.hasModel) return '先绑定 AI 模型'
-  if (!report.hasBlueprint || !report.hasArcPlans || !report.hasStoryState) return '系统正在自动初始化'
+  if (!report.hasBlueprint || !report.hasArcPlans || !report.hasStoryState) return '系统正在自动补齐创作配置'
   if (report.ragRebuildInFlight) return 'RAG 索引正在后台重建'
   if (report.emptyCompletedChapters > 0) return '回看短章并重算投影'
   if (report.recentCommitFailures > 0) return '重放失败的章节提交'
@@ -127,10 +127,10 @@ function buildRecommendations(report: HealthSummary): string[] {
   const recommendations: string[] = []
 
   if (!report.hasModel) {
-    recommendations.push('先绑定 AI 模型，否则主生成链路无法稳定运行')
+    recommendations.push('先绑定 AI 模型，否则主生成流程无法稳定运行')
   }
   if (!report.hasBlueprint || !report.hasArcPlans || !report.hasStoryState) {
-    recommendations.push('系统正在自动初始化创作系统，补齐蓝图、阶段规划和故事状态')
+    recommendations.push('系统正在自动补齐创作配置，蓝图、阶段规划和故事状态完成后即可开始生成')
   }
   if (report.emptyCompletedChapters > 0) {
     recommendations.push('修复已完成但字数过低的章节，避免质量门失真')
@@ -161,7 +161,7 @@ function buildRecommendations(report: HealthSummary): string[] {
   }
 
   if (recommendations.length === 0) {
-    recommendations.push('当前健康状态正常，可继续生产')
+    recommendations.push('当前健康状态正常，可继续生成')
   }
 
   return recommendations.slice(0, 5)

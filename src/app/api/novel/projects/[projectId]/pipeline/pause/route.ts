@@ -20,7 +20,7 @@ export async function POST(
     const project = await prisma.novelProject.findUnique({ where: { id: projectId } })
     if (!project || !project.pipelineJobId) {
       return NextResponse.json(
-        { success: false, error: { code: 'NOT_FOUND', message: '没有可暂停的流水线任务' } },
+        { success: false, error: { code: 'NOT_FOUND', message: '没有可暂停的生成任务' } },
         { status: 404 }
       )
     }
@@ -31,7 +31,7 @@ export async function POST(
     })
     if (!job || job.status === 'COMPLETED' || job.status === 'FAILED') {
       return NextResponse.json(
-        { success: false, error: { code: 'INVALID_STATE', message: '当前任务不能暂停' } },
+        { success: false, error: { code: 'INVALID_STATE', message: '当前生成任务不能暂停' } },
         { status: 400 }
       )
     }
@@ -50,7 +50,7 @@ export async function POST(
   } catch (error) {
     console.error('Pipeline pause error:', error)
     return NextResponse.json(
-      { success: false, error: { code: 'INTERNAL_ERROR', message: '暂停流水线失败' } },
+      { success: false, error: { code: 'INTERNAL_ERROR', message: '暂停生成任务失败' } },
       { status: 500 }
     )
   }

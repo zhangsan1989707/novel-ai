@@ -7,16 +7,7 @@ import { getCurrentUserId } from '@/lib/auth'
 import { createProviderFromDefaultConfig } from '@/lib/ai'
 import { parseAiJsonObject } from '@/lib/engine/ai-json'
 import { queueProjectBootstrap } from '@/lib/engine/auto-maintenance'
-
-interface EpubChapter {
-  title: string
-  content: string
-}
-
-interface ParsedChapter {
-  title: string
-  content: string
-}
+import { splitIntoChapters, countContentWords } from '@/lib/analysis/chapter-utils'
 
 // ============================================
 // 工具函数
@@ -72,164 +63,6 @@ async function extractTextFromTxt(arrayBuffer: ArrayBuffer): Promise<string> {
     text = new TextDecoder('gbk').decode(arrayBuffer)
   }
   return text.trim()
-}
-
-// ============================================
-// 智能分章
-// ============================================
-
-const CHAPTER_PATTERNS = [
-  // 第1章 标题 / 第一章 标题
-  /^第([一二三四五六七八九十百千零\d]+)\s*[章节回部]\s*(.+)/m,
-  // Chapter 1 - Title
-  /^Chapter\s+(\d+)\s*[-–—:]\s*(.+)/im,
-  // 1. 标题
-  /^(\d+)\.\s*(.+)/m,
-  // 【第1章】标题
-  /^\[?第?([一二三四五六七八九十百千零\d]+)\s*[章节回部]\s*\]?\s*(.+)/m,
-]
-
-// 中文数字转阿拉伯数字
-function chineseToNumber(cn: string): number {
-  const map: Record<string, number> = {
-    '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9, '十': 10,
-    '百': 100, '千': 1000, '零': 0,
-  }
-  let num = 0
-  if (cn.includes('十')) {
-    const parts = cn.split('十')
-    if (parts[0] === '') {
-      num = 10
-    } else if (parts[1] === '') {
-      num = map[parts[0]] * 10
-    } else {
-      num = (map[parts[0]] || 0) * 10 + (map[parts[1]] || 0)
-    }
-  } else {
-    for (const char of cn) {
-      if (map[char] !== undefined) num = num * 10 + map[char]
-    }
-  }
-  return num || parseInt(cn) || 0
-}
-
-function detectChapterNumber(title: string): number {
-  for (const pattern of CHAPTER_PATTERNS) {
-    const match = title.match(pattern)
-    if (match) {
-      const numStr = match[1]
-      // 尝试直接转数字
-      const parsed = parseInt(numStr)
-      if (!isNaN(parsed)) return parsed
-      // 中文数字
-      return chineseToNumber(numStr)
-    }
-  }
-  return 0
-}
-
-function extractChapterTitle(content: string): string {
-  const lines = content.split('\n').filter(l => l.trim().length > 0)
-  for (const line of lines.slice(0, 5)) {
-    const trimmed = line.trim()
-    for (const pattern of CHAPTER_PATTERNS) {
-      const match = trimmed.match(pattern)
-      if (match) {
-        return match[0].slice(0, 100)
-      }
-    }
-  }
-  return ''
-}
-
-/**
- * 智能分章
- * 优先使用标题检测，失败则使用固定字数分段
- */
-function splitIntoChapters(text: string, minChapterLength = 500): ParsedChapter[] {
-  const chapters: ParsedChapter[] = []
-
-  // 按换行分割段落
-  const paragraphs = text.split(/\n{2,}/).filter(p => p.trim().length > 0)
-
-  let currentChapter: ParsedChapter | null = null
-  let currentContent: string[] = []
-
-  for (const para of paragraphs) {
-    const trimmed = para.trim()
-    if (!trimmed) continue
-
-    // 检测是否为章节标题
-    const isChapterTitle = CHAPTER_PATTERNS.some(p => p.test(trimmed))
-
-    if (isChapterTitle && trimmed.length < 100) {
-      // 保存当前章节
-      if (currentChapter && currentContent.length > 0) {
-        currentChapter.content = currentContent.join('\n\n')
-        chapters.push(currentChapter)
-      }
-
-      // 开始新章节
-      currentChapter = {
-        title: trimmed.slice(0, 100),
-        content: '',
-      }
-      currentContent = []
-    } else {
-      // 累积内容
-      if (currentChapter) {
-        currentContent.push(trimmed)
-      } else {
-        // 没有检测到章节标题，创建第一个
-        currentChapter = {
-          title: extractChapterTitle(para) || '序章',
-          content: '',
-        }
-        currentContent.push(trimmed)
-      }
-
-      // 如果当前章节内容过长，自动截断并创建新章节
-      if (currentContent.join('\n\n').length > 10000) {
-        if (currentChapter && currentContent.length > 0) {
-          currentChapter.content = currentContent.join('\n\n')
-          chapters.push(currentChapter)
-        }
-        currentChapter = {
-          title: extractChapterTitle(currentContent.join('\n\n')) || `第${chapters.length + 1}章`,
-          content: '',
-        }
-        currentContent = []
-      }
-    }
-  }
-
-  // 保存最后一章
-  if (currentChapter && currentContent.length > 0) {
-    currentChapter.content = currentContent.join('\n\n')
-    chapters.push(currentChapter)
-  }
-
-  // 如果没有检测到任何章节，使用固定字数分段
-  if (chapters.length === 0) {
-    const segmentSize = 5000
-    for (let i = 0; i < text.length; i += segmentSize) {
-      const segNum = Math.floor(i / segmentSize) + 1
-      const segment = text.slice(i, i + segmentSize)
-      chapters.push({
-        title: `第${segNum}段`,
-        content: segment,
-      })
-    }
-  }
-
-  // 为没有标题的章节补充标题
-  chapters.forEach((ch, idx) => {
-    if (ch.title === '序章' || !ch.title || ch.title === `第${idx + 1}段`) {
-      ch.title = ch.title || `第${idx + 1}章`
-    }
-  })
-
-  return chapters
 }
 
 // ============================================
@@ -463,7 +296,7 @@ ${contentPreview}
       chapterNumber: idx + 1,
       title: ch.title,
       content: ch.content,
-      wordCount: ch.content.replace(/\s/g, '').length,
+      wordCount: countContentWords(ch.content),
       status: 'REVIEWING' as const,
     }))
 

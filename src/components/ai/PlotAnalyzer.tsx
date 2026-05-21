@@ -4,6 +4,7 @@ import { useState, useRef, useCallback } from 'react'
 import { Button, Select, Badge } from '@/components/ui'
 import { Sparkles, BookOpen, AlertCircle, X, Loader2 } from 'lucide-react'
 import { AnalysisDimension } from '@/types'
+import { ANALYSIS_DIMENSION_DESCRIPTIONS, DEFAULT_ANALYSIS_DIMENSIONS, ANALYSIS_DIMENSION_LABELS } from '@/lib/analysis/config'
 
 interface PlotAnalyzerProps {
   projectId: number
@@ -18,21 +19,10 @@ interface AnalysisResult {
   rawContent: string
 }
 
-const dimensionOptions = [
-  { value: AnalysisDimension.CHARACTER_RELATION, label: '人物关系' },
-  { value: AnalysisDimension.PLOT_LINE, label: '剧情线' },
-  { value: AnalysisDimension.FORESHADOWING, label: '伏笔悬念' },
-  { value: AnalysisDimension.CHAPTER_STRUCTURE, label: '章节结构' },
-  { value: AnalysisDimension.WORLD_SETTING, label: '世界观设定' },
-]
-
-const dimensionDescriptions: Record<AnalysisDimension, string> = {
-  [AnalysisDimension.CHARACTER_RELATION]: '分析角色关系、矛盾冲突',
-  [AnalysisDimension.PLOT_LINE]: '梳理主线、副线、时间线',
-  [AnalysisDimension.FORESHADOWING]: '标记伏笔和悬念的埋设与回收',
-  [AnalysisDimension.CHAPTER_STRUCTURE]: '分析章节的节奏和起承转合',
-  [AnalysisDimension.WORLD_SETTING]: '提取世界观和力量体系设定',
-}
+const dimensionOptions = DEFAULT_ANALYSIS_DIMENSIONS.map((value) => ({
+  value,
+  label: ANALYSIS_DIMENSION_LABELS[value],
+}))
 
 export function PlotAnalyzer({
   projectId,
@@ -48,13 +38,7 @@ export function PlotAnalyzer({
 
   // 粒度选择
   const [volumeNumber, setVolumeNumber] = useState<string>('-1') // -1=整书
-  const [selectedDimensions, setSelectedDimensions] = useState<AnalysisDimension[]>([
-    AnalysisDimension.CHARACTER_RELATION,
-    AnalysisDimension.PLOT_LINE,
-    AnalysisDimension.FORESHADOWING,
-    AnalysisDimension.CHAPTER_STRUCTURE,
-    AnalysisDimension.WORLD_SETTING,
-  ])
+  const [selectedDimensions, setSelectedDimensions] = useState<AnalysisDimension[]>(DEFAULT_ANALYSIS_DIMENSIONS)
   const [contextChapterCount, setContextChapterCount] = useState<string>('3')
 
   // 切换维度选择
@@ -202,7 +186,7 @@ export function PlotAnalyzer({
               <div>
                 <div className="font-medium text-sm">{option.label}</div>
                 <div className="text-xs text-muted-foreground">
-                  {dimensionDescriptions[option.value]}
+                  {ANALYSIS_DIMENSION_DESCRIPTIONS[option.value]}
                 </div>
               </div>
             </label>

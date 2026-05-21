@@ -21,7 +21,7 @@ export async function POST(
     const project = await prisma.novelProject.findUnique({ where: { id: projectId } })
     if (!project || !project.pipelineJobId) {
       return NextResponse.json(
-        { success: false, error: { code: 'NOT_FOUND', message: '没有可恢复的流水线任务' } },
+        { success: false, error: { code: 'NOT_FOUND', message: '没有可恢复的生成任务' } },
         { status: 404 }
       )
     }
@@ -39,7 +39,7 @@ export async function POST(
   } catch (error) {
     console.error('Pipeline resume error:', error)
     return NextResponse.json(
-      { success: false, error: { code: 'INTERNAL_ERROR', message: '恢复流水线失败' } },
+      { success: false, error: { code: 'INTERNAL_ERROR', message: '恢复生成任务失败' } },
       { status: 500 }
     )
   }

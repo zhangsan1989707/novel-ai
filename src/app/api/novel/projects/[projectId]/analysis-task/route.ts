@@ -6,17 +6,17 @@ import { AnalysisDimension, AnalysisType } from '@/types'
 import { logError } from '@/lib/logger'
 import { Prisma } from '@prisma/client'
 import { getChapterSummariesInRange, saveChapterSummary } from '@/lib/memory/chapter-summary'
+import {
+  ANALYSIS_DIMENSION_LABELS,
+  ANALYSIS_FORMAT_TEMPLATES,
+  DEFAULT_ANALYSIS_DIMENSIONS,
+  DEFAULT_CONTEXT_CHAPTER_COUNT,
+} from '@/lib/analysis/config'
 
 const createTaskSchema = z.object({
   volumeNumber: z.number().int().min(-1).max(100).default(-1),
-  dimensions: z.array(z.enum([
-    'CHARACTER_RELATION',
-    'PLOT_LINE',
-    'FORESHADOWING',
-    'CHAPTER_STRUCTURE',
-    'WORLD_SETTING',
-  ])).min(1, '至少选择一个分析维度'),
-  contextChapterCount: z.number().int().min(1).max(10).default(3),
+  dimensions: z.array(z.nativeEnum(AnalysisDimension)).min(1, '至少选择一个分析维度').default(DEFAULT_ANALYSIS_DIMENSIONS),
+  contextChapterCount: z.number().int().min(1).max(10).default(DEFAULT_CONTEXT_CHAPTER_COUNT),
 })
 
 /**
@@ -58,14 +58,14 @@ export async function POST(
     const task = await analysisTaskManager.createTask({
       projectId: projectIdNum,
       volumeNumber: parsed.volumeNumber,
-      dimensions: parsed.dimensions as AnalysisDimension[],
+      dimensions: parsed.dimensions,
       contextChapterCount: parsed.contextChapterCount,
     })
 
     // 启动异步执行
     void executeAnalysisAsync(task.id, projectIdNum, {
       volumeNumber: parsed.volumeNumber,
-      dimensions: parsed.dimensions as AnalysisDimension[],
+      dimensions: parsed.dimensions,
       contextChapterCount: parsed.contextChapterCount,
     })
 
@@ -266,14 +266,6 @@ async function executeAnalysisAsync(
     }
 
     // 逐维度分析
-    const dimensionLabels: Record<AnalysisDimension, string> = {
-      [AnalysisDimension.CHARACTER_RELATION]: '人物关系',
-      [AnalysisDimension.PLOT_LINE]: '剧情线',
-      [AnalysisDimension.FORESHADOWING]: '伏笔',
-      [AnalysisDimension.CHAPTER_STRUCTURE]: '章节结构',
-      [AnalysisDimension.WORLD_SETTING]: '世界观',
-    }
-
     let resultContent: string
 
     if (useLayered) {
@@ -317,14 +309,14 @@ async function executeAnalysisAsync(
     // 解析结果并存储
     for (let i = 0; i < options.dimensions.length; i++) {
       const dim = options.dimensions[i]
-      const dimLabel = dimensionLabels[dim] || dim
+      const dimLabel = ANALYSIS_DIMENSION_LABELS[dim] || dim
 
       await analysisTaskManager.updateProgress(
         taskId,
         Math.round(((i + 1) / (options.dimensions.length + 1)) * 100),
-        `正在分析: ${dimLabel} (${i + 1}/${options.dimensions.length})`,
+        `正在写入分析结果: ${dimLabel} (${i + 1}/${options.dimensions.length})`,
         {
-          completedDimensions: i,
+          completedDimensions: i + 1,
           currentDimension: dimLabel,
         }
       )
@@ -388,13 +380,14 @@ async function generateChapterSummariesBatch(
 
 【输出格式】
 对每章输出一行：
-第X章: [一句话摘要] | [关键事件1]; [关键事件2]; ...
+第X章: [一句话摘要] | [情绪基调] | [关键事件1]; [关键事件2]; ...
 
 【章节内容】
 ${batch.map(ch => `第${ch.chapterNumber}章 "${ch.title}":\n${ch.content.slice(0, 3000)}${ch.content.length > 3000 ? '...(省略)' : ''}`).join('\n\n')}
 
 【要求】
 - 每章摘要不超过50字
+- 情绪基调从 紧张/温馨/悲伤/高潮/平缓/压抑/轻松 中选择最贴切的一项
 - 提取2-4个关键事件
 - 保持章节号与内容对应`
 
@@ -406,7 +399,7 @@ ${batch.map(ch => `第${ch.chapterNumber}章 "${ch.title}":\n${ch.content.slice(
         if (match) {
           const chapterNum = parseInt(match[1])
           const rest = match[2]
-          const [summary, eventsStr] = rest.split('|')
+          const [summary, emotionalTone, eventsStr] = rest.split('|').map(part => part?.trim() || '')
           const keyEvents = eventsStr ? eventsStr.split(';').map((e: string) => e.trim()).filter(Boolean) : []
           summaries.push({ chapterNumber: chapterNum, summary: summary.trim(), keyEvents })
 
@@ -414,7 +407,7 @@ ${batch.map(ch => `第${ch.chapterNumber}章 "${ch.title}":\n${ch.content.slice(
             await saveChapterSummary(projectId, chapterNum, {
               summary: summary.trim(),
               keyEvents,
-              emotionalTone: null,
+              emotionalTone: emotionalTone || null,
               plantedPlotlines: [],
               resolvedPlotlines: [],
             })
@@ -451,41 +444,6 @@ async function generateLayeredAnalysisContent(
       : `第${s.chapterNumber}章: 无关键事件记录`)
     .join('\n')
 
-  const dimensionLabels: Record<string, AnalysisDimension> = {
-    '人物关系': AnalysisDimension.CHARACTER_RELATION,
-    '剧情线': AnalysisDimension.PLOT_LINE,
-    '伏笔': AnalysisDimension.FORESHADOWING,
-    '章节结构': AnalysisDimension.CHAPTER_STRUCTURE,
-    '世界观': AnalysisDimension.WORLD_SETTING,
-  }
-
-  const formatTemplates: Record<AnalysisDimension, string> = {
-    [AnalysisDimension.CHARACTER_RELATION]: `{
-  "characters": [
-    { "name": "角色名", "role": "protagonist|antagonist|supporting|minor", "description": "角色描述", "relationships": [{ "target": "相关角色", "type": "关系类型", "description": "关系描述" }] }
-  ],
-  "summary": "人物关系整体概述"
-}`,
-    [AnalysisDimension.PLOT_LINE]: `{
-  "mainPlot": [{ "title": "主线标题", "keyEvents": ["关键事件"], "emotionalArc": "情感弧线" }],
-  "subPlots": [{ "title": "副线标题", "keyEvents": ["关键事件"], "relationship": "与主线关联" }],
-  "timeline": [{ "event": "事件", "chapter": 章节号, "significance": "major|minor" }]
-}`,
-    [AnalysisDimension.FORESHADOWING]: `{
-  "items": [{ "setup": "伏笔内容", "description": "描述", "payoff": "回收情况", "chapter": 章节号, "importance": "major|minor", "type": "plot|character" }],
-  "unresolved": ["未解伏笔列表"]
-}`,
-    [AnalysisDimension.CHAPTER_STRUCTURE]: `{
-  "chapters": [{ "number": 章节号, "title": "章节名", "function": "setup|development|climax|resolution", "keyEvents": ["事件"], "emotionalBeat": "情感基调" }],
-  "arcAnalysis": "整体结构分析",
-  "pacingAssessment": "节奏评估"
-}`,
-    [AnalysisDimension.WORLD_SETTING]: `{
-  "settings": [{ "name": "设定名称", "description": "描述", "rules": ["规则1"], "firstAppear": "首次出现章节" }],
-  "locations": [{ "name": "地点", "description": "描述", "significance": "major|minor" }]
-}`,
-  }
-
   const prompt = `你是一位专业的小说分析师。请对小说《${projectTitle}》进行全面的拆书分析。
 
 【基础信息】
@@ -506,8 +464,8 @@ ${recentChapters.map(ch => `第${ch.chapterNumber}章 "${ch.title}":\n${ch.conte
 请对以下 ${dimensions.length} 个维度进行深入分析：
 
 ${dimensions.map(dim => {
-    const label = Object.keys(dimensionLabels).find(k => dimensionLabels[k] === dim) || dim
-    return `### 【${label}】\n\`\`\`json\n${formatTemplates[dim]}\n\`\`\``
+    const label = ANALYSIS_DIMENSION_LABELS[dim] || dim
+    return `### 【${label}】\n\`\`\`json\n${ANALYSIS_FORMAT_TEMPLATES[dim]}\n\`\`\``
   }).join('\n\n')}
 
 【重要说明】
@@ -516,6 +474,9 @@ ${dimensions.map(dim => {
 3. 剧情线需要区分主线和副线
 4. 伏笔需要标注首次出现章节和预计回收章节
 5. 章节结构需要分析每章的功能定位（开篇/发展/高潮/结尾）
+6. 故事总览需要输出阶段大纲骨架和卖点判断
+7. 阅读体验需要指出高点章节、疲劳章节和章尾留钩强弱
+8. 角色成长需要交代主角弧线、配角功能和反派压迫感
 
 请严格按照 JSON 格式输出分析结果。`
 
