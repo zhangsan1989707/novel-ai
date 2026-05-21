@@ -211,28 +211,11 @@ echo "======================"
 check_prerequisites
 load_password
 
-# 询问用户执行步骤
-read -p "是否执行完整部署（构建+上传+部署）? [Y/n] " -n 1 -r
-echo
-if [[ $REPLY =~ ^[Yy]$ || $REPLY == "" ]]; then
-    build_project
-    package_code
-    upload_code
-    deploy_on_server
-    verify_deployment
-else
-    read -p "仅打包上传部署（跳过本地构建）? [Y/n] " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ || $REPLY == "" ]]; then
-        package_code
-        upload_code
-        deploy_on_server
-        verify_deployment
-    else
-        echo "ℹ️ 已取消部署"
-        exit 0
-    fi
-fi
+build_project
+package_code
+upload_code
+deploy_on_server
+verify_deployment
 
 echo ""
 echo "🎉 部署流程完成！"
