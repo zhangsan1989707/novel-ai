@@ -5,6 +5,7 @@ import { analysisTaskManager, AnalysisTaskRecord } from '@/lib/engine/analysis-t
 import { AnalysisDimension, AnalysisType } from '@/types'
 import { logError } from '@/lib/logger'
 import { Prisma } from '@prisma/client'
+import { getChapterSummariesInRange, saveChapterSummary } from '@/lib/memory/chapter-summary'
 
 const createTaskSchema = z.object({
   volumeNumber: z.number().int().min(-1).max(100).default(-1),
@@ -169,7 +170,6 @@ async function executeAnalysisAsync(
     const { createProviderFromDefaultConfig, buildPlotAnalysisPrompt } = await import('@/lib/ai')
     const { getVolumeChapterRange } = await import('@/lib/ai/context-manager')
     const { buildChapterMemoryPack, buildMemorySnapshotPack } = await import('@/lib/memory')
-    const { getChapterSummariesInRange, saveChapterSummary } = await import('@/lib/memory/chapter-summary')
 
     const provider = await createProviderFromDefaultConfig()
 
@@ -321,7 +321,7 @@ async function executeAnalysisAsync(
 
       await analysisTaskManager.updateProgress(
         taskId,
-        AnalysisTaskManager.calculateProgress(options.dimensions, i, 'analysis'),
+        Math.round(((i + 1) / (options.dimensions.length + 1)) * 100),
         `正在分析: ${dimLabel} (${i + 1}/${options.dimensions.length})`,
         {
           completedDimensions: i,
