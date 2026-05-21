@@ -2,20 +2,12 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Button, Card, CardHeader, CardTitle, CardContent, toast } from '@/components/ui'
-import { ProjectForm, type ProjectFormData } from '@/components/project'
-import { BookOpen, Sparkles, FileText, CheckCircle, Upload, File, Loader2 } from 'lucide-react'
+import { Button, Progress, toast } from '@/components/ui'
+import { BookOpen, Sparkles, CheckCircle, Upload, File, Loader2 } from 'lucide-react'
 import { BookAnalysisPanel, AnalysisTaskPanel } from '@/components/ai'
-import { AnalyzeChapterPreparation } from './AnalyzeChapterPreparation'
-import {
-  type ChapterReviewItem,
-  mergeChapterItems,
-  moveChapterItem,
-  normalizeChapterReviewItems,
-  splitChapterItem,
-} from '@/lib/analysis/chapter-utils'
+import { normalizeChapterReviewItems } from '@/lib/analysis/chapter-utils'
 
-type WizardStep = 'upload' | 'uploading' | 'confirm' | 'analyzing' | 'complete'
+type WizardStep = 'upload' | 'uploading' | 'analyzing' | 'complete'
 
 export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
   const router = useRouter()
@@ -28,10 +20,10 @@ export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
   const [projectId, setProjectId] = useState<number | null>(null)
   const [analysisCount, setAnalysisCount] = useState(0)
   const [charactersCount, setCharactersCount] = useState(0)
+  const [flowProgress, setFlowProgress] = useState(0)
+  const [flowMessage, setFlowMessage] = useState('准备导入图书')
   const [taskId, setTaskId] = useState<string | null>(null)
   const [taskPollingActive, setTaskPollingActive] = useState(false)
-  const [chapterDrafts, setChapterDrafts] = useState<ChapterReviewItem[]>([])
-  const [chapterDraftsLoading, setChapterDraftsLoading] = useState(false)
   const [extractedMeta, setExtractedMeta] = useState<{
     title: string
     genre?: string
@@ -92,6 +84,8 @@ export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
 
     setSubmitting(true)
     setStep('uploading')
+    setFlowProgress(8)
+    setFlowMessage('正在上传图书')
     setError('')
 
     try {
@@ -110,15 +104,34 @@ export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
         setSubmitting(false)
         return
       }
+      setFlowProgress(35)
+      setFlowMessage('图书已上传，正在提取元数据')
 
       const newProjectId = uploadData.data.projectId
       setProjectId(newProjectId)
+
+      let resolvedMeta = {
+        title: selectedFile.name.replace(/\.(txt|epub)$/i, ''),
+        genre: undefined as string | undefined,
+        writingStyle: undefined as string | undefined,
+        corePitch: undefined as string | undefined,
+        description: undefined as string | undefined,
+        targetWordCount: undefined as number | undefined,
+        chapterWordCount: 3000 as number | undefined,
+        totalVolumes: 4 as number | undefined,
+        targetAudience: undefined as 'MALE' | 'FEMALE' | undefined,
+        chapterCount: uploadData.data.chapterCount,
+        worldSetting: undefined as string | undefined,
+        powerSystem: undefined as string | undefined,
+        protagonistProfile: undefined as string | undefined,
+        antagonistSetting: undefined as string | undefined,
+      }
 
       const projectRes = await fetch(`/api/novel/projects/${newProjectId}`)
       const projectData = await projectRes.json()
       if (projectData.success) {
         const p = projectData.data
-        setExtractedMeta({
+        resolvedMeta = {
           title: p.title || selectedFile.name.replace(/\.(txt|epub)$/i, ''),
           genre: p.genre || undefined,
           writingStyle: p.writingStyle || undefined,
@@ -133,33 +146,36 @@ export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
           powerSystem: p.powerSystem || undefined,
           protagonistProfile: p.protagonistProfile || undefined,
           antagonistSetting: p.antagonistSetting || undefined,
-        })
+        }
       }
+      setExtractedMeta(resolvedMeta)
 
-      setChapterDraftsLoading(true)
+      setFlowProgress(55)
+      setFlowMessage('正在加载章节切分结果')
       const chapterRes = await fetch(`/api/novel/projects/${newProjectId}/chapters?includeContent=true`)
       const chapterData = await chapterRes.json()
       if (chapterData.success) {
-        setChapterDrafts(normalizeChapterReviewItems(
+        const normalizedChapters = normalizeChapterReviewItems(
           chapterData.data.map((chapter: { title: string; content?: string }) => ({
             title: chapter.title,
             content: chapter.content || '',
           }))
-        ))
+        )
+        setFlowProgress(70)
+        setFlowMessage(`已自动识别 ${normalizedChapters.length} 章，正在启动 AI 分析`)
+        await startAutoAnalysis(newProjectId, resolvedMeta)
+        return
       }
-
-      setStep('confirm')
+      throw new Error('无法读取章节内容')
     } catch (err) {
       console.error('Error:', err)
       setError('操作失败，请重试')
       setStep('upload')
       setSubmitting(false)
-    } finally {
-      setChapterDraftsLoading(false)
     }
   }
 
-  const startTaskPolling = (tid: string) => {
+  const startTaskPolling = (tid: string, targetProjectId: number) => {
     setTaskId(tid)
     setTaskPollingActive(true)
 
@@ -170,24 +186,27 @@ export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
     pollIntervalRef.current = setInterval(async () => {
       if (!tid) return
       try {
-        const res = await fetch(`/api/novel/projects/${projectId}/analysis-task`)
+        const res = await fetch(`/api/novel/projects/${targetProjectId}/analysis-task`)
         const data = await res.json()
         if (data.success && data.data) {
           if (data.data.status === 'COMPLETED') {
             setAnalysisCount(data.data.totalDimensions || 0)
+            setFlowProgress(100)
+            setFlowMessage('AI 拆书分析完成')
             clearInterval(pollIntervalRef.current!)
             pollIntervalRef.current = null
             setTaskPollingActive(false)
 
             // 触发后续流程
-            await postAnalysisTasks()
+            await postAnalysisTasks(targetProjectId)
             setStep('complete')
           } else if (data.data.status === 'FAILED') {
             setError(data.data.errorMessage || '分析任务失败')
+            setFlowMessage('分析失败')
             clearInterval(pollIntervalRef.current!)
             pollIntervalRef.current = null
             setTaskPollingActive(false)
-            setStep('confirm')
+            setStep('analyzing')
           }
         }
       } catch (err) {
@@ -196,11 +215,11 @@ export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
     }, 2000)
   }
 
-  const postAnalysisTasks = async () => {
-    if (!projectId) return
+  const postAnalysisTasks = async (targetProjectId: number) => {
+    if (!targetProjectId) return
 
     // RAG 索引重建
-    await fetch(`/api/novel/projects/${projectId}/rag/rebuild`, {
+    await fetch(`/api/novel/projects/${targetProjectId}/rag/rebuild`, {
       method: 'POST',
     }).catch(() => {
       console.warn('RAG 索引重建失败')
@@ -210,7 +229,7 @@ export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
     const charRes = await fetch('/api/novel/ai/extract-characters', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectId }),
+      body: JSON.stringify({ projectId: targetProjectId }),
     }).catch(() => null)
 
     if (charRes) {
@@ -221,52 +240,34 @@ export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
     }
   }
 
-  const handleConfirmProject = async (formData: ProjectFormData) => {
-    if (!projectId || !extractedMeta) return
-
-    setSubmitting(true)
+  const startAutoAnalysis = useCallback(async (
+    targetProjectId: number,
+    meta: NonNullable<typeof extractedMeta>,
+  ) => {
+    setProjectId(targetProjectId)
     setStep('analyzing')
-    setError('')
+    setFlowProgress(78)
+    setFlowMessage('正在保存 AI 识别结果')
 
     try {
-      const normalizedChapters = chapterDrafts.map(chapter => ({
-        title: chapter.title,
-        content: chapter.content,
-      }))
-
-      const normalizeRes = await fetch(`/api/novel/projects/${projectId}/chapters/normalize`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chapters: normalizedChapters }),
-      })
-      const normalizeData = await normalizeRes.json()
-      if (!normalizeData.success) {
-        setError(normalizeData.error?.message || '保存切章校正失败')
-        setStep('confirm')
-        setSubmitting(false)
-        return
-      }
-
-      const updateRes = await fetch(`/api/novel/projects/${projectId}`, {
+      setFlowProgress(84)
+      setFlowMessage('正在保存项目设定')
+      const updateRes = await fetch(`/api/novel/projects/${targetProjectId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title: formData.title || extractedMeta.title,
-          description: formData.description,
-          genre: formData.genre,
-          writingStyle: formData.writingStyle,
-          targetWordCount: formData.targetWordCount,
-          chapterWordCount: formData.chapterWordCount,
-          totalVolumes: formData.totalVolumes,
-          targetAudience: formData.targetAudience,
-          aiModelId: formData.aiModelId,
-          worldSetting: formData.worldSetting,
-          powerSystem: formData.powerSystem,
-          protagonistProfile: formData.protagonistProfile,
-          protagonistGoal: formData.protagonistGoal,
-          antagonistSetting: formData.antagonistSetting,
-          endingPlan: formData.endingPlan,
-          writingPrompt: formData.writingPrompt,
+          title: meta.title,
+          description: meta.description,
+          genre: meta.genre,
+          writingStyle: meta.writingStyle,
+          targetWordCount: meta.targetWordCount,
+          chapterWordCount: meta.chapterWordCount,
+          totalVolumes: meta.totalVolumes,
+          targetAudience: meta.targetAudience,
+          worldSetting: meta.worldSetting,
+          powerSystem: meta.powerSystem,
+          protagonistProfile: meta.protagonistProfile,
+          antagonistSetting: meta.antagonistSetting,
         }),
       })
 
@@ -275,17 +276,22 @@ export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
         console.warn('Project update failed:', updateData.error)
       }
 
+      setFlowProgress(90)
+      setFlowMessage('正在启动拆书分析任务')
       // 使用异步任务 API
-      const res = await fetch(`/api/novel/projects/${projectId}/analysis-task`, {
+      const res = await fetch(`/api/novel/projects/${targetProjectId}/analysis-task`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           volumeNumber: -1,
           dimensions: [
+            'STORY_OVERVIEW',
             'CHARACTER_RELATION',
+            'CHARACTER_ARC',
             'PLOT_LINE',
             'FORESHADOWING',
             'CHAPTER_STRUCTURE',
+            'READING_EXPERIENCE',
             'WORLD_SETTING',
           ],
           contextChapterCount: 3,
@@ -297,24 +303,28 @@ export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
         if (data.data.task.status === 'COMPLETED') {
           // 已有完成的任务（复用）
           setAnalysisCount(data.data.task.totalDimensions || 0)
-          await postAnalysisTasks()
+          setFlowProgress(100)
+          setFlowMessage('分析已完成')
+          await postAnalysisTasks(targetProjectId)
           setStep('complete')
         } else {
           // 开始轮询任务状态
-          startTaskPolling(data.data.task.id)
+          setFlowProgress(Math.max(92, data.data.task.progress || 0))
+          setFlowMessage('AI 正在拆书分析')
+          startTaskPolling(data.data.task.id, targetProjectId)
         }
       } else {
         setError(data.error?.message || '创建分析任务失败')
-        setStep('confirm')
+        setStep('upload')
       }
     } catch (err) {
       console.error('Error:', err)
       setError('分析处理失败，请重试')
-      setStep('confirm')
+      setStep('upload')
     } finally {
       setSubmitting(false)
     }
-  }
+  }, [postAnalysisTasks])
 
   useEffect(() => {
     return () => {
@@ -338,7 +348,6 @@ export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
 
   const steps = [
     { key: 'upload', label: '上传文件' },
-    { key: 'confirm', label: '确认信息' },
     { key: 'analyzing', label: 'AI 分析' },
     { key: 'complete', label: '完成' },
   ]
@@ -478,79 +487,26 @@ export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
           <Loader2 className="w-12 h-12 mx-auto text-blue-500 animate-spin mb-4" />
           <h3 className="text-lg font-medium mb-2">正在上传并提取信息...</h3>
           <p className="text-sm text-gray-500">AI 正在自动识别小说标题、类型、写作风格等信息</p>
-        </div>
-      )}
-
-      {/* Step: 确认/编辑信息 */}
-      {step === 'confirm' && extractedMeta && (
-        <div>
-          <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-            <div className="flex items-start gap-3">
-              <FileText className="w-5 h-5 text-blue-500 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="text-sm font-medium text-blue-700 dark:text-blue-300">AI 已自动识别以下信息</p>
-                <p className="text-xs text-blue-500 dark:text-blue-400 mt-1">
-                  请检查并修改以下内容，确认后开始深度分析。文件「{selectedFile?.name}」已导入，共 {extractedMeta.chapterCount || '?'} 章。
-                </p>
-              </div>
+          <div className="mt-6 rounded-2xl border border-gray-200 bg-white p-4 text-left dark:border-gray-800 dark:bg-gray-900">
+            <div className="flex items-center justify-between text-sm">
+              <span className="font-medium">{flowMessage}</span>
+              <span className="text-gray-500">{flowProgress}%</span>
             </div>
+            <Progress value={flowProgress} max={100} size="sm" className="mt-3" />
           </div>
-
-          {chapterDraftsLoading ? (
-            <div className="mb-6 rounded-2xl border border-gray-200 bg-white p-6 text-center text-sm text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400">
-              正在加载章节校验列表...
-            </div>
-          ) : (
-            <AnalyzeChapterPreparation
-              chapters={chapterDrafts}
-              onTitleChange={(index, title) => setChapterDrafts(prev => normalizeChapterReviewItems(
-                prev.map((item, itemIndex) => ({
-                  title: itemIndex === index ? title : item.title,
-                  content: item.content,
-                }))
-              ))}
-              onMergeNext={(index) => setChapterDrafts(prev => mergeChapterItems(prev, index))}
-              onSplit={(index) => setChapterDrafts(prev => splitChapterItem(prev, index))}
-              onMove={(index, direction) => setChapterDrafts(prev => moveChapterItem(prev, index, direction))}
-              onDelete={(index) => setChapterDrafts(prev => normalizeChapterReviewItems(
-                prev.filter((_, itemIndex) => itemIndex !== index).map(item => ({
-                  title: item.title,
-                  content: item.content,
-                }))
-              ))}
-            />
-          )}
-
-          <ProjectForm
-            defaultValues={{
-              title: extractedMeta.title,
-              description: extractedMeta.description,
-              genre: extractedMeta.genre,
-              writingStyle: extractedMeta.writingStyle,
-              targetWordCount: extractedMeta.targetWordCount,
-              chapterWordCount: extractedMeta.chapterWordCount || 3000,
-              totalVolumes: extractedMeta.totalVolumes || 4,
-              targetAudience: extractedMeta.targetAudience,
-              worldSetting: extractedMeta.worldSetting || '',
-              powerSystem: extractedMeta.powerSystem || '',
-              protagonistProfile: extractedMeta.protagonistProfile || '',
-              protagonistGoal: '',
-              antagonistSetting: extractedMeta.antagonistSetting || '',
-              endingPlan: '',
-              writingPrompt: '',
-            }}
-            onSubmit={handleConfirmProject}
-            onCancel={onCancel}
-            loading={submitting}
-            submitLabel="确认并开始分析"
-            showAdvancedFields={true}
-          />
         </div>
       )}
 
       {/* Step: AI 分析中 */}
       {step === 'analyzing' && projectId && (
-        <div className="space-y-6">
+        <div>
+          <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-900/40 dark:bg-blue-950/20">
+            <div className="flex items-center justify-between text-sm text-blue-900 dark:text-blue-200">
+              <span className="font-medium">{flowMessage}</span>
+              <span>{flowProgress}%</span>
+            </div>
+            <Progress value={flowProgress} max={100} size="sm" className="mt-3" />
+          </div>
           <AnalysisTaskPanel projectId={projectId} compact={false} />
           {!taskPollingActive && !taskId && (
             <div className="text-center py-6">
@@ -573,37 +529,6 @@ export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
               已成功分析 {analysisCount} 个维度，提取 {charactersCount} 个角色档案
             </p>
           </div>
-
-          {projectId && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <FileText className="h-5 w-5 text-blue-500" />
-                  自动识别信息
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <div className="text-gray-500 mb-1">小说标题</div>
-                    <div className="font-medium">{extractedMeta?.title || selectedFile?.name}</div>
-                  </div>
-                  <div>
-                    <div className="text-gray-500 mb-1">小说类型</div>
-                    <div className="font-medium">{extractedMeta?.genre || '未识别'}</div>
-                  </div>
-                  <div>
-                    <div className="text-gray-500 mb-1">写作风格</div>
-                    <div className="font-medium">{extractedMeta?.writingStyle || '未识别'}</div>
-                  </div>
-                  <div>
-                    <div className="text-gray-500 mb-1">章节数</div>
-                    <div className="font-medium">{extractedMeta?.chapterCount || '-'} 章</div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
 
           {projectId && (
             <BookAnalysisPanel projectId={projectId} />

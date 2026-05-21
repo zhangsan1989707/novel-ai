@@ -17,12 +17,14 @@ interface ChapterRhythmHeatmapProps {
   projectId: number
   initialData?: ChapterRhythmData[]
   className?: string
+  selectedChapterNo?: number | null
 }
 
 export function ChapterRhythmHeatmap({
   projectId,
   initialData,
   className,
+  selectedChapterNo,
 }: ChapterRhythmHeatmapProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const tooltipRef = useRef<HTMLDivElement>(null)
@@ -102,6 +104,8 @@ export function ChapterRhythmHeatmap({
         .attr('width', Math.max(cellWidth - cellPadding * 2, 4))
         .attr('height', d => innerHeight - yScale(d.wordCount))
         .attr('fill', d => colorScale(d.emotionalIntensity))
+        .attr('stroke', d => selectedChapterNo === d.chapterNo ? '#2563eb' : 'transparent')
+        .attr('stroke-width', d => selectedChapterNo === d.chapterNo ? 3 : 0)
         .attr('rx', 4)
         .attr('ry', 4)
         .style('cursor', 'pointer')
@@ -181,8 +185,8 @@ export function ChapterRhythmHeatmap({
         .attr('cy', d => yScale(d.wordCount))
         .attr('r', d => 3 + d.emotionalIntensity / 30)
         .attr('fill', d => d3.interpolateRdYlBu(1 - d.emotionalIntensity / 100))
-        .attr('stroke', '#fff')
-        .attr('stroke-width', 1)
+        .attr('stroke', d => selectedChapterNo === d.chapterNo ? '#2563eb' : '#fff')
+        .attr('stroke-width', d => selectedChapterNo === d.chapterNo ? 3 : 1)
         .style('cursor', 'pointer')
         .on('mouseover', function (event, d) {
           d3.select(tooltipRef.current)
@@ -232,7 +236,7 @@ export function ChapterRhythmHeatmap({
     return () => {
       resizeObserver.disconnect()
     }
-  }, [data, viewMode])
+  }, [data, viewMode, selectedChapterNo])
 
   if (loading) {
     return (

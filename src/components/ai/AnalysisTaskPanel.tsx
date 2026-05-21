@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Loader2, CheckCircle, XCircle, Clock, AlertCircle, X, Play, RotateCcw } from 'lucide-react'
-import { Badge, Button } from '@/components/ui'
+import { Loader2, CheckCircle, XCircle, Clock, AlertCircle } from 'lucide-react'
+import { Badge } from '@/components/ui'
 
 interface AnalysisTask {
   id: string
@@ -58,7 +58,6 @@ export function AnalysisTaskPanel({ projectId, onTaskComplete, compact = false }
   const [task, setTask] = useState<AnalysisTask | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [cancelling, setCancelling] = useState(false)
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // 获取任务状态
@@ -83,9 +82,9 @@ export function AnalysisTaskPanel({ projectId, onTaskComplete, compact = false }
     fetchTask(true)
   }, [fetchTask])
 
-  // 轮询运行中的任务
+  // 轮询活跃任务
   useEffect(() => {
-    if (task?.status === 'RUNNING') {
+    if (task?.status === 'RUNNING' || task?.status === 'PENDING') {
       pollIntervalRef.current = setInterval(() => {
         fetchTask()
       }, 2000)
@@ -106,52 +105,23 @@ export function AnalysisTaskPanel({ projectId, onTaskComplete, compact = false }
     }
   }, [task?.status, task?.startedAt, onTaskComplete])
 
-  // 取消任务
-  const handleCancel = async () => {
-    if (!task) return
-    setCancelling(true)
-    try {
-      const res = await fetch(`/api/novel/analysis-task/${task.id}/cancel`, { method: 'POST' })
-      const data = await res.json()
-      if (data.success) {
-        setTask(data.data)
-      }
-    } catch (err) {
-      setError('取消失败')
-    } finally {
-      setCancelling(false)
-    }
+  if (loading && !task) {
+    return (
+      <div className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          正在加载分析任务...
+        </div>
+      </div>
+    )
   }
 
-  // 重试任务
-  const handleRetry = async () => {
-    if (!task) return
-    setLoading(true)
-    try {
-      const res = await fetch(`/api/novel/projects/${projectId}/analysis-task`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          volumeNumber: task.volumeNumber,
-          dimensions: task.dimensions,
-          contextChapterCount: task.contextChapterCount,
-        }),
-      })
-      const data = await res.json()
-      if (data.success) {
-        setTask(data.data.task)
-      } else {
-        setError(data.error?.message || '重试失败')
-      }
-    } catch (err) {
-      setError('网络错误')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  if (loading || !task) {
-    return null
+  if (!task) {
+    return (
+      <div className="rounded-lg border border-dashed border-gray-300 bg-white p-4 text-sm text-gray-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400">
+        分析任务尚未创建，系统会自动发起拆书分析并在这里显示进度。
+      </div>
+    )
   }
 
   const config = statusConfig[task.status]
@@ -205,44 +175,10 @@ export function AnalysisTaskPanel({ projectId, onTaskComplete, compact = false }
             </div>
           </div>
 
-          {/* 操作按钮 */}
-          <div className="flex items-center gap-1">
-            {task.status === 'RUNNING' && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleCancel}
-                disabled={cancelling}
-                className="h-8 w-8 p-0"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            )}
-            {(task.status === 'FAILED' || task.status === 'CANCELLED') && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleRetry}
-                className="h-8 w-8 p-0"
-              >
-                <RotateCcw className="h-4 w-4" />
-              </Button>
-            )}
-            {task.status === 'COMPLETED' && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleRetry}
-                className="h-8 w-8 p-0"
-              >
-                <Play className="h-4 w-4" />
-              </Button>
-            )}
-          </div>
         </div>
 
         {/* 进度条 */}
-        {task.status === 'RUNNING' && (
+        {(task.status === 'PENDING' || task.status === 'RUNNING') && (
           <div className="mt-3">
             <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
               <span>进度</span>

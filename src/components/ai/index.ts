@@ -5,6 +5,7 @@ export { OutlineGenerator } from './OutlineGenerator'
 export { SuggestionButtons } from './SuggestionButtons'
 export { PlotAnalyzer } from './PlotAnalyzer'
 export { BookAnalysisPanel } from './BookAnalysisPanel'
+export { BookAnalysisDashboard } from './BookAnalysisDashboard'
 export { AnalysisTaskPanel } from './AnalysisTaskPanel'
 export { AnalysisWorkbench } from './AnalysisWorkbench'
 // 续写功能

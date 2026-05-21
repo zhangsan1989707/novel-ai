@@ -134,6 +134,7 @@ model NovelProject {
   bookAnalyses       BookAnalysis[]
   bookBlueprint      BookBlueprint?
   bookSummary        BookSummary?
+  chapterGraphSnapshot ChapterGraphSnapshot?
   chapterCommits     ChapterCommit[]
   chapterSummaries   ChapterSummary[]
   characters         Character[]
@@ -288,6 +289,18 @@ model BookAnalysis {
   @@unique([projectId, volumeNumber, analysisType, dimension])
   @@index([projectId])
   @@map("book_analysis")
+}
+
+model ChapterGraphSnapshot {
+  id             String       @id @default(cuid())
+  projectId      Int          @unique
+  graph          Json         @default("{}")
+  sourceUpdatedAt DateTime?
+  generatedAt    DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  project        NovelProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("chapter_graph_snapshots")
 }
 
 model AnalysisTask {

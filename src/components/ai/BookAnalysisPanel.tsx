@@ -1,6 +1,6 @@
 'use client'
 
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertCircle,
   BookOpen,
@@ -8,6 +8,7 @@ import {
   ChevronRight,
   Gauge,
   Layers3,
+  MoveHorizontal,
   RefreshCw,
   Sparkles,
   TriangleAlert,
@@ -16,6 +17,7 @@ import {
 import { AnalysisDimension, BookAnalysis } from '@/types'
 import { ChapterRhythmHeatmap } from '@/components/ai/ChapterRhythmHeatmap'
 import { ANALYSIS_DIMENSION_LABELS } from '@/lib/analysis/config'
+import { buildChapterGraph, type ChapterGraph } from '@/lib/analysis/chapter-graph'
 
 interface BookAnalysisPanelProps {
   projectId: number
@@ -49,6 +51,13 @@ export function BookAnalysisPanel({ projectId, refreshSeed = 0 }: BookAnalysisPa
   const [analyses, setAnalyses] = useState<BookAnalysis[]>([])
   const [expandedVolumes, setExpandedVolumes] = useState<Set<number>>(new Set([-1]))
   const [filterDimension, setFilterDimension] = useState<AnalysisDimension | 'all'>('all')
+  const [focusedAnchor, setFocusedAnchor] = useState<string | null>(null)
+  const [selectedChapterNo, setSelectedChapterNo] = useState<number | null>(null)
+  const [chapterGraph, setChapterGraph] = useState<ChapterGraph>({ nodes: [], highConfidenceCount: 0, lowConfidenceCount: 0 })
+  const volumeNumbers = useMemo(
+    () => Array.from(new Set(analyses.map(item => item.volumeNumber))).sort((a, b) => a - b),
+    [analyses]
+  )
 
   const loadAnalyses = useCallback(async () => {
     setLoading(true)
@@ -94,7 +103,43 @@ export function BookAnalysisPanel({ projectId, refreshSeed = 0 }: BookAnalysisPa
   const storyOverview = (analysisMap.get(`-1:${AnalysisDimension.STORY_OVERVIEW}`)?.analysisData || {}) as Record<string, unknown>
   const readingExperience = (analysisMap.get(`-1:${AnalysisDimension.READING_EXPERIENCE}`)?.analysisData || {}) as ReadingExperienceData
   const characterRelation = (analysisMap.get(`-1:${AnalysisDimension.CHARACTER_RELATION}`)?.analysisData || {}) as Record<string, unknown>
+  const plotLine = (analysisMap.get(`-1:${AnalysisDimension.PLOT_LINE}`)?.analysisData || {}) as Record<string, unknown>
+  const foreshadowing = (analysisMap.get(`-1:${AnalysisDimension.FORESHADOWING}`)?.analysisData || {}) as Record<string, unknown>
   const chapterStructure = (analysisMap.get(`-1:${AnalysisDimension.CHAPTER_STRUCTURE}`)?.analysisData || {}) as Record<string, unknown>
+  const worldSetting = (analysisMap.get(`-1:${AnalysisDimension.WORLD_SETTING}`)?.analysisData || {}) as Record<string, unknown>
+  
+  useEffect(() => {
+    let cancelled = false
+    async function loadChapterGraph() {
+      try {
+        const res = await fetch(`/api/novel/projects/${projectId}/chapter-graph`)
+        const data = await res.json()
+        if (!cancelled && data.success) {
+          setChapterGraph(data.data.graph)
+          return
+        }
+      } catch {
+        // 失败时回退到前端拼装
+      }
+
+      if (!cancelled) {
+        setChapterGraph(buildChapterGraph({
+          storyOverview,
+          chapterStructure,
+          plotLine,
+          foreshadowing,
+          readingExperience,
+          worldSetting,
+        }))
+      }
+    }
+
+    loadChapterGraph()
+    return () => {
+      cancelled = true
+    }
+  }, [chapterStructure, foreshadowing, plotLine, projectId, readingExperience, storyOverview, worldSetting])
+
   const missingModules = analyses.length > 0
     ? Object.values(AnalysisDimension).filter((dimension) => !analysisMap.has(`-1:${dimension}`))
     : []
@@ -120,6 +165,47 @@ export function BookAnalysisPanel({ projectId, refreshSeed = 0 }: BookAnalysisPa
       return next
     })
   }
+
+  const expandAllVolumes = () => {
+    setExpandedVolumes(new Set(volumeNumbers))
+  }
+
+  const collapseAllVolumes = () => {
+    setExpandedVolumes(new Set())
+  }
+
+  const scrollToSection = (sectionId: string) => {
+    const el = document.getElementById(sectionId)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }
+
+  const focusAnchor = useCallback((anchorId: string) => {
+    setFocusedAnchor(anchorId)
+    const chapterNo = extractChapterNo(anchorId)
+    if (chapterNo !== null) {
+      setSelectedChapterNo(chapterNo)
+    }
+    requestAnimationFrame(() => {
+      document.getElementById(anchorId)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
+  }, [])
+
+  const clearChapterFocus = useCallback(() => {
+    setSelectedChapterNo(null)
+    setFocusedAnchor(null)
+  }, [])
+
+  const focusDimension = useCallback((dimension: AnalysisDimension, volumeNumber = -1) => {
+    setExpandedVolumes(prev => new Set(prev).add(volumeNumber))
+    requestAnimationFrame(() => {
+      const el = document.querySelector(
+        `[data-analysis-volume="${volumeNumber}"][data-analysis-dimension="${dimension}"]`
+      ) as HTMLElement | null
+      el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }, [])
 
   if (loading && analyses.length === 0) {
     return (
@@ -157,6 +243,56 @@ export function BookAnalysisPanel({ projectId, refreshSeed = 0 }: BookAnalysisPa
         </div>
       </div>
 
+      <div className="sticky top-0 z-10 -mx-1 rounded-2xl border border-gray-200 bg-white/90 px-2 py-2 shadow-sm backdrop-blur dark:border-gray-800 dark:bg-gray-950/80">
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={() => scrollToSection('overview-panel')} className="rounded-full border border-gray-200 px-3 py-1.5 text-xs text-gray-600 transition-colors hover:border-blue-300 hover:text-blue-600 dark:border-gray-800 dark:text-gray-300">
+            总览
+          </button>
+          <button onClick={() => scrollToSection('timeline-panel')} className="rounded-full border border-gray-200 px-3 py-1.5 text-xs text-gray-600 transition-colors hover:border-blue-300 hover:text-blue-600 dark:border-gray-800 dark:text-gray-300">
+            时间轴
+          </button>
+          <button onClick={() => scrollToSection('evidence-panel')} className="rounded-full border border-gray-200 px-3 py-1.5 text-xs text-gray-600 transition-colors hover:border-blue-300 hover:text-blue-600 dark:border-gray-800 dark:text-gray-300">
+            证据层
+          </button>
+          <button onClick={() => scrollToSection('heatmap-panel')} className="rounded-full border border-gray-200 px-3 py-1.5 text-xs text-gray-600 transition-colors hover:border-blue-300 hover:text-blue-600 dark:border-gray-800 dark:text-gray-300">
+            节奏图
+          </button>
+          <button onClick={() => scrollToSection('details-panel')} className="rounded-full border border-gray-200 px-3 py-1.5 text-xs text-gray-600 transition-colors hover:border-blue-300 hover:text-blue-600 dark:border-gray-800 dark:text-gray-300">
+            明细
+          </button>
+          <button onClick={() => focusDimension(AnalysisDimension.STORY_OVERVIEW)} className="rounded-full border border-gray-200 px-3 py-1.5 text-xs text-gray-600 transition-colors hover:border-blue-300 hover:text-blue-600 dark:border-gray-800 dark:text-gray-300">
+            结论摘要
+          </button>
+          {selectedChapterNo !== null && (
+            <button
+              onClick={clearChapterFocus}
+              className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs text-blue-700 transition-colors hover:border-blue-300 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-300"
+            >
+              取消章节筛选
+            </button>
+          )}
+          {selectedChapterNo !== null && (
+            <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs text-blue-700 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-300">
+              当前章节：第{selectedChapterNo}章
+            </span>
+          )}
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={expandAllVolumes}
+              className="rounded-full border border-gray-200 px-3 py-1.5 text-xs text-gray-600 transition-colors hover:border-blue-300 hover:text-blue-600 dark:border-gray-800 dark:text-gray-300"
+            >
+              展开全部
+            </button>
+            <button
+              onClick={collapseAllVolumes}
+              className="rounded-full border border-gray-200 px-3 py-1.5 text-xs text-gray-600 transition-colors hover:border-blue-300 hover:text-blue-600 dark:border-gray-800 dark:text-gray-300"
+            >
+              收起全部
+            </button>
+          </div>
+        </div>
+      </div>
+
       {error && (
         <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300">
           <AlertCircle className="h-4 w-4" />
@@ -174,12 +310,57 @@ export function BookAnalysisPanel({ projectId, refreshSeed = 0 }: BookAnalysisPa
 
       {analyses.length > 0 && (
         <>
+          <div id="overview-panel">
+          <UnifiedOverviewCard
+            storyOverview={storyOverview}
+            characterRelation={characterRelation}
+            foreshadowing={foreshadowing}
+            plotLine={plotLine}
+            chapterStructure={chapterStructure}
+            worldSetting={worldSetting}
+            onFocusDimension={focusDimension}
+            onFocusAnchor={focusAnchor}
+          />
+          </div>
+
           <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
             <OverviewCard storyOverview={storyOverview} readingExperience={readingExperience} />
             <div className="space-y-4">
               <ScoreCard readingExperience={readingExperience} />
               <CharacterFocusCard characters={topCharacters} />
             </div>
+          </div>
+
+          <SummaryStrip
+            storyOverview={storyOverview}
+            readingExperience={readingExperience}
+            characterRelation={characterRelation}
+            foreshadowing={foreshadowing}
+            onFocusDimension={focusDimension}
+          />
+
+          <ChapterGraphCard
+            graph={chapterGraph}
+            selectedChapterNo={selectedChapterNo}
+            onSelectChapter={focusAnchor}
+          />
+
+          <div id="timeline-panel">
+          <TimelineCard
+            storyOverview={storyOverview}
+            plotLine={plotLine}
+            chapterStructure={chapterStructure}
+            readingExperience={readingExperience}
+            onFocusDimension={focusDimension}
+            onFocusAnchor={focusAnchor}
+            focusedAnchor={focusedAnchor}
+            selectedChapterNo={selectedChapterNo}
+          />
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
+            <WorldSettingCard worldSetting={worldSetting} />
+            <CharacterRelationCard data={characterRelation} />
           </div>
 
           {(missingModules.length > 0 || emptyModules.length > 0) && (
@@ -198,18 +379,18 @@ export function BookAnalysisPanel({ projectId, refreshSeed = 0 }: BookAnalysisPa
             </div>
           )}
 
-          <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-            <EvidenceCard chapterStructure={chapterStructure} readingExperience={readingExperience} />
-            <div className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+          <div id="evidence-panel" className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+            <EvidenceCard chapterStructure={chapterStructure} readingExperience={readingExperience} selectedChapterNo={selectedChapterNo} />
+            <div id="heatmap-panel" className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
               <div className="mb-3 flex items-center gap-2">
                 <Gauge className="h-4 w-4 text-blue-600" />
                 <div className="font-medium">章节节奏热力图</div>
               </div>
-              <ChapterRhythmHeatmap projectId={projectId} />
+              <ChapterRhythmHeatmap projectId={projectId} selectedChapterNo={selectedChapterNo} />
             </div>
           </div>
 
-          <div className="space-y-3">
+          <div id="details-panel" className="space-y-3">
             {Object.entries(groupedByVolume)
               .sort(([a], [b]) => Number(a) - Number(b))
               .map(([vol, volAnalyses]) => (
@@ -231,16 +412,47 @@ export function BookAnalysisPanel({ projectId, refreshSeed = 0 }: BookAnalysisPa
 
                   {expandedVolumes.has(Number(vol)) && (
                     <div className="space-y-3 bg-white p-4 dark:bg-gray-950">
-                      {volAnalyses.map(analysis => (
-                        <div key={analysis.id} className="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                      {volAnalyses
+                        .filter(analysis => {
+                          if (selectedChapterNo === null) return true
+                          if (analysis.volumeNumber === -1) return true
+                          return chapterMatchesAnalysis(selectedChapterNo, analysis.dimension as AnalysisDimension, analysis.analysisData as Record<string, unknown>)
+                        })
+                        .map(analysis => (
+                        <div
+                          key={analysis.id}
+                          data-analysis-volume={analysis.volumeNumber}
+                          data-analysis-dimension={analysis.dimension}
+                          data-analysis-selected={selectedChapterNo !== null ? 'true' : 'false'}
+                          className="rounded-xl border border-gray-200 p-4 dark:border-gray-800"
+                        >
                           <div className="mb-3 flex items-center gap-2">
                             <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
                               {ANALYSIS_DIMENSION_LABELS[analysis.dimension as AnalysisDimension]}
                             </span>
                           </div>
-                          {renderDimensionContent(analysis.dimension as AnalysisDimension, analysis.analysisData as Record<string, unknown>)}
+                          {renderDimensionContent(
+                            analysis.dimension as AnalysisDimension,
+                            analysis.analysisData as Record<string, unknown>,
+                            focusedAnchor,
+                            focusAnchor,
+                            focusDimension,
+                            selectedChapterNo,
+                            {
+                              plotLine,
+                              foreshadowing,
+                            }
+                          )}
                         </div>
                       ))}
+                      {selectedChapterNo !== null && volAnalyses.filter(analysis => {
+                        if (analysis.volumeNumber === -1) return false
+                        return chapterMatchesAnalysis(selectedChapterNo, analysis.dimension as AnalysisDimension, analysis.analysisData as Record<string, unknown>)
+                      }).length === 0 && (
+                        <div className="rounded-xl border border-dashed border-gray-300 p-4 text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">
+                          当前章节暂无匹配的分析内容
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -360,29 +572,742 @@ function CharacterFocusCard({ characters }: { characters: Array<Record<string, u
   )
 }
 
+function SummaryStrip({
+  storyOverview,
+  readingExperience,
+  characterRelation,
+  foreshadowing,
+  onFocusDimension,
+}: {
+  storyOverview: Record<string, unknown>
+  readingExperience: ReadingExperienceData
+  characterRelation: Record<string, unknown>
+  foreshadowing: Record<string, unknown>
+  onFocusDimension?: (dimension: AnalysisDimension, volumeNumber?: number) => void
+}) {
+  const summary = useMemo(() => {
+    const outline = (storyOverview.outline || {}) as Record<string, unknown>
+    const characters = Array.isArray(characterRelation.characters) ? (characterRelation.characters as Array<Record<string, unknown>>) : []
+    const items = Array.isArray(foreshadowing.items) ? (foreshadowing.items as Array<Record<string, unknown>>) : []
+    const unresolved = items.filter(item => !(item.payoff && String(item.payoff).trim() && String(item.payoff).trim() !== '待回收')).length
+
+    const bestHook = stringValue((readingExperience.readingFeel || {}).hookSummary)
+    const pacing = stringValue((readingExperience.readingFeel || {}).fatigueSummary)
+    const core = stringValue(outline.coreConflict)
+
+    return {
+      core: core || '暂无核心冲突摘要',
+      hook: bestHook || '暂无开篇抓力摘要',
+      pacing: pacing || '暂无节奏风险摘要',
+      characters: characters.length,
+      foreshadowing: unresolved,
+    }
+  }, [characterRelation, foreshadowing, readingExperience, storyOverview])
+
+  return (
+    <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-950/20">
+      <div className="mb-3 flex items-center gap-2 text-sm font-medium">
+        <Sparkles className="h-4 w-4 text-amber-600" />
+        结论摘要
+      </div>
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <SummaryPill label="核心冲突" value={summary.core} onClick={() => onFocusDimension?.(AnalysisDimension.STORY_OVERVIEW)} />
+        <SummaryPill label="开篇抓力" value={summary.hook} onClick={() => onFocusDimension?.(AnalysisDimension.READING_EXPERIENCE)} />
+        <SummaryPill label="节奏判断" value={summary.pacing} onClick={() => onFocusDimension?.(AnalysisDimension.CHAPTER_STRUCTURE)} />
+        <SummaryPill label="角色 / 伏笔" value={`${summary.characters} 个角色 · ${summary.foreshadowing} 条待回收伏笔`} onClick={() => onFocusDimension?.(AnalysisDimension.FORESHADOWING)} />
+      </div>
+    </div>
+  )
+}
+
+function ChapterGraphCard({
+  graph,
+  selectedChapterNo,
+  onSelectChapter,
+}: {
+  graph: ChapterGraph
+  selectedChapterNo?: number | null
+  onSelectChapter?: (anchorId: string) => void
+}) {
+  const selectedNode = useMemo(
+    () => (selectedChapterNo !== null && selectedChapterNo !== undefined
+      ? graph.nodes.find(node => node.chapterNo === selectedChapterNo) || null
+      : null),
+    [graph.nodes, selectedChapterNo]
+  )
+
+  return (
+    <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="font-medium">章节图谱</div>
+          <div className="text-sm text-gray-500 dark:text-gray-400">统一章节、角色、伏笔、转折、节奏的中间层</div>
+        </div>
+        <div className="flex flex-wrap gap-2 text-xs text-gray-500 dark:text-gray-400">
+          <span className="rounded-full bg-gray-50 px-2.5 py-1 dark:bg-gray-950/20">章节 {graph.nodes.length}</span>
+          <span className="rounded-full bg-gray-50 px-2.5 py-1 dark:bg-gray-950/20">高置信 {graph.highConfidenceCount}</span>
+          <span className="rounded-full bg-gray-50 px-2.5 py-1 dark:bg-gray-950/20">待复核 {graph.lowConfidenceCount}</span>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto pb-2">
+        <div className="flex min-w-max gap-3">
+          {graph.nodes.map(node => (
+            <button
+              key={node.chapterNo}
+              type="button"
+              onClick={() => onSelectChapter?.(`chapter-no-${node.chapterNo}`)}
+              className={`w-[220px] shrink-0 rounded-2xl border px-4 py-3 text-left transition-colors ${
+                selectedChapterNo === node.chapterNo
+                  ? 'border-blue-400 bg-blue-50 ring-2 ring-blue-400 ring-offset-2 ring-offset-white dark:border-blue-700 dark:bg-blue-950/20 dark:ring-offset-gray-900'
+                  : 'border-gray-200 bg-gray-50 hover:border-blue-300 hover:bg-blue-50 dark:border-gray-800 dark:bg-gray-950/20 dark:hover:bg-blue-950/10'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-gray-700 dark:bg-black/20 dark:text-gray-200">
+                  第{node.chapterNo}章
+                </span>
+                <span className={`rounded-full px-2 py-0.5 text-[11px] ${
+                  node.confidenceLevel === '高'
+                    ? 'bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-300'
+                    : node.confidenceLevel === '中'
+                      ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300'
+                      : 'bg-red-100 text-red-700 dark:bg-red-950/30 dark:text-red-300'
+                }`}>
+                  {node.confidenceLevel}
+                </span>
+              </div>
+              <div className="mt-3 font-medium text-gray-900 dark:text-gray-100">{node.title}</div>
+              <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">{node.stageLabel || '未识别阶段'}</div>
+              <div className="mt-2 text-sm text-gray-700 dark:text-gray-300 line-clamp-3">
+                {node.summary || '暂无章节摘要'}
+              </div>
+              <div className="mt-3 flex flex-wrap gap-1">
+                {node.tags.slice(0, 4).map(tag => (
+                  <span key={tag} className="rounded-full bg-white px-2 py-0.5 text-[11px] text-gray-700 dark:bg-black/20 dark:text-gray-300">
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {selectedNode && (
+        <div className="mt-4 rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-950/20">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="font-medium">第{selectedNode.chapterNo}章证据链</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">证据来源 {selectedNode.sources.length} 项</div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {selectedNode.sources.map(source => (
+              <span key={source.label} className={`rounded-full px-2.5 py-1 text-xs ${
+                source.tone === 'blue'
+                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300'
+                  : source.tone === 'green'
+                    ? 'bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-300'
+                    : source.tone === 'amber'
+                      ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300'
+                      : source.tone === 'red'
+                        ? 'bg-red-100 text-red-700 dark:bg-red-950/30 dark:text-red-300'
+                        : 'bg-purple-100 text-purple-700 dark:bg-purple-950/30 dark:text-purple-300'
+              }`}>
+                {source.label}
+              </span>
+            ))}
+          </div>
+          {selectedNode.supportingNote && (
+            <div className="mt-3 rounded-xl bg-white px-3 py-3 text-sm text-gray-700 dark:bg-gray-900 dark:text-gray-300">
+              {selectedNode.supportingNote}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function UnifiedOverviewCard({
+  storyOverview,
+  characterRelation,
+  foreshadowing,
+  plotLine,
+  chapterStructure,
+  worldSetting,
+  onFocusDimension,
+  onFocusAnchor,
+}: {
+  storyOverview: Record<string, unknown>
+  characterRelation: Record<string, unknown>
+  foreshadowing: Record<string, unknown>
+  plotLine: Record<string, unknown>
+  chapterStructure: Record<string, unknown>
+  worldSetting: Record<string, unknown>
+  onFocusDimension?: (dimension: AnalysisDimension, volumeNumber?: number) => void
+  onFocusAnchor?: (anchorId: string) => void
+}) {
+  const overview = useMemo(() => {
+    const outline = (storyOverview.outline || {}) as Record<string, unknown>
+    const stageBreakdown = Array.isArray(outline.stageBreakdown)
+      ? outline.stageBreakdown as Array<Record<string, unknown>>
+      : []
+    const worldNodes = Array.isArray(worldSetting.settings)
+      ? (worldSetting.settings as Array<Record<string, unknown>>)
+          .map((item, index) => ({
+            kind: '世界设定',
+            title: stringValue(item.name) || `设定 ${index + 1}`,
+            chapter: parseChapterMark(stringValue(item.firstAppear)),
+            summary: stringValue(item.description),
+            anchorId: `world-setting-${index}`,
+          }))
+      : []
+    const turningPoints = Array.isArray(plotLine.turningPoints)
+      ? (plotLine.turningPoints as Array<Record<string, unknown>>).map((item, index) => ({
+          kind: '剧情转折',
+          title: stringValue(item.event) || `转折 ${index + 1}`,
+          chapter: Number(item.chapter || index + 1),
+          summary: stringValue(item.impact),
+          anchorId: `plot-turning-${index}`,
+        }))
+      : []
+    const timeline = [
+      ...stageBreakdown.map((stage, index) => ({
+        kind: '阶段推进',
+        title: stringValue(stage.stage) || `阶段 ${index + 1}`,
+        chapter: rangeStart(stringValue(stage.chapterRange), index + 1),
+        summary: stringValue(stage.summary),
+        anchorId: `timeline-stage-${index}`,
+      })),
+      ...worldNodes,
+      ...turningPoints,
+    ].sort((a, b) => a.chapter - b.chapter)
+
+    const characters = Array.isArray(characterRelation.characters)
+      ? (characterRelation.characters as Array<Record<string, unknown>>)
+          .map((item) => ({
+            name: stringValue(item.name),
+            role: stringValue(item.role),
+            importance: Number(item.importance || 999),
+            relationCount: Array.isArray(item.relationships) ? item.relationships.length : 0,
+            links: Array.isArray(item.relationships)
+              ? (item.relationships as Array<Record<string, unknown>>)
+                  .slice(0, 3)
+                  .map(rel => `${stringValue(rel.target)}·${stringValue(rel.type)}`)
+              : [],
+            description: stringValue(item.description),
+          }))
+          .sort((a, b) => a.importance - b.importance)
+      : []
+
+    const foreshadowItems = Array.isArray(foreshadowing.items)
+      ? (foreshadowing.items as Array<Record<string, unknown>>)
+          .map((item, index) => ({
+            status: item.payoff && String(item.payoff).trim() && String(item.payoff).trim() !== '待回收' ? '已回收' : '待回收',
+            title: stringValue(item.setup) || `伏笔 ${index + 1}`,
+            payoff: stringValue(item.payoff),
+            chapter: Number(item.chapter || index + 1),
+            importance: stringValue(item.importance),
+          }))
+          .sort((a, b) => a.chapter - b.chapter)
+      : []
+
+    const chapterStats = {
+      peaks: Array.isArray(chapterStructure.peakSections) ? chapterStructure.peakSections.length : 0,
+      lows: Array.isArray(chapterStructure.slowSections) ? chapterStructure.slowSections.length : 0,
+      unresolved: foreshadowItems.filter(item => item.status === '待回收').length,
+      relations: characters.length,
+    }
+
+    return { timeline, characters, foreshadowItems, chapterStats }
+  }, [characterRelation, chapterStructure, foreshadowing, plotLine, storyOverview, worldSetting])
+
+  return (
+    <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div>
+          <div className="font-medium">拆书总览带</div>
+          <div className="text-sm text-gray-500 dark:text-gray-400">世界观时间轴、角色关系网、伏笔回收链</div>
+        </div>
+        <div className="grid grid-cols-2 gap-2 text-xs text-gray-500 dark:text-gray-400 sm:grid-cols-4">
+          <div className="rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-950/20">关系 {overview.chapterStats.relations}</div>
+          <div className="rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-950/20">伏笔 {overview.chapterStats.unresolved}</div>
+          <div className="rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-950/20">高点 {overview.chapterStats.peaks}</div>
+          <div className="rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-950/20">低谷 {overview.chapterStats.lows}</div>
+        </div>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[1.2fr_0.95fr_0.95fr]">
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => onFocusDimension?.(AnalysisDimension.STORY_OVERVIEW)}
+          className="rounded-xl border border-gray-200 p-4 text-left transition-colors hover:border-blue-300 dark:border-gray-800"
+        >
+          <div className="mb-3 flex items-center gap-2 text-sm font-medium">
+            <MoveHorizontal className="h-4 w-4 text-indigo-600" />
+            世界观时间轴
+          </div>
+          <div className="space-y-2">
+            {overview.timeline.length > 0 ? overview.timeline.slice(0, 8).map((item, index) => (
+              <button
+                key={`${item.kind}-${index}`}
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onFocusAnchor?.(item.anchorId)
+                }}
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-left text-sm transition-colors hover:border-blue-300 hover:bg-blue-50 dark:border-gray-800 dark:hover:border-blue-700 dark:hover:bg-blue-950/20"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium">{item.title}</span>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">第{item.chapter}章</span>
+                </div>
+                <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">{item.kind}</div>
+                <div className="mt-1 text-sm text-gray-700 dark:text-gray-300">{item.summary || '暂无说明'}</div>
+              </button>
+            )) : <EmptyHint text="暂无时间轴数据" />}
+          </div>
+        </div>
+
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => onFocusDimension?.(AnalysisDimension.CHARACTER_RELATION)}
+          className="rounded-xl border border-gray-200 p-4 text-left transition-colors hover:border-blue-300 dark:border-gray-800"
+        >
+          <div className="mb-3 flex items-center gap-2 text-sm font-medium">
+            <UserRound className="h-4 w-4 text-purple-600" />
+            角色关系网
+          </div>
+          <div className="space-y-2">
+            {overview.characters.length > 0 ? overview.characters.slice(0, 5).map((char, index) => (
+              <div key={`${char.name}-${index}`} className="rounded-lg border border-gray-200 px-3 py-2 dark:border-gray-800">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium">{char.name || '未知角色'}</span>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">关联 {char.relationCount}</span>
+                </div>
+                <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">{char.role || '未知定位'}</div>
+                {char.links.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {char.links.map((link: string, linkIndex: number) => (
+                      <span key={linkIndex} className="rounded-full bg-purple-50 px-2 py-0.5 text-xs text-purple-700 dark:bg-purple-950/30 dark:text-purple-300">
+                        {link}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {char.description && (
+                  <div className="mt-2 text-sm text-gray-700 dark:text-gray-300">{char.description}</div>
+                )}
+              </div>
+            )) : <EmptyHint text="暂无角色关系数据" />}
+          </div>
+        </div>
+
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => onFocusDimension?.(AnalysisDimension.FORESHADOWING)}
+          className="rounded-xl border border-gray-200 p-4 text-left transition-colors hover:border-blue-300 dark:border-gray-800"
+        >
+          <div className="mb-3 flex items-center gap-2 text-sm font-medium">
+            <Sparkles className="h-4 w-4 text-amber-600" />
+            伏笔回收链
+          </div>
+          <div className="space-y-2">
+            {overview.foreshadowItems.length > 0 ? overview.foreshadowItems.slice(0, 6).map((item, index) => (
+              <div key={`${item.title}-${index}`} className="rounded-lg border border-gray-200 px-3 py-2 dark:border-gray-800">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium">{item.title}</span>
+                  <span className={`rounded-full px-2 py-0.5 text-xs ${
+                    item.status === '已回收'
+                      ? 'bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-300'
+                      : 'bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300'
+                  }`}>
+                    {item.status}
+                  </span>
+                </div>
+                <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">第{item.chapter}章 · {item.importance || '未标注'}</div>
+                <div className="mt-1 text-sm text-gray-700 dark:text-gray-300">{item.payoff || '尚未回收'}</div>
+              </div>
+            )) : <EmptyHint text="暂无伏笔数据" />}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function TimelineCard({
+  storyOverview,
+  plotLine,
+  chapterStructure,
+  readingExperience,
+  onFocusDimension,
+  onFocusAnchor,
+  focusedAnchor,
+  selectedChapterNo,
+}: {
+  storyOverview: Record<string, unknown>
+  plotLine: Record<string, unknown>
+  chapterStructure: Record<string, unknown>
+  readingExperience: ReadingExperienceData
+  onFocusDimension?: (dimension: AnalysisDimension, volumeNumber?: number) => void
+  onFocusAnchor?: (anchorId: string) => void
+  focusedAnchor?: string | null
+  selectedChapterNo?: number | null
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const dragState = useRef<{ startX: number; scrollLeft: number } | null>(null)
+  const focusedChapterNumber = useMemo(() => {
+    if (selectedChapterNo !== null && selectedChapterNo !== undefined) {
+      return selectedChapterNo
+    }
+    if (!focusedAnchor) return null
+    const chapterMatch = focusedAnchor.match(/^chapter-no-(\d+)$/)
+    if (chapterMatch) return Number(chapterMatch[1])
+    const foreshadowMatch = focusedAnchor.match(/^foreshadow-chapter-(\d+)$/)
+    if (foreshadowMatch) return Number(foreshadowMatch[1])
+    const plotMatch = focusedAnchor.match(/^plot-turning-(\d+)$/)
+    if (plotMatch) return Number(plotMatch[1])
+    const stageMatch = focusedAnchor.match(/^timeline-stage-(\d+)$/)
+    if (stageMatch) return Number(stageMatch[1])
+    return null
+  }, [focusedAnchor, selectedChapterNo])
+
+  const items = useMemo(() => {
+    const outline = (storyOverview.outline || {}) as Record<string, unknown>
+    const stageBreakdown = Array.isArray(outline.stageBreakdown)
+      ? outline.stageBreakdown as Array<Record<string, unknown>>
+      : []
+    const turningPoints = Array.isArray(plotLine.turningPoints) ? plotLine.turningPoints as Array<Record<string, unknown>> : []
+    const peaks = Array.isArray(chapterStructure.peakSections) ? chapterStructure.peakSections as Array<Record<string, unknown>> : []
+    const slows = Array.isArray(chapterStructure.slowSections) ? chapterStructure.slowSections as Array<Record<string, unknown>> : []
+    const highlights = readingExperience.highlightChapters || []
+    const fatigue = readingExperience.fatigueChapters || []
+
+    const nextItems: Array<{
+      kind: string
+      title: string
+      range: string
+      summary: string
+      tone: 'blue' | 'amber' | 'green' | 'red' | 'purple'
+      sortKey: number
+      anchorId?: string
+      chapterNo?: number
+    }> = []
+
+    stageBreakdown.forEach((stage, index) => {
+      nextItems.push({
+        kind: '阶段',
+        title: stringValue(stage.stage) || `阶段 ${index + 1}`,
+        range: stringValue(stage.chapterRange) || '',
+        summary: stringValue(stage.summary),
+        tone: 'blue',
+        sortKey: rangeStart(stringValue(stage.chapterRange), index + 1),
+        anchorId: `timeline-stage-${index}`,
+        chapterNo: rangeStart(stringValue(stage.chapterRange), index + 1),
+      })
+    })
+
+    turningPoints.forEach((point, index) => {
+      nextItems.push({
+        kind: '转折',
+        title: stringValue(point.event) || `转折 ${index + 1}`,
+        range: `第${String(point.chapter || '?')}章`,
+        summary: stringValue(point.impact),
+        tone: 'purple',
+        sortKey: Number(point.chapter || index + 1),
+        anchorId: `plot-turning-${index}`,
+        chapterNo: Number(point.chapter || index + 1),
+      })
+    })
+
+    peaks.forEach((item, index) => {
+      nextItems.push({
+        kind: '高点',
+        title: stringValue(item.chapterRange) || `高点 ${index + 1}`,
+        range: stringValue(item.chapterRange),
+        summary: stringValue(item.reason),
+        tone: 'green',
+        sortKey: rangeStart(stringValue(item.chapterRange), index + 1),
+        chapterNo: rangeStart(stringValue(item.chapterRange), index + 1),
+      })
+    })
+
+    slows.forEach((item, index) => {
+      nextItems.push({
+        kind: '低谷',
+        title: stringValue(item.chapterRange) || `低谷 ${index + 1}`,
+        range: stringValue(item.chapterRange),
+        summary: stringValue(item.reason),
+        tone: 'red',
+        sortKey: rangeStart(stringValue(item.chapterRange), index + 1),
+        chapterNo: rangeStart(stringValue(item.chapterRange), index + 1),
+      })
+    })
+
+    highlights.forEach((item, index) => {
+      nextItems.push({
+        kind: '高光',
+        title: `第${item.chapter ?? '?'}章`,
+        range: item.reason || '',
+        summary: item.reason || '',
+        tone: 'green',
+        sortKey: Number(item.chapter || index + 1),
+        chapterNo: Number(item.chapter || index + 1),
+      })
+    })
+
+    fatigue.forEach((item, index) => {
+      nextItems.push({
+        kind: '疲劳',
+        title: item.chapterRange || `疲劳 ${index + 1}`,
+        range: item.chapterRange || '',
+        summary: item.reason || '',
+        tone: 'amber',
+        sortKey: rangeStart(item.chapterRange || '', index + 1),
+        chapterNo: rangeStart(item.chapterRange || '', index + 1),
+      })
+    })
+
+    return nextItems.sort((a, b) => a.sortKey - b.sortKey)
+  }, [chapterStructure, plotLine, readingExperience, storyOverview])
+
+  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!scrollRef.current) return
+    dragState.current = {
+      startX: event.clientX,
+      scrollLeft: scrollRef.current.scrollLeft,
+    }
+    scrollRef.current.setPointerCapture(event.pointerId)
+  }
+
+  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!scrollRef.current || !dragState.current) return
+    const delta = event.clientX - dragState.current.startX
+    scrollRef.current.scrollLeft = dragState.current.scrollLeft - delta
+  }
+
+  const handlePointerUp = () => {
+    dragState.current = null
+  }
+
+  if (items.length === 0) {
+    return null
+  }
+
+  return (
+    <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
+      <div className="mb-4 flex items-center gap-2">
+        <MoveHorizontal className="h-4 w-4 text-indigo-600" />
+        <div className="font-medium">故事时间轴</div>
+        <div className="text-xs text-gray-500 dark:text-gray-400">按章节顺序拖动查看</div>
+      </div>
+      <div
+        ref={scrollRef}
+        className="cursor-grab overflow-x-auto pb-2 active:cursor-grabbing"
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerLeave={handlePointerUp}
+      >
+        <div className="flex min-w-max gap-3">
+          {items.map((item, index) => (
+            <button
+              key={`${item.kind}-${item.sortKey}-${index}`}
+              onClick={() => {
+                if (item.kind === '阶段') onFocusDimension?.(AnalysisDimension.STORY_OVERVIEW)
+                if (item.kind === '转折') onFocusDimension?.(AnalysisDimension.PLOT_LINE)
+                if (item.kind === '高点' || item.kind === '低谷' || item.kind === '高光' || item.kind === '疲劳') {
+                  onFocusDimension?.(AnalysisDimension.CHAPTER_STRUCTURE)
+                }
+                if (item.anchorId) {
+                  onFocusAnchor?.(item.anchorId)
+                }
+              }}
+              className={`w-[240px] shrink-0 rounded-2xl border px-4 py-3 text-left transition-colors hover:shadow-sm ${
+                focusedChapterNumber !== null && item.chapterNo === focusedChapterNumber ? 'ring-2 ring-blue-400 ring-offset-2 ring-offset-white dark:ring-offset-gray-900' : ''
+              } ${
+                item.tone === 'blue'
+                  ? 'border-blue-200 bg-blue-50 dark:border-blue-900/40 dark:bg-blue-950/20'
+                  : item.tone === 'purple'
+                    ? 'border-purple-200 bg-purple-50 dark:border-purple-900/40 dark:bg-purple-950/20'
+                    : item.tone === 'green'
+                      ? 'border-green-200 bg-green-50 dark:border-green-900/40 dark:bg-green-950/20'
+                      : item.tone === 'red'
+                        ? 'border-red-200 bg-red-50 dark:border-red-900/40 dark:bg-red-950/20'
+                        : 'border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/20'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="rounded-full bg-white/80 px-2 py-0.5 text-[11px] font-medium text-gray-700 dark:bg-black/20 dark:text-gray-200">
+                  {item.kind}
+                </span>
+                <span className="text-[11px] text-gray-500 dark:text-gray-400">{item.range}</span>
+              </div>
+              <div className="mt-3 font-medium text-gray-900 dark:text-gray-100">{item.title}</div>
+              <div className="mt-2 text-sm text-gray-700 dark:text-gray-300">{item.summary || '暂无说明'}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function WorldSettingCard({ worldSetting }: { worldSetting: Record<string, unknown> }) {
+  const settings = Array.isArray(worldSetting.settings) ? worldSetting.settings as Array<Record<string, unknown>> : []
+  const powerSystem = (worldSetting.powerSystem || {}) as Record<string, unknown>
+  const consistency = stringValue(worldSetting.consistency)
+
+  return (
+    <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
+      <div className="mb-3 flex items-center gap-2">
+        <Sparkles className="h-4 w-4 text-sky-600" />
+        <div className="font-medium">世界观设定</div>
+      </div>
+      {stringValue(powerSystem.name) && (
+        <div className="mb-3 rounded-xl border border-sky-200 bg-sky-50 px-3 py-3 text-sm dark:border-sky-900/40 dark:bg-sky-950/20">
+          <div className="font-medium">{stringValue(powerSystem.name)}</div>
+          {Array.isArray(powerSystem.levels) && (powerSystem.levels as string[]).length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1">
+              {(powerSystem.levels as string[]).map((level, index) => (
+                <span key={index} className="rounded bg-white px-2 py-0.5 text-xs text-sky-700 dark:bg-black/20 dark:text-sky-300">
+                  {level}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      <div className="space-y-2 text-sm">
+        {settings.slice(0, 4).map((setting, index) => (
+          <div key={index} className="rounded-xl border border-gray-200 px-3 py-3 dark:border-gray-800">
+            <div className="font-medium">{stringValue(setting.name)}</div>
+            <div className="mt-1 text-gray-600 dark:text-gray-400">{stringValue(setting.description) || '暂无描述'}</div>
+          </div>
+        ))}
+      </div>
+      {consistency && (
+        <div className="mt-3 rounded-xl bg-gray-50 px-3 py-3 text-sm text-gray-700 dark:bg-gray-950/20 dark:text-gray-300">
+          {consistency}
+        </div>
+      )}
+      {settings.length === 0 && !stringValue(powerSystem.name) && !consistency && (
+        <EmptyHint text="暂无世界观数据" />
+      )}
+    </div>
+  )
+}
+
+function CharacterRelationCard({ data }: { data: Record<string, unknown> }) {
+  const characters = Array.isArray(data.characters) ? data.characters as Array<Record<string, unknown>> : []
+
+  return (
+    <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
+      <div className="mb-3 flex items-center gap-2">
+        <UserRound className="h-4 w-4 text-purple-600" />
+        <div className="font-medium">人物关系摘要</div>
+      </div>
+      {characters.length === 0 ? (
+        <EmptyHint text="暂无人物关系数据" />
+      ) : (
+        <div className="space-y-3">
+          {characters.slice(0, 6).map((char, index) => (
+            <div key={index} className="rounded-xl border border-gray-200 px-3 py-3 dark:border-gray-800">
+              <div className="flex items-center justify-between gap-2">
+                <div className="font-medium">{stringValue(char.name)}</div>
+                <span className="rounded-full bg-purple-100 px-2 py-0.5 text-xs text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">
+                  {stringValue(char.role)}
+                </span>
+              </div>
+              <div className="mt-2 text-sm text-gray-700 dark:text-gray-300">{stringValue(char.description)}</div>
+              {Array.isArray(char.relationships) && (char.relationships as Array<Record<string, unknown>>).length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {(char.relationships as Array<Record<string, unknown>>).slice(0, 4).map((rel, relIndex) => (
+                    <span key={relIndex} className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                      {stringValue(rel.target)} · {stringValue(rel.type)}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function EvidenceCard({
   chapterStructure,
   readingExperience,
+  selectedChapterNo,
 }: {
   chapterStructure: Record<string, unknown>
   readingExperience: ReadingExperienceData
+  selectedChapterNo?: number | null
 }) {
   const peaks = Array.isArray(chapterStructure.peakSections) ? chapterStructure.peakSections as Array<Record<string, unknown>> : []
   const slows = Array.isArray(chapterStructure.slowSections) ? chapterStructure.slowSections as Array<Record<string, unknown>> : []
   const highlights = readingExperience.highlightChapters || []
   const fatigue = readingExperience.fatigueChapters || []
+  const isChapterMatched = useCallback((value?: unknown) => {
+    if (selectedChapterNo === null || selectedChapterNo === undefined) return false
+    const num = typeof value === 'number' ? value : Number(String(value || '').match(/(\d+)/)?.[1] || 0)
+    return num === selectedChapterNo
+  }, [selectedChapterNo])
 
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
       <div className="mb-3 flex items-center gap-2">
         <Layers3 className="h-4 w-4 text-indigo-600" />
         <div className="font-medium">证据层与风险段</div>
+        {selectedChapterNo !== null && selectedChapterNo !== undefined && (
+          <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-700 dark:bg-blue-950/20 dark:text-blue-300">
+            第{selectedChapterNo}章
+          </span>
+        )}
       </div>
       <div className="grid gap-3 md:grid-cols-2">
-        <EvidenceList title="高光章节" icon={<Sparkles className="h-4 w-4 text-green-600" />} items={highlights.map(item => `${item.chapter ? `第${item.chapter}章` : ''} ${item.reason || ''}`.trim())} emptyText="暂无高光章节标注" />
-        <EvidenceList title="疲劳章节" icon={<TriangleAlert className="h-4 w-4 text-amber-600" />} items={fatigue.map(item => `${item.chapterRange || ''} ${item.reason || ''}`.trim())} emptyText="暂无疲劳章节标注" />
-        <EvidenceList title="结构高点" icon={<Sparkles className="h-4 w-4 text-blue-600" />} items={peaks.map(item => `${stringValue(item.chapterRange)} ${stringValue(item.reason)}`.trim())} emptyText="暂无结构高点" />
-        <EvidenceList title="结构低谷" icon={<TriangleAlert className="h-4 w-4 text-red-600" />} items={slows.map(item => `${stringValue(item.chapterRange)} ${stringValue(item.reason)}`.trim())} emptyText="暂无结构低谷" />
+        <EvidenceList
+          title="高光章节"
+          icon={<Sparkles className="h-4 w-4 text-green-600" />}
+          items={highlights.map(item => ({
+            text: `${item.chapter ? `第${item.chapter}章` : ''} ${item.reason || ''}`.trim(),
+            active: isChapterMatched(item.chapter),
+          }))}
+          emptyText="暂无高光章节标注"
+        />
+        <EvidenceList
+          title="疲劳章节"
+          icon={<TriangleAlert className="h-4 w-4 text-amber-600" />}
+          items={fatigue.map(item => ({
+            text: `${item.chapterRange || ''} ${item.reason || ''}`.trim(),
+            active: isChapterMatched(stringValue(item.chapterRange)),
+          }))}
+          emptyText="暂无疲劳章节标注"
+        />
+        <EvidenceList
+          title="结构高点"
+          icon={<Sparkles className="h-4 w-4 text-blue-600" />}
+          items={peaks.map(item => ({
+            text: `${stringValue(item.chapterRange)} ${stringValue(item.reason)}`.trim(),
+            active: isChapterMatched(stringValue(item.chapterRange)),
+          }))}
+          emptyText="暂无结构高点"
+        />
+        <EvidenceList
+          title="结构低谷"
+          icon={<TriangleAlert className="h-4 w-4 text-red-600" />}
+          items={slows.map(item => ({
+            text: `${stringValue(item.chapterRange)} ${stringValue(item.reason)}`.trim(),
+            active: isChapterMatched(stringValue(item.chapterRange)),
+          }))}
+          emptyText="暂无结构低谷"
+        />
       </div>
     </div>
   )
@@ -396,7 +1321,7 @@ function EvidenceList({
 }: {
   title: string
   icon: ReactNode
-  items: string[]
+  items: Array<{ text: string; active?: boolean }>
   emptyText: string
 }) {
   return (
@@ -410,7 +1335,16 @@ function EvidenceList({
       ) : (
         <div className="space-y-2">
           {items.map((item, index) => (
-            <div key={index} className="text-sm text-gray-700 dark:text-gray-300">{item}</div>
+            <div
+              key={index}
+              className={`rounded-lg px-2 py-1 text-sm ${
+                item.active
+                  ? 'bg-blue-50 text-blue-800 dark:bg-blue-950/20 dark:text-blue-300'
+                  : 'text-gray-700 dark:text-gray-300'
+              }`}
+            >
+              {item.text}
+            </div>
           ))}
         </div>
       )}
@@ -444,22 +1378,63 @@ function TagBlock({ title, items, tone }: { title: string; items: string[]; tone
   )
 }
 
-function renderDimensionContent(dimension: AnalysisDimension, data: Record<string, unknown>) {
+function SummaryPill({ label, value, onClick }: { label: string; value: string; onClick?: () => void }) {
+  const classes = `rounded-xl border border-gray-200 bg-white px-3 py-3 text-left dark:border-gray-800 dark:bg-gray-900 ${
+    onClick ? 'transition-colors hover:border-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/20' : ''
+  }`
+  if (!onClick) {
+    return (
+      <div className={classes}>
+        <div className="text-xs text-gray-500 dark:text-gray-400">{label}</div>
+        <div className="mt-1 text-sm font-medium text-gray-900 dark:text-gray-100 line-clamp-2">{value || '暂无'}</div>
+      </div>
+    )
+  }
+
+  return (
+    <button type="button" onClick={onClick} className={classes}>
+      <div className="text-xs text-gray-500 dark:text-gray-400">{label}</div>
+      <div className="mt-1 text-sm font-medium text-gray-900 dark:text-gray-100 line-clamp-2">{value || '暂无'}</div>
+    </button>
+  )
+}
+
+function renderDimensionContent(
+  dimension: AnalysisDimension,
+  data: Record<string, unknown>,
+  focusedAnchor?: string | null,
+  onFocusAnchor?: (anchorId: string) => void,
+  onFocusDimension?: (dimension: AnalysisDimension, volumeNumber?: number) => void,
+  selectedChapterNo?: number | null,
+  bookContext?: {
+    plotLine?: Record<string, unknown>
+    foreshadowing?: Record<string, unknown>
+  }
+) {
   switch (dimension) {
     case AnalysisDimension.STORY_OVERVIEW:
-      return <StoryOverviewView data={data} />
+      return <StoryOverviewView data={data} focusedAnchor={focusedAnchor} onFocusAnchor={onFocusAnchor} selectedChapterNo={selectedChapterNo} />
     case AnalysisDimension.CHARACTER_RELATION:
       return <CharacterRelationView data={data} />
     case AnalysisDimension.CHARACTER_ARC:
       return <CharacterArcView data={data} />
     case AnalysisDimension.PLOT_LINE:
-      return <PlotLineView data={data} />
+      return <PlotLineView data={data} onFocusDimension={onFocusDimension} />
     case AnalysisDimension.FORESHADOWING:
-      return <ForeshadowingView data={data} />
+      return <ForeshadowingView data={data} focusedAnchor={focusedAnchor} onFocusAnchor={onFocusAnchor} selectedChapterNo={selectedChapterNo} />
     case AnalysisDimension.CHAPTER_STRUCTURE:
-      return <ChapterStructureView data={data} />
+      return (
+        <ChapterStructureView
+          data={data}
+          focusedAnchor={focusedAnchor}
+          onFocusAnchor={onFocusAnchor}
+          selectedChapterNo={selectedChapterNo}
+          plotLine={bookContext?.plotLine}
+          foreshadowing={bookContext?.foreshadowing}
+        />
+      )
     case AnalysisDimension.READING_EXPERIENCE:
-      return <ReadingExperienceView data={data as ReadingExperienceData} />
+      return <ReadingExperienceView data={data as ReadingExperienceData} selectedChapterNo={selectedChapterNo} />
     case AnalysisDimension.WORLD_SETTING:
       return <WorldSettingView data={data} />
     default:
@@ -467,10 +1442,47 @@ function renderDimensionContent(dimension: AnalysisDimension, data: Record<strin
   }
 }
 
-function StoryOverviewView({ data }: { data: Record<string, unknown> }) {
+function StoryOverviewView({
+  data,
+  focusedAnchor,
+  onFocusAnchor,
+  selectedChapterNo,
+}: {
+  data: Record<string, unknown>
+  focusedAnchor?: string | null
+  onFocusAnchor?: (anchorId: string) => void
+  selectedChapterNo?: number | null
+}) {
+  const [activeStage, setActiveStage] = useState<number | null>(null)
   const summary = stringValue(data.summary)
   const outline = (data.outline || {}) as Record<string, unknown>
   const stageBreakdown = Array.isArray(outline.stageBreakdown) ? outline.stageBreakdown as Array<Record<string, unknown>> : []
+
+  useEffect(() => {
+    if (!focusedAnchor?.startsWith('timeline-stage-')) return
+    const index = Number(focusedAnchor.split('-').at(-1))
+    if (!Number.isNaN(index)) {
+      setActiveStage(index)
+    }
+  }, [focusedAnchor])
+
+  useEffect(() => {
+    if (selectedChapterNo === null || selectedChapterNo === undefined) return
+    const matchedIndex = stageBreakdown.findIndex(stage => {
+      const range = stringValue(stage.chapterRange)
+      const start = rangeStart(range, 0)
+      if (start === selectedChapterNo) return true
+      const endMatch = range.match(/(\d+)\s*[-~]\s*(\d+)/)
+      if (endMatch) {
+        return selectedChapterNo >= Number(endMatch[1]) && selectedChapterNo <= Number(endMatch[2])
+      }
+      return false
+    })
+    if (matchedIndex >= 0) {
+      setActiveStage(matchedIndex)
+    }
+  }, [selectedChapterNo, stageBreakdown])
+
   return (
     <div className="space-y-3 text-sm">
       {summary && <div className="rounded-xl bg-amber-50 px-3 py-3 text-amber-900 dark:bg-amber-950/20 dark:text-amber-200">{summary}</div>}
@@ -478,11 +1490,24 @@ function StoryOverviewView({ data }: { data: Record<string, unknown> }) {
       {stageBreakdown.length > 0 && (
         <div className="space-y-2">
           {stageBreakdown.map((stage, index) => (
-            <div key={index} className="rounded-xl border border-gray-200 px-3 py-2 dark:border-gray-800">
+            <button
+              key={index}
+              id={`timeline-stage-${index}`}
+              type="button"
+              onClick={() => {
+                setActiveStage(index)
+                onFocusAnchor?.(`timeline-stage-${index}`)
+              }}
+              className={`w-full rounded-xl border px-3 py-2 text-left transition-colors ${
+                activeStage === index
+                  ? 'border-amber-400 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/20'
+                  : 'border-gray-200 dark:border-gray-800'
+              }`}
+            >
               <div className="font-medium">{stringValue(stage.stage)}</div>
               <div className="text-xs text-gray-500 dark:text-gray-400">{stringValue(stage.chapterRange)}</div>
               <div className="mt-1">{stringValue(stage.summary)}</div>
-            </div>
+            </button>
           ))}
         </div>
       )}
@@ -550,7 +1575,13 @@ function CharacterArcView({ data }: { data: Record<string, unknown> }) {
   )
 }
 
-function PlotLineView({ data }: { data: Record<string, unknown> }) {
+function PlotLineView({
+  data,
+  onFocusDimension,
+}: {
+  data: Record<string, unknown>
+  onFocusDimension?: (dimension: AnalysisDimension, volumeNumber?: number) => void
+}) {
   const mainPlot = Array.isArray(data.mainPlot) ? data.mainPlot as Array<Record<string, unknown>> : []
   const subPlots = Array.isArray(data.subPlots) ? data.subPlots as Array<Record<string, unknown>> : []
   const turningPoints = Array.isArray(data.turningPoints) ? data.turningPoints as Array<Record<string, unknown>> : []
@@ -588,9 +1619,15 @@ function PlotLineView({ data }: { data: Record<string, unknown> }) {
           <div className="mb-2 font-medium text-amber-700 dark:text-amber-300">关键转折</div>
           <div className="space-y-2">
             {turningPoints.map((point, index) => (
-              <div key={index} className="rounded-xl bg-amber-50 px-3 py-2 dark:bg-amber-950/20">
+              <button
+                key={index}
+                id={`plot-turning-${index}`}
+                type="button"
+                onClick={() => onFocusDimension?.(AnalysisDimension.PLOT_LINE)}
+                className="w-full rounded-xl bg-amber-50 px-3 py-2 text-left dark:bg-amber-950/20"
+              >
                 第{String(point.chapter || '?')}章 · {stringValue(point.event)} · {stringValue(point.impact)}
-              </div>
+              </button>
             ))}
           </div>
         </div>
@@ -599,13 +1636,53 @@ function PlotLineView({ data }: { data: Record<string, unknown> }) {
   )
 }
 
-function ForeshadowingView({ data }: { data: Record<string, unknown> }) {
+function ForeshadowingView({
+  data,
+  focusedAnchor,
+  onFocusAnchor,
+  selectedChapterNo,
+}: {
+  data: Record<string, unknown>
+  focusedAnchor?: string | null
+  onFocusAnchor?: (anchorId: string) => void
+  selectedChapterNo?: number | null
+}) {
   const items = Array.isArray(data.items) ? data.items as Array<Record<string, unknown>> : []
+  const [activeChapterNo, setActiveChapterNo] = useState<number | null>(null)
+  useEffect(() => {
+    if (!focusedAnchor?.startsWith('foreshadow-chapter-')) return
+    const chapterNo = Number(focusedAnchor.split('-').at(-1))
+    if (!Number.isNaN(chapterNo)) {
+      setActiveChapterNo(chapterNo)
+    }
+  }, [focusedAnchor])
+
+  useEffect(() => {
+    if (selectedChapterNo === null || selectedChapterNo === undefined) return
+    const matched = items.find(item => Number(item.chapter || 0) === selectedChapterNo)
+    if (matched) {
+      setActiveChapterNo(selectedChapterNo)
+    }
+  }, [items, selectedChapterNo])
+
   if (items.length === 0) return <EmptyHint text="暂无伏笔数据" />
   return (
     <div className="space-y-2 text-sm">
       {items.map((item, index) => (
-        <div key={index} className="rounded-xl border border-gray-200 px-3 py-3 dark:border-gray-800">
+        <button
+          key={index}
+          id={`foreshadow-chapter-${String(item.chapter || index + 1)}`}
+          type="button"
+          onClick={() => {
+            setActiveChapterNo(Number(item.chapter || index + 1))
+            onFocusAnchor?.(`foreshadow-chapter-${String(item.chapter || index + 1)}`)
+          }}
+          className={`w-full rounded-xl border px-3 py-3 text-left transition-colors ${
+            activeChapterNo === Number(item.chapter || index + 1)
+              ? 'border-amber-400 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/20'
+              : 'border-gray-200 dark:border-gray-800'
+          }`}
+        >
           <div className="flex items-center gap-2">
             <span className={`rounded px-1.5 py-0.5 text-xs ${
               item.importance === 'major'
@@ -618,30 +1695,114 @@ function ForeshadowingView({ data }: { data: Record<string, unknown> }) {
           </div>
           <div className="mt-2">埋：{stringValue(item.setup)}</div>
           <div className="mt-1 text-purple-700 dark:text-purple-300">收：{stringValue(item.payoff) || '待回收'}</div>
-        </div>
+        </button>
       ))}
     </div>
   )
 }
 
-function ChapterStructureView({ data }: { data: Record<string, unknown> }) {
+function ChapterStructureView({
+  data,
+  focusedAnchor,
+  onFocusAnchor,
+  selectedChapterNo,
+  plotLine,
+  foreshadowing,
+}: {
+  data: Record<string, unknown>
+  focusedAnchor?: string | null
+  onFocusAnchor?: (anchorId: string) => void
+  selectedChapterNo?: number | null
+  plotLine?: Record<string, unknown>
+  foreshadowing?: Record<string, unknown>
+}) {
   const chapters = Array.isArray(data.chapters) ? data.chapters as Array<Record<string, unknown>> : []
   const arcAnalysis = stringValue(data.arcAnalysis)
   const pacingAssessment = stringValue(data.pacingAssessment)
+  const [activeChapterNo, setActiveChapterNo] = useState<number | null>(null)
+  useEffect(() => {
+    if (!focusedAnchor?.startsWith('chapter-no-')) return
+    const chapterNo = Number(focusedAnchor.split('-').at(-1))
+    if (!Number.isNaN(chapterNo)) {
+      setActiveChapterNo(chapterNo)
+    }
+  }, [focusedAnchor])
+
+  useEffect(() => {
+    if (selectedChapterNo === null || selectedChapterNo === undefined) return
+    const matched = chapters.find(chapter => Number(chapter.number || 0) === selectedChapterNo)
+    if (matched) {
+      setActiveChapterNo(selectedChapterNo)
+    }
+  }, [chapters, selectedChapterNo])
+
+  const relatedItems = useMemo(() => {
+    if (activeChapterNo === null) return { foreshadow: [], turning: [] as Array<Record<string, unknown>> }
+    const foreshadowItems = Array.isArray(foreshadowing?.items)
+      ? (foreshadowing?.items as Array<Record<string, unknown>>).filter(item => Number(item.chapter || 0) === activeChapterNo)
+      : []
+    const turningItems = Array.isArray(plotLine?.turningPoints)
+      ? (plotLine?.turningPoints as Array<Record<string, unknown>>).filter(item => Number(item.chapter || 0) === activeChapterNo)
+      : []
+    return { foreshadow: foreshadowItems, turning: turningItems }
+  }, [activeChapterNo, foreshadowing, plotLine])
+
   if (chapters.length === 0 && !arcAnalysis && !pacingAssessment) return <EmptyHint text="暂无章节结构数据" />
   return (
     <div className="space-y-3 text-sm">
       {chapters.length > 0 && (
         <div className="space-y-2">
           {chapters.slice(0, 12).map((chapter, index) => (
-            <div key={index} className="flex items-start gap-2 rounded-xl border border-gray-200 px-3 py-2 dark:border-gray-800">
+            <button
+              key={index}
+              id={`chapter-no-${String(chapter.number || index + 1)}`}
+              type="button"
+              onClick={() => {
+                setActiveChapterNo(Number(chapter.number || index + 1))
+                onFocusAnchor?.(`chapter-no-${String(chapter.number || index + 1)}`)
+              }}
+              className={`flex w-full items-start gap-2 rounded-xl border px-3 py-2 text-left transition-colors ${
+                activeChapterNo === Number(chapter.number || index + 1)
+                  ? 'border-blue-400 bg-blue-50 dark:border-blue-700 dark:bg-blue-950/20'
+                  : 'border-gray-200 dark:border-gray-800'
+              }`}
+            >
               <span className="min-w-[64px] font-medium">第{String(chapter.number)}章</span>
               <span className="rounded bg-blue-100 px-1.5 py-0.5 text-xs text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
                 {stringValue(chapter.function)}
               </span>
               <span>{stringValue(chapter.title)}</span>
-            </div>
+            </button>
           ))}
+        </div>
+      )}
+      {activeChapterNo !== null && (
+        <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-950/20">
+          <div className="mb-2 font-medium">本章关联内容</div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="rounded-lg bg-white p-3 dark:bg-gray-900">
+              <div className="text-xs font-medium text-gray-500 dark:text-gray-400">关联伏笔</div>
+              <div className="mt-2 space-y-2">
+                {relatedItems.foreshadow.length > 0 ? relatedItems.foreshadow.map((item, index) => (
+                  <div key={index} className="rounded-lg border border-gray-200 px-3 py-2 dark:border-gray-800">
+                    <div className="text-sm font-medium">{stringValue(item.setup) || '未命名伏笔'}</div>
+                    <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">收束：{stringValue(item.payoff) || '待回收'}</div>
+                  </div>
+                )) : <EmptyHint text="本章暂无关联伏笔" />}
+              </div>
+            </div>
+            <div className="rounded-lg bg-white p-3 dark:bg-gray-900">
+              <div className="text-xs font-medium text-gray-500 dark:text-gray-400">关联转折</div>
+              <div className="mt-2 space-y-2">
+                {relatedItems.turning.length > 0 ? relatedItems.turning.map((item, index) => (
+                  <div key={index} className="rounded-lg border border-gray-200 px-3 py-2 dark:border-gray-800">
+                    <div className="text-sm font-medium">{stringValue(item.event) || '未命名转折'}</div>
+                    <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">{stringValue(item.impact) || '暂无影响描述'}</div>
+                  </div>
+                )) : <EmptyHint text="本章暂无关联转折" />}
+              </div>
+            </div>
+          </div>
         </div>
       )}
       {arcAnalysis && <div className="rounded-xl bg-gray-50 px-3 py-3 dark:bg-gray-900">{arcAnalysis}</div>}
@@ -650,9 +1811,25 @@ function ChapterStructureView({ data }: { data: Record<string, unknown> }) {
   )
 }
 
-function ReadingExperienceView({ data }: { data: ReadingExperienceData }) {
+function ReadingExperienceView({
+  data,
+  selectedChapterNo,
+}: {
+  data: ReadingExperienceData
+  selectedChapterNo?: number | null
+}) {
   const scores = data.scores || {}
   const entries = Object.entries(scores)
+  const highlight = useMemo(() => {
+    if (selectedChapterNo === null || selectedChapterNo === undefined) return null
+    const chapterHighlight = Array.isArray(data.highlightChapters)
+      ? data.highlightChapters.find(item => Number(item.chapter || 0) === selectedChapterNo)
+      : undefined
+    const fatigueMatch = Array.isArray(data.fatigueChapters)
+      ? data.fatigueChapters.find(item => rangeStart(item.chapterRange || '', 0) === selectedChapterNo)
+      : undefined
+    return chapterHighlight || fatigueMatch || null
+  }, [data, selectedChapterNo])
   return (
     <div className="space-y-3 text-sm">
       {entries.length > 0 && (
@@ -671,6 +1848,15 @@ function ReadingExperienceView({ data }: { data: ReadingExperienceData }) {
         <Metric label="阅读疲劳" value={data.readingFeel?.fatigueSummary || '暂无'} />
         <Metric label="章尾钩子" value={data.readingFeel?.chapterEndingSummary || '暂无'} />
       </div>
+      {highlight && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-3 text-sm text-blue-800 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-300">
+          <div className="font-medium">当前章节关联阅读体验</div>
+          <div className="mt-1">
+            {selectedChapterNo !== null && selectedChapterNo !== undefined ? `第${selectedChapterNo}章：` : ''}
+            {'reason' in highlight ? stringValue((highlight as { reason?: string }).reason) : ''}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -717,4 +1903,73 @@ function volumeLabel(vol: number) {
 
 function stringValue(value: unknown) {
   return typeof value === 'string' ? value : ''
+}
+
+function extractChapterNo(anchorId: string) {
+  const match = anchorId.match(/^(?:chapter-no|foreshadow-chapter|timeline-stage|plot-turning)-(\d+)$/)
+  return match ? Number(match[1]) : null
+}
+
+function chapterMatchesAnalysis(
+  chapterNo: number,
+  dimension: AnalysisDimension,
+  data: Record<string, unknown>
+) {
+  switch (dimension) {
+    case AnalysisDimension.CHAPTER_STRUCTURE: {
+      const chapters = Array.isArray(data.chapters) ? data.chapters as Array<Record<string, unknown>> : []
+      const current = chapters.some((chapter, index) => Number(chapter.number || index + 1) === chapterNo)
+      const slow = Array.isArray(data.slowSections)
+        ? (data.slowSections as Array<Record<string, unknown>>).some(item => rangeStart(stringValue(item.chapterRange || ''), 0) === chapterNo)
+        : false
+      const peak = Array.isArray(data.peakSections)
+        ? (data.peakSections as Array<Record<string, unknown>>).some(item => rangeStart(stringValue(item.chapterRange || ''), 0) === chapterNo)
+        : false
+      return current || slow || peak || chapters.length === 0
+    }
+    case AnalysisDimension.FORESHADOWING: {
+      const items = Array.isArray(data.items) ? data.items as Array<Record<string, unknown>> : []
+      return items.some(item => Number(item.chapter || 0) === chapterNo) || items.length === 0
+    }
+    case AnalysisDimension.PLOT_LINE: {
+      const turningPoints = Array.isArray(data.turningPoints) ? data.turningPoints as Array<Record<string, unknown>> : []
+      return turningPoints.some(item => Number(item.chapter || 0) === chapterNo) || turningPoints.length === 0
+    }
+    case AnalysisDimension.STORY_OVERVIEW: {
+      const outline = (data.outline || {}) as Record<string, unknown>
+      const stages = Array.isArray(outline.stageBreakdown) ? outline.stageBreakdown as Array<Record<string, unknown>> : []
+      return stages.some(stage => {
+        const range = stringValue(stage.chapterRange)
+        const start = rangeStart(range, 0)
+        if (start === chapterNo) return true
+        const endMatch = range.match(/(\d+)\s*[-~]\s*(\d+)/)
+        if (endMatch) {
+          return chapterNo >= Number(endMatch[1]) && chapterNo <= Number(endMatch[2])
+        }
+        return false
+      }) || stages.length === 0
+    }
+    case AnalysisDimension.READING_EXPERIENCE: {
+      const highlights = Array.isArray(data.highlightChapters) ? data.highlightChapters as Array<{ chapter?: number }> : []
+      const fatigue = Array.isArray(data.fatigueChapters) ? data.fatigueChapters as Array<{ chapterRange?: string }> : []
+      return highlights.some(item => Number(item.chapter || 0) === chapterNo) ||
+        fatigue.some(item => rangeStart(item.chapterRange || '', 0) === chapterNo) ||
+        (!highlights.length && !fatigue.length)
+    }
+    case AnalysisDimension.CHARACTER_RELATION:
+    case AnalysisDimension.CHARACTER_ARC:
+    case AnalysisDimension.WORLD_SETTING:
+    default:
+      return true
+  }
+}
+
+function parseChapterMark(value: string) {
+  const match = value.match(/(\d+)/)
+  return match ? Number(match[1]) : 0
+}
+
+function rangeStart(value: string, fallback: number) {
+  const match = value.match(/(\d+)/)
+  return match ? Number(match[1]) : fallback
 }

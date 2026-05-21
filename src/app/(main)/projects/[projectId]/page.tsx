@@ -579,6 +579,7 @@ export default function ProjectDetailPage() {
   const liveChapter = pipeline?.runtime?.currentChapter || null
   const recentChapterRuns = pipeline?.runtime?.recentChapters || []
   const hasBoundModel = Boolean(project.aiModelConfig)
+  const isAnalyzeMode = project.projectMode === 'ANALYZE'
 
   return (
     <>
@@ -595,7 +596,7 @@ export default function ProjectDetailPage() {
       </div>
 
       {/* Pipeline Progress Panel */}
-      {pipeline && (pipeline.status === 'RUNNING' || pipeline.status === 'PENDING' || pipeline.status === 'PAUSED') && (
+      {!isAnalyzeMode && pipeline && (pipeline.status === 'RUNNING' || pipeline.status === 'PENDING' || pipeline.status === 'PAUSED') && (
         <div className={`mb-4 rounded-lg px-4 py-3 ${
           pipeline.status === 'PAUSED'
             ? 'border border-amber-200 bg-amber-50 dark:border-amber-900/60 dark:bg-amber-900/20'
@@ -672,7 +673,7 @@ export default function ProjectDetailPage() {
         </div>
       )}
 
-      {pipeline && pipeline.status === 'FAILED' && (
+      {!isAnalyzeMode && pipeline && pipeline.status === 'FAILED' && (
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-900/60 dark:bg-red-900/20">
           <div className="flex items-center gap-2 mb-2">
             <AlertCircle className="h-4 w-4 text-red-600" />
@@ -690,7 +691,7 @@ export default function ProjectDetailPage() {
         </div>
       )}
 
-      {pipeline && pipeline.status === 'COMPLETED' && (
+      {!isAnalyzeMode && pipeline && pipeline.status === 'COMPLETED' && (
         <div className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 dark:border-green-900/60 dark:bg-green-900/20">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="h-4 w-4 text-green-600" />
@@ -711,69 +712,96 @@ export default function ProjectDetailPage() {
           {project.genre && <Badge variant="outline">{project.genre}</Badge>}
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={handleStartPipeline}
-            loading={pipelineStarting}
-            disabled={pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING' || pipeline?.status === 'PAUSED' || !hasBoundModel || projectInitializing}
-            className="gap-1.5"
-          >
-            <Rocket className="h-4 w-4" />
-            {projectInitializing ? '初始化中' : '开始 AI 生成'}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowToolbox(true)}
-            className="gap-1.5"
-          >
-            <Wrench className="h-4 w-4" />
-            工具箱
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowExportModal(true)}
-            className="gap-1.5"
-          >
-            <Download className="h-4 w-4" />
-            导出
-          </Button>
-          <MoreActionsMenu
-            onEdit={() => setShowEditModal(true)}
-            onDelete={() => setShowDeleteModal(true)}
-            onExport={() => {
-              const handleExport = async () => {
-                try {
-                  const res = await fetch(`/api/novel/projects/${projectId}/export-data`)
-                  const data = await res.json()
-                  if (data.success) {
-                    let content = `${project.title}\n\n${'='.repeat(40)}\n\n`
-                    for (const ch of data.data.chapters) {
-                      content += `第${ch.chapterNumber}章 ${ch.title}\n\n${ch.content || ''}\n\n`
+          {isAnalyzeMode ? (
+            <Badge variant="secondary">只读拆书模式</Badge>
+          ) : (
+            <>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleStartPipeline}
+                loading={pipelineStarting}
+                disabled={pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING' || pipeline?.status === 'PAUSED' || !hasBoundModel || projectInitializing}
+                className="gap-1.5"
+              >
+                <Rocket className="h-4 w-4" />
+                {projectInitializing ? '初始化中' : '开始 AI 生成'}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowToolbox(true)}
+                className="gap-1.5"
+              >
+                <Wrench className="h-4 w-4" />
+                工具箱
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowExportModal(true)}
+                className="gap-1.5"
+              >
+                <Download className="h-4 w-4" />
+                导出
+              </Button>
+              <MoreActionsMenu
+                onEdit={() => setShowEditModal(true)}
+                onDelete={() => setShowDeleteModal(true)}
+                onExport={() => {
+                  const handleExport = async () => {
+                    try {
+                      const res = await fetch(`/api/novel/projects/${projectId}/export-data`)
+                      const data = await res.json()
+                      if (data.success) {
+                        let content = `${project.title}\n\n${'='.repeat(40)}\n\n`
+                        for (const ch of data.data.chapters) {
+                          content += `第${ch.chapterNumber}章 ${ch.title}\n\n${ch.content || ''}\n\n`
+                        }
+                        const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
+                        const url = URL.createObjectURL(blob)
+                        const a = document.createElement('a')
+                        a.href = url
+                        a.download = `${project.title}.txt`
+                        document.body.appendChild(a)
+                        a.click()
+                        document.body.removeChild(a)
+                        URL.revokeObjectURL(url)
+                        toast.success('导出成功')
+                      }
+                    } catch {
+                      toast.error('导出失败')
                     }
-                    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
-                    const url = URL.createObjectURL(blob)
-                    const a = document.createElement('a')
-                    a.href = url
-                    a.download = `${project.title}.txt`
-                    document.body.appendChild(a)
-                    a.click()
-                    document.body.removeChild(a)
-                    URL.revokeObjectURL(url)
-                    toast.success('导出成功')
                   }
-                } catch {
-                  toast.error('导出失败')
-                }
-              }
-              handleExport()
-            }}
-          />
+                  handleExport()
+                }}
+              />
+            </>
+          )}
         </div>
       </div>
 
+      {isAnalyzeMode ? (
+        <div className="space-y-6">
+          <Card className="border-amber-200 bg-amber-50/60 dark:border-amber-900/40 dark:bg-amber-950/20">
+            <CardContent className="p-5">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="text-sm font-medium text-amber-700 dark:text-amber-300">拆书模式</div>
+                  <h2 className="mt-1 text-lg font-semibold text-gray-900 dark:text-white">只读分析工作台</h2>
+                  <p className="mt-2 text-sm text-gray-700 dark:text-gray-300">
+                    这里用于查看 AI 自动完成的拆书结果，不提供章节编辑、设定维护或总控配置入口。
+                  </p>
+                </div>
+                <Badge variant="secondary">AI 自动分析</Badge>
+              </div>
+            </CardContent>
+          </Card>
+
+          <AnalysisWorkbench projectId={projectId} />
+        </div>
+      ) : (
+        <>
       {/* Simplified Tabs */}
       <div className="border-b border-gray-200 dark:border-gray-700 mb-6">
         <div className="flex items-center gap-1">
@@ -1253,7 +1281,7 @@ export default function ProjectDetailPage() {
           )}
 
           {activeTab === 'analysis' && project.projectMode === 'ANALYZE' && (
-            <AnalysisWorkbench projectId={projectId} totalVolumes={project.totalVolumes} />
+            <AnalysisWorkbench projectId={projectId} />
           )}
 
           {activeTab === 'characters' && project.projectMode === 'ANALYZE' && (
@@ -1398,6 +1426,9 @@ export default function ProjectDetailPage() {
         </button>
       )}
 
+      </>
+      )}
+
       {/* Toolbox */}
       <Toolbox
         open={showToolbox}
@@ -1524,7 +1555,7 @@ export default function ProjectDetailPage() {
         title="拆书分析"
         className="max-w-4xl"
       >
-        <AnalysisWorkbench projectId={projectId} totalVolumes={project.totalVolumes} />
+        <AnalysisWorkbench projectId={projectId} />
       </Modal>
 
       {/* Review Modal */}

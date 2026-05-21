@@ -1,166 +1,46 @@
 'use client'
 
-import { useState } from 'react'
-import { Sparkles } from 'lucide-react'
-import { Button } from '@/components/ui'
-import { AnalysisDimension } from '@/types'
-import { ANALYSIS_DIMENSION_DESCRIPTIONS, ANALYSIS_DIMENSION_LABELS, DEFAULT_ANALYSIS_DIMENSIONS } from '@/lib/analysis/config'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui'
+import { BookOpen, Sparkles } from 'lucide-react'
 import { AnalysisTaskPanel } from './AnalysisTaskPanel'
+import { BookAnalysisDashboard } from './BookAnalysisDashboard'
 import { BookAnalysisPanel } from './BookAnalysisPanel'
 
 interface AnalysisWorkbenchProps {
   projectId: number
-  totalVolumes?: number
 }
 
-export function AnalysisWorkbench({ projectId, totalVolumes = 4 }: AnalysisWorkbenchProps) {
-  const [volumeNumber, setVolumeNumber] = useState('-1')
-  const [contextChapterCount, setContextChapterCount] = useState('3')
-  const [selectedDimensions, setSelectedDimensions] = useState<AnalysisDimension[]>(DEFAULT_ANALYSIS_DIMENSIONS)
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState('')
-  const [refreshSeed, setRefreshSeed] = useState(0)
-
-  const toggleDimension = (dimension: AnalysisDimension) => {
-    setSelectedDimensions(prev =>
-      prev.includes(dimension)
-        ? prev.filter(item => item !== dimension)
-        : [...prev, dimension]
-    )
-  }
-
-  const handleStart = async () => {
-    if (selectedDimensions.length === 0) {
-      setError('请至少选择一个分析模块')
-      return
-    }
-
-    setSubmitting(true)
-    setError('')
-    try {
-      const res = await fetch(`/api/novel/projects/${projectId}/analysis-task`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          volumeNumber: parseInt(volumeNumber, 10),
-          contextChapterCount: parseInt(contextChapterCount, 10),
-          dimensions: selectedDimensions,
-        }),
-      })
-      const data = await res.json()
-      if (!data.success) {
-        setError(data.error?.message || '启动分析失败')
-        return
-      }
-      setRefreshSeed(prev => prev + 1)
-    } catch {
-      setError('启动分析失败')
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
+export function AnalysisWorkbench({ projectId }: AnalysisWorkbenchProps) {
   return (
     <div className="space-y-5">
-      <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
-        <div className="mb-4 flex items-center gap-2">
-          <Sparkles className="h-5 w-5 text-amber-600" />
-          <div>
-            <div className="font-medium">拆书分析配置</div>
-            <div className="text-sm text-gray-500 dark:text-gray-400">统一从这里发起整书或分卷分析，结果会进入下方工作台。</div>
-          </div>
-        </div>
+      <Card className="border-amber-200 bg-amber-50/70 dark:border-amber-900/40 dark:bg-amber-950/20">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Sparkles className="h-4 w-4 text-amber-600" />
+            拆书自动分析
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="text-sm text-gray-700 dark:text-gray-300">
+          <p>系统会自动完成切章、摘要、角色、剧情、伏笔、章节结构、阅读体验和世界观分析。</p>
+          <p className="mt-1">这里不提供编辑入口，只展示 AI 识别结果和结构化证据，适合直接阅读和复盘。</p>
+        </CardContent>
+      </Card>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <label className="text-sm font-medium">分析范围</label>
-            <select
-              value={volumeNumber}
-              onChange={(e) => setVolumeNumber(e.target.value)}
-              className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm dark:border-gray-700 dark:bg-gray-950"
-            >
-              <option value="-1">整书分析</option>
-              <option value="0">全卷综合</option>
-              {Array.from({ length: totalVolumes }, (_, index) => (
-                <option key={index} value={String(index + 1)}>
-                  第{index + 1}卷
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium">补充上下文</label>
-            <select
-              value={contextChapterCount}
-              onChange={(e) => setContextChapterCount(e.target.value)}
-              className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm dark:border-gray-700 dark:bg-gray-950"
-            >
-              <option value="1">最近 1 章</option>
-              <option value="3">最近 3 章</option>
-              <option value="5">最近 5 章</option>
-              <option value="10">最近 10 章</option>
-            </select>
-          </div>
-        </div>
+      <AnalysisTaskPanel projectId={projectId} />
 
-        <div className="mt-4 space-y-2">
-          <div className="flex items-center justify-between">
-            <label className="text-sm font-medium">分析模块</label>
-            <button
-              type="button"
-              onClick={() => setSelectedDimensions(
-                selectedDimensions.length === DEFAULT_ANALYSIS_DIMENSIONS.length
-                  ? []
-                  : DEFAULT_ANALYSIS_DIMENSIONS
-              )}
-              className="text-xs text-blue-600 transition-colors hover:text-blue-700 dark:text-blue-400"
-            >
-              {selectedDimensions.length === DEFAULT_ANALYSIS_DIMENSIONS.length ? '取消全选' : '全选'}
-            </button>
-          </div>
-          <div className="grid gap-2 lg:grid-cols-2">
-            {DEFAULT_ANALYSIS_DIMENSIONS.map((dimension) => (
-              <label
-                key={dimension}
-                className={`cursor-pointer rounded-xl border px-3 py-3 transition-colors ${
-                  selectedDimensions.includes(dimension)
-                    ? 'border-amber-400 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/20'
-                    : 'border-gray-200 dark:border-gray-800'
-                }`}
-              >
-                <div className="flex items-start gap-3">
-                  <input
-                    type="checkbox"
-                    checked={selectedDimensions.includes(dimension)}
-                    onChange={() => toggleDimension(dimension)}
-                    className="mt-1"
-                  />
-                  <div>
-                    <div className="font-medium">{ANALYSIS_DIMENSION_LABELS[dimension]}</div>
-                    <div className="text-sm text-gray-500 dark:text-gray-400">{ANALYSIS_DIMENSION_DESCRIPTIONS[dimension]}</div>
-                  </div>
-                </div>
-              </label>
-            ))}
-          </div>
-        </div>
+      <Card className="overflow-hidden border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <BookOpen className="h-4 w-4 text-blue-600" />
+            拆书总览
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <BookAnalysisDashboard projectId={projectId} />
+        </CardContent>
+      </Card>
 
-        {error && (
-          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300">
-            {error}
-          </div>
-        )}
-
-        <div className="mt-4 flex justify-end">
-          <Button onClick={handleStart} loading={submitting}>
-            <Sparkles className="mr-2 h-4 w-4" />
-            开始拆书分析
-          </Button>
-        </div>
-      </div>
-
-      <AnalysisTaskPanel projectId={projectId} onTaskComplete={() => setRefreshSeed(prev => prev + 1)} />
-      <BookAnalysisPanel projectId={projectId} refreshSeed={refreshSeed} />
+      <BookAnalysisPanel projectId={projectId} />
     </div>
   )
 }
