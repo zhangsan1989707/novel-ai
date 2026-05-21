@@ -5,6 +5,7 @@ export { OutlineGenerator } from './OutlineGenerator'
 export { SuggestionButtons } from './SuggestionButtons'
 export { PlotAnalyzer } from './PlotAnalyzer'
 export { BookAnalysisPanel } from './BookAnalysisPanel'
+export { AnalysisTaskPanel } from './AnalysisTaskPanel'
 // 续写功能
 export { ContinuationPanel } from './ContinuationPanel'
 export { ContinuationResults } from './ContinuationResults'
@@ -12,6 +13,7 @@ export { ContinuationResults } from './ContinuationResults'
 export { PlotlineTracker } from './PlotlineTracker'
 // P1
 export { CharacterRelationshipGraph } from './CharacterRelationshipGraph'
+export { CharacterPanel } from './CharacterPanel'
 export { CharacterNode } from './CharacterNode'
 export { RelationshipEdge } from './RelationshipEdge'
 export { RealtimeAnalysisPanel } from './RealtimeAnalysisPanel'
@@ -33,8 +35,6 @@ export { ShortStoryPanel } from './ShortStoryPanel'
 export { StorySteeringPanel } from './StorySteeringPanel'
 // Toolbox
 export { Toolbox } from './Toolbox'
-// Auto Pipeline
-export { AutoPipelinePanel } from './AutoPipelinePanel'
 // Export
 export { ExportPanel } from './ExportPanel'
 // Anti Detect

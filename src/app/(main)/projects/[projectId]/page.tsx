@@ -3,9 +3,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Button, Card, CardContent, CardHeader, CardTitle, Badge, Progress, Modal, toast, MoreActionsMenu } from '@/components/ui'
-import { BlueprintConsole, ProjectBaseInfoForm, ProjectBaseInfoFormData } from '@/components/project'
-import { Toolbox, AutoPipelinePanel } from '@/components/ai'
-import { CoverGenerator, PlotAnalyzer, ResearchPanel, ReviewPanel, DeslopPanel, ExportPanel } from '@/components/ai'
+import { BlueprintConsole, ProjectBaseInfoForm, ProjectBaseInfoFormData, BookAnalysisPanel } from '@/components/project'
+import { Toolbox, CharacterPanel } from '@/components/ai'
+import { CoverGenerator, PlotAnalyzer, ResearchPanel, ReviewPanel, DeslopPanel, ExportPanel, AnalysisTaskPanel } from '@/components/ai'
 import { BookOpen, Clock, Target, Users, Layers, Search, ClipboardList, Rocket, Shield, Sparkles, ChevronRight, ChevronDown, Wrench, Eye, Play, Pause, AlertCircle, CheckCircle2, Loader2, Download } from 'lucide-react'
 import type { ProjectStatus } from '@/types'
 import type { PipelineRuntimeState } from '@/lib/engine/pipeline-runtime'
@@ -226,7 +226,7 @@ function formatDuration(durationMs?: number) {
   return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`
 }
 
-type DashboardTab = 'dashboard' | 'settings'
+type DashboardTab = 'dashboard' | 'settings' | 'analysis' | 'characters'
 
 function groupChaptersByArc(project: Project): { arcName: string; arcNumber: number; chapters: Chapter[] }[] {
   const arcPlans = project.arcPlans || []
@@ -270,7 +270,6 @@ export default function ProjectDetailPage() {
   const [showReviewModal, setShowReviewModal] = useState(false)
   const [showDeslopModal, setShowDeslopModal] = useState(false)
   const [showExportModal, setShowExportModal] = useState(false)
-  const [showAutoPipelineModal, setShowAutoPipelineModal] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [pipelineStarting, setPipelineStarting] = useState(false)
@@ -321,10 +320,10 @@ export default function ProjectDetailPage() {
     lastPipelineStatusRef.current = nextStatus
 
     if (nextStatus === 'COMPLETED' && prevStatus !== 'COMPLETED') {
-      toast.success(`流水线执行完成 — 共生成 ${nextPipeline.totalChapters} 章`)
+      toast.success(`AI 生成完成，共生成 ${nextPipeline.totalChapters} 章`)
       fetchProject()
     } else if (nextStatus === 'FAILED' && prevStatus !== 'FAILED') {
-      toast.error(nextPipeline.error || '流水线执行失败')
+      toast.error(nextPipeline.error || 'AI 生成失败')
       fetchProject()
     }
   }, [fetchProject])
@@ -441,7 +440,7 @@ export default function ProjectDetailPage() {
       })
       const data = await res.json()
       if (data.success) {
-        toast.success('流水线已恢复')
+        toast.success('AI 生成已恢复')
         fetchProject()
       } else {
         toast.error(data.error?.message || '恢复失败')
@@ -458,7 +457,7 @@ export default function ProjectDetailPage() {
       })
       const data = await res.json()
       if (data.success) {
-        toast.success('流水线已暂停')
+        toast.success('AI 生成已暂停')
         fetchProject()
       } else {
         toast.error(data.error?.message || '暂停失败')
@@ -470,7 +469,7 @@ export default function ProjectDetailPage() {
 
   const handleStartPipeline = async () => {
     if (projectInitializing) {
-      toast.error('创作系统仍在初始化，请完成后再启动流水线')
+      toast.error('创作系统仍在初始化，请完成后再开始 AI 生成')
       return
     }
 
@@ -481,7 +480,7 @@ export default function ProjectDetailPage() {
       })
       const data = await res.json()
       if (data.success) {
-        toast.success('AI 生产流水线已启动')
+        toast.success('AI 生成已启动')
         setPipeline({
           status: 'PENDING',
           currentStep: 'BLUEPRINT',
@@ -494,7 +493,7 @@ export default function ProjectDetailPage() {
         toast.error(data.error?.message || '启动失败')
       }
     } catch {
-      toast.error('启动失败')
+      toast.error('启动 AI 生成失败')
     } finally {
       setPipelineStarting(false)
     }
@@ -611,10 +610,10 @@ export default function ProjectDetailPage() {
                   : 'text-blue-700 dark:text-blue-300'
               }`}>
                 {pipeline.status === 'PENDING'
-                  ? '流水线准备中'
+                  ? 'AI 生成准备中'
                   : pipeline.status === 'PAUSED'
-                    ? '流水线已暂停'
-                    : `流水线${getPipelineStatusLabel(pipeline.status)}`}
+                    ? 'AI 生成已暂停'
+                    : `AI 生成${getPipelineStatusLabel(pipeline.status)}`}
               </span>
             </div>
             <span className={`text-xs ${pipeline.status === 'PAUSED' ? 'text-amber-500' : 'text-blue-500'}`}>{pipeline.progress}%</span>
@@ -671,8 +670,8 @@ export default function ProjectDetailPage() {
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-900/60 dark:bg-red-900/20">
           <div className="flex items-center gap-2 mb-2">
             <AlertCircle className="h-4 w-4 text-red-600" />
-            <span className="text-sm font-medium text-red-700 dark:text-red-300">
-              流水线执行失败
+              <span className="text-sm font-medium text-red-700 dark:text-red-300">
+              AI 生成失败
             </span>
           </div>
           {pipeline.error && (
@@ -690,7 +689,7 @@ export default function ProjectDetailPage() {
           <div className="flex items-center gap-2">
             <CheckCircle2 className="h-4 w-4 text-green-600" />
             <span className="text-sm font-medium text-green-700 dark:text-green-300">
-              流水线执行完成 — 共生成 {pipeline.totalChapters} 章
+              AI 生成完成，共生成 {pipeline.totalChapters} 章
             </span>
           </div>
         </div>
@@ -715,7 +714,7 @@ export default function ProjectDetailPage() {
             className="gap-1.5"
           >
             <Rocket className="h-4 w-4" />
-            {projectInitializing ? '初始化中' : '启动 AI 生产'}
+            {projectInitializing ? '初始化中' : '开始 AI 生成'}
           </Button>
           <Button
             variant="outline"
@@ -734,15 +733,6 @@ export default function ProjectDetailPage() {
           >
             <Download className="h-4 w-4" />
             导出
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowAutoPipelineModal(true)}
-            className="gap-1.5"
-          >
-            <Rocket className="h-4 w-4" />
-            全自动流水线
           </Button>
           <MoreActionsMenu
             onEdit={() => setShowEditModal(true)}
@@ -803,6 +793,32 @@ export default function ProjectDetailPage() {
             <Target className="h-4 w-4 inline mr-1.5" />
             AI 设定中枢
           </button>
+          {project.projectMode === 'ANALYZE' && (
+            <>
+              <button
+                onClick={() => setActiveTab('analysis')}
+                className={`px-4 py-3 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                  activeTab === 'analysis'
+                    ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                }`}
+              >
+                <Layers className="h-4 w-4 inline mr-1.5" />
+                结构分析
+              </button>
+              <button
+                onClick={() => setActiveTab('characters')}
+                className={`px-4 py-3 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                  activeTab === 'characters'
+                    ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                }`}
+              >
+                <Users className="h-4 w-4 inline mr-1.5" />
+                角色档案
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -834,7 +850,7 @@ export default function ProjectDetailPage() {
                     <div className="text-center py-12">
                       <BookOpen className="h-10 w-10 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
                       <p className="text-sm text-gray-500 dark:text-gray-400">
-                        暂无章节，启动流水线后自动生成
+                        暂无章节，开始 AI 生成后会自动生成
                       </p>
                       <Button
                         variant="primary"
@@ -845,7 +861,7 @@ export default function ProjectDetailPage() {
                         className="mt-4 gap-1.5"
                       >
                         <Rocket className="h-4 w-4" />
-                        {projectInitializing ? '初始化中' : '启动 AI 生产'}
+                        {projectInitializing ? '初始化中' : '开始 AI 生成'}
                       </Button>
                     </div>
                   ) : (
@@ -901,7 +917,7 @@ export default function ProjectDetailPage() {
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-base">
                       <Clock className="h-5 w-5 text-blue-600" />
-                      流水线进度
+                      AI 生成进度
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
@@ -1027,7 +1043,7 @@ export default function ProjectDetailPage() {
 
                     {!project.preflight.hasModel && (
                       <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">
-                        <div className="font-medium">先绑定 AI 模型，再启动主链路</div>
+                        <div className="font-medium">先绑定 AI 模型，再开始生成</div>
                         <div className="mt-1 text-xs leading-5 text-amber-700 dark:text-amber-300">
                           绑定方式很简单：如果你已经在“系统设置 → AI 配置”里创建过配置，就点“编辑小说”在 AI 模型配置里选择它；
                           如果还没有配置，先去系统设置新增一个，再回来选择。
@@ -1046,13 +1062,13 @@ export default function ProjectDetailPage() {
                       <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-blue-800 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-200">
                         <div className="font-medium">
                         {project.maintenanceSummary?.bootstrapQueued || project.maintenanceSummary?.bootstrapRunning
-                            ? 'AI 正在自动初始化创作系统'
+                            ? 'AI 正在自动补齐创作配置'
                             : project.maintenanceSummary?.ragQueued || project.maintenanceSummary?.ragRunning
                               ? 'AI 正在自动重建 RAG 索引'
-                              : '系统会自动补齐创作系统'}
+                              : '系统会自动补齐创作配置'}
                         </div>
                         <div className="mt-1 text-xs leading-5 text-blue-700 dark:text-blue-300">
-                          系统会自动补齐 Book Blueprint、阶段规划、世界状态、故事状态以及 RAG 索引。完成前请勿启动流水线。页面会自动刷新，无需手动刷新。
+                          系统会自动补齐 Book Blueprint、阶段规划、世界状态、故事状态以及 RAG 索引。完成前请勿开始 AI 生成。页面会自动刷新，无需手动刷新。
                         </div>
                         {(bootstrapProgress || ragProgress) && (
                           <div className="mt-3 space-y-2">
@@ -1484,11 +1500,14 @@ export default function ProjectDetailPage() {
         title="剧情分析"
         className="max-w-4xl"
       >
-        <PlotAnalyzer
-          projectId={projectId}
-          projectTitle={project.title}
-          totalVolumes={project.totalVolumes}
-        />
+        <div className="space-y-4">
+          <AnalysisTaskPanel projectId={projectId} onTaskComplete={() => {}} compact={false} />
+          <PlotAnalyzer
+            projectId={projectId}
+            projectTitle={project.title}
+            totalVolumes={project.totalVolumes}
+          />
+        </div>
       </Modal>
 
       {/* Review Modal */}
@@ -1532,21 +1551,6 @@ export default function ProjectDetailPage() {
         />
       </Modal>
 
-      {/* Auto Pipeline Modal */}
-      <Modal
-        open={showAutoPipelineModal}
-        onClose={() => setShowAutoPipelineModal(false)}
-        title="全自动流水线"
-        className="max-w-2xl"
-      >
-        <AutoPipelinePanel
-          projectId={projectId}
-          maxChapter={project.chapters.length}
-          blocked={projectInitializing}
-          blockedMessage="创作系统正在自动初始化，请完成后再启动全自动流水线"
-          onClose={() => setShowAutoPipelineModal(false)}
-        />
-      </Modal>
     </>
   )
 }

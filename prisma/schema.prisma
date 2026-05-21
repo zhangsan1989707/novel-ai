@@ -77,6 +77,14 @@ enum JobStatus {
   PAUSED
 }
 
+enum AnalysisTaskStatus {
+  PENDING       // 待执行
+  RUNNING       // 执行中
+  COMPLETED     // 已完成
+  FAILED        // 失败
+  CANCELLED     // 已取消
+}
+
 enum ArcStage {
   OPENING       // 开局
   GROWTH        // 成长
@@ -245,6 +253,7 @@ model NovelProject {
 
   chapters            NovelChapter[]
   bookAnalyses        BookAnalysis[]
+  analysisTasks       AnalysisTask[]
   sourceNovel         SourceNovel?
 
   // 小说引擎关联
@@ -437,6 +446,41 @@ model BookAnalysis {
   @@unique([projectId, volumeNumber, analysisType, dimension])
   @@index([projectId])
   @@map("book_analysis")
+}
+
+// 拆书分析任务 - 用于持久化任务状态和进度
+model AnalysisTask {
+  id            String            @id @default(cuid())
+  projectId     Int
+  project       NovelProject      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  // 任务参数
+  volumeNumber  Int               @default(-1)
+  dimensions    Json              // 分析维度列表 ["CHARACTER_RELATION", ...]
+  contextChapterCount Int         @default(3)
+
+  // 任务状态
+  status        AnalysisTaskStatus @default(PENDING)
+  progress      Int               @default(0)         // 0-100
+  progressMessage String?         @db.Text            // 当前进度描述
+
+  // 结果信息
+  totalDimensions Int            // 总维度数
+  completedDimensions Int        @default(0)          // 已完成维度数
+  currentDimension String?       // 当前正在分析的维度
+  errorMessage  String?          @db.Text
+
+  // 时间信息
+  startedAt     DateTime?
+  completedAt   DateTime?
+
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([projectId])
+  @@index([projectId, status])
+  @@index([projectId, createdAt(sort: Desc)])
+  @@map("analysis_tasks")
 }
 
 // 拆解模式：存储原始小说文本

@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button, Card, CardHeader, CardTitle, CardContent, toast } from '@/components/ui'
+import { ProjectForm, type ProjectFormData } from '@/components/project'
 import { BookOpen, Sparkles, FileText, CheckCircle, Upload, File, Loader2 } from 'lucide-react'
-import { BookAnalysisPanel } from '@/components/ai'
+import { BookAnalysisPanel, AnalysisTaskPanel } from '@/components/ai'
 
-type WizardStep = 'upload' | 'uploading' | 'extracting' | 'analyzing' | 'complete'
+type WizardStep = 'upload' | 'uploading' | 'confirm' | 'analyzing' | 'complete'
 
 export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
   const router = useRouter()
@@ -17,18 +18,25 @@ export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [projectId, setProjectId] = useState<number | null>(null)
-  const [statusMessage, setStatusMessage] = useState('')
   const [analysisCount, setAnalysisCount] = useState(0)
-  const [extractionResult, setExtractionResult] = useState<{
-    title?: string
+  const [charactersCount, setCharactersCount] = useState(0)
+  const [taskId, setTaskId] = useState<string | null>(null)
+  const [taskPollingActive, setTaskPollingActive] = useState(false)
+  const [extractedMeta, setExtractedMeta] = useState<{
+    title: string
     genre?: string
     writingStyle?: string
-    sourceName?: string
-    wordCount?: number
+    corePitch?: string
+    description?: string
+    targetWordCount?: number
+    chapterWordCount?: number
+    totalVolumes?: number
+    targetAudience?: 'MALE' | 'FEMALE'
     chapterCount?: number
   } | null>(null)
 
-  // 拖拽处理
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     setIsDragging(true)
@@ -43,9 +51,7 @@ export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
     e.preventDefault()
     setIsDragging(false)
     const file = e.dataTransfer.files[0]
-    if (file) {
-      handleFileSelect(file)
-    }
+    if (file) handleFileSelect(file)
   }, [])
 
   const handleFileSelect = useCallback((file: File) => {
@@ -54,12 +60,12 @@ export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
     const extension = file.name.toLowerCase().slice(file.name.lastIndexOf('.'))
 
     if (!validTypes.includes(file.type) && !validExtensions.includes(extension)) {
-      setError('请上传 .txt 或 .epub 格式的文件')
+      toast.error('请上传 .txt 或 .epub 格式的文件')
       return
     }
 
     if (file.size > 100 * 1024 * 1024) {
-      setError('文件大小不能超过 100MB')
+      toast.error('文件大小不能超过 100MB')
       return
     }
 
@@ -67,16 +73,14 @@ export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
     setError('')
   }, [])
 
-  const handleStartAnalyze = async () => {
+  const handleStartUpload = async () => {
     if (!selectedFile) return
 
     setSubmitting(true)
     setStep('uploading')
-    setStatusMessage('正在上传文件...')
     setError('')
 
     try {
-      // 1. 上传文件并自动创建项目
       const formData = new FormData()
       formData.append('file', selectedFile)
 
@@ -89,35 +93,143 @@ export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
       if (!uploadData.success) {
         setError(uploadData.error?.message || '文件上传失败')
         setStep('upload')
+        setSubmitting(false)
         return
       }
 
       const newProjectId = uploadData.data.projectId
       setProjectId(newProjectId)
-      setStatusMessage('正在提取书籍元数据...')
-      setStep('extracting')
 
-      // 2. AI 提取元数据（标题、类型、风格等）
-      const extractRes = await fetch('/api/novel/ai/extract-metadata', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId: newProjectId }),
-      })
-
-      const extractData = await extractRes.json()
-      if (extractData.success) {
-        setExtractionResult(extractData.data)
+      const projectRes = await fetch(`/api/novel/projects/${newProjectId}`)
+      const projectData = await projectRes.json()
+      if (projectData.success) {
+        const p = projectData.data
+        setExtractedMeta({
+          title: p.title || selectedFile.name.replace(/\.(txt|epub)$/i, ''),
+          genre: p.genre || undefined,
+          writingStyle: p.writingStyle || undefined,
+          corePitch: p.corePitch || undefined,
+          description: p.description || undefined,
+          targetWordCount: p.targetWordCount || undefined,
+          chapterWordCount: p.chapterWordCount || 3000,
+          totalVolumes: p.totalVolumes || 4,
+          targetAudience: p.targetAudience || undefined,
+          chapterCount: uploadData.data.chapterCount,
+        })
       }
 
-      setStatusMessage('正在深度分析小说结构...')
-      setStep('analyzing')
+      setStep('confirm')
+    } catch (err) {
+      console.error('Error:', err)
+      setError('操作失败，请重试')
+      setStep('upload')
+      setSubmitting(false)
+    }
+  }
 
-      // 3. 执行多维度分析
-      const analyzeRes = await fetch('/api/novel/ai/analyze-plot', {
+  const startTaskPolling = (tid: string) => {
+    setTaskId(tid)
+    setTaskPollingActive(true)
+
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current)
+    }
+
+    pollIntervalRef.current = setInterval(async () => {
+      if (!tid) return
+      try {
+        const res = await fetch(`/api/novel/projects/${projectId}/analysis-task`)
+        const data = await res.json()
+        if (data.success && data.data) {
+          if (data.data.status === 'COMPLETED') {
+            setAnalysisCount(data.data.totalDimensions || 0)
+            clearInterval(pollIntervalRef.current!)
+            pollIntervalRef.current = null
+            setTaskPollingActive(false)
+
+            // 触发后续流程
+            await postAnalysisTasks()
+            setStep('complete')
+          } else if (data.data.status === 'FAILED') {
+            setError(data.data.errorMessage || '分析任务失败')
+            clearInterval(pollIntervalRef.current!)
+            pollIntervalRef.current = null
+            setTaskPollingActive(false)
+            setStep('confirm')
+          }
+        }
+      } catch (err) {
+        console.error('Poll error:', err)
+      }
+    }, 2000)
+  }
+
+  const postAnalysisTasks = async () => {
+    if (!projectId) return
+
+    // RAG 索引重建
+    await fetch(`/api/novel/projects/${projectId}/rag/rebuild`, {
+      method: 'POST',
+    }).catch(() => {
+      console.warn('RAG 索引重建失败')
+    })
+
+    // 提取角色档案
+    const charRes = await fetch('/api/novel/ai/extract-characters', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId }),
+    }).catch(() => null)
+
+    if (charRes) {
+      const charData = await charRes.json().catch(() => null)
+      if (charData?.success) {
+        setCharactersCount(charData.data.charactersCreated || 0)
+      }
+    }
+  }
+
+  const handleConfirmProject = async (formData: ProjectFormData) => {
+    if (!projectId || !extractedMeta) return
+
+    setSubmitting(true)
+    setStep('analyzing')
+    setError('')
+
+    try {
+      const updateRes = await fetch(`/api/novel/projects/${projectId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: formData.title || extractedMeta.title,
+          description: formData.description,
+          genre: formData.genre,
+          writingStyle: formData.writingStyle,
+          targetWordCount: formData.targetWordCount,
+          chapterWordCount: formData.chapterWordCount,
+          totalVolumes: formData.totalVolumes,
+          targetAudience: formData.targetAudience,
+          aiModelId: formData.aiModelId,
+          worldSetting: formData.worldSetting,
+          powerSystem: formData.powerSystem,
+          protagonistProfile: formData.protagonistProfile,
+          protagonistGoal: formData.protagonistGoal,
+          antagonistSetting: formData.antagonistSetting,
+          endingPlan: formData.endingPlan,
+          writingPrompt: formData.writingPrompt,
+        }),
+      })
+
+      const updateData = await updateRes.json()
+      if (!updateData.success) {
+        console.warn('Project update failed:', updateData.error)
+      }
+
+      // 使用异步任务 API
+      const res = await fetch(`/api/novel/projects/${projectId}/analysis-task`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          projectId: newProjectId,
           volumeNumber: -1,
           dimensions: [
             'CHARACTER_RELATION',
@@ -130,41 +242,37 @@ export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
         }),
       })
 
-      const analyzeData = await analyzeRes.json()
-      if (analyzeData.success) {
-        setAnalysisCount(analyzeData.data.results.length)
+      const data = await res.json()
+      if (data.success) {
+        if (data.data.task.status === 'COMPLETED') {
+          // 已有完成的任务（复用）
+          setAnalysisCount(data.data.task.totalDimensions || 0)
+          await postAnalysisTasks()
+          setStep('complete')
+        } else {
+          // 开始轮询任务状态
+          startTaskPolling(data.data.task.id)
+        }
       } else {
-        setError(analyzeData.error?.message || '分析失败')
+        setError(data.error?.message || '创建分析任务失败')
+        setStep('confirm')
       }
-
-      setStatusMessage('正在构建 RAG 索引...')
-
-      // 4. 触发 RAG 索引重建
-      await fetch(`/api/novel/projects/${newProjectId}/rag/rebuild`, {
-        method: 'POST',
-      }).catch(() => {
-        // RAG 重建可能失败但不影响主流程
-        console.warn('RAG 索引重建失败')
-      })
-
-      // 5. 自动提取角色档案
-      await fetch('/api/novel/ai/extract-characters', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId: newProjectId }),
-      }).catch(() => {
-        console.warn('角色提取失败')
-      })
-
-      setStep('complete')
     } catch (err) {
       console.error('Error:', err)
-      setError('操作失败，请重试')
-      setStep('upload')
+      setError('分析处理失败，请重试')
+      setStep('confirm')
     } finally {
       setSubmitting(false)
     }
   }
+
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current)
+      }
+    }
+  }, [])
 
   const handleGoToProject = () => {
     if (projectId) {
@@ -180,7 +288,7 @@ export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
 
   const steps = [
     { key: 'upload', label: '上传文件' },
-    { key: 'extracting', label: '提取信息' },
+    { key: 'confirm', label: '确认信息' },
     { key: 'analyzing', label: 'AI 分析' },
     { key: 'complete', label: '完成' },
   ]
@@ -225,7 +333,7 @@ export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
         </div>
       )}
 
-      {/* Step 1: 上传文件 */}
+      {/* Step: 上传文件 */}
       {step === 'upload' && (
         <div className="space-y-4">
           <div className="text-center mb-6">
@@ -303,43 +411,82 @@ export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
             )}
             {!onCancel && <div />}
             <Button
-              onClick={handleStartAnalyze}
+              onClick={handleStartUpload}
               disabled={!selectedFile || submitting}
               loading={submitting}
             >
               <Sparkles className="w-4 h-4 mr-2" />
-              {submitting ? '处理中...' : '开始分析'}
+              上传并识别
             </Button>
           </div>
         </div>
       )}
 
-      {/* 处理中状态 */}
+      {/* Step: 上传中 */}
       {step === 'uploading' && (
         <div className="text-center py-12">
           <Loader2 className="w-12 h-12 mx-auto text-blue-500 animate-spin mb-4" />
-          <h3 className="text-lg font-medium mb-2">正在上传文件...</h3>
-          <p className="text-sm text-gray-500">大文件可能需要较长时间，请耐心等待</p>
+          <h3 className="text-lg font-medium mb-2">正在上传并提取信息...</h3>
+          <p className="text-sm text-gray-500">AI 正在自动识别小说标题、类型、写作风格等信息</p>
         </div>
       )}
 
-      {step === 'extracting' && (
-        <div className="text-center py-12">
-          <Loader2 className="w-12 h-12 mx-auto text-purple-500 animate-spin mb-4" />
-          <h3 className="text-lg font-medium mb-2">AI 正在提取书籍信息...</h3>
-          <p className="text-sm text-gray-500">正在自动识别标题、类型、写作风格等信息</p>
+      {/* Step: 确认/编辑信息 */}
+      {step === 'confirm' && extractedMeta && (
+        <div>
+          <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+            <div className="flex items-start gap-3">
+              <FileText className="w-5 h-5 text-blue-500 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-blue-700 dark:text-blue-300">AI 已自动识别以下信息</p>
+                <p className="text-xs text-blue-500 dark:text-blue-400 mt-1">
+                  请检查并修改以下内容，确认后开始深度分析。文件「{selectedFile?.name}」已导入，共 {extractedMeta.chapterCount || '?'} 章。
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <ProjectForm
+            defaultValues={{
+              title: extractedMeta.title,
+              description: extractedMeta.description,
+              genre: extractedMeta.genre,
+              writingStyle: extractedMeta.writingStyle,
+              targetWordCount: extractedMeta.targetWordCount,
+              chapterWordCount: extractedMeta.chapterWordCount || 3000,
+              totalVolumes: extractedMeta.totalVolumes || 4,
+              targetAudience: extractedMeta.targetAudience,
+              worldSetting: '',
+              powerSystem: '',
+              protagonistProfile: '',
+              protagonistGoal: '',
+              antagonistSetting: '',
+              endingPlan: '',
+              writingPrompt: '',
+            }}
+            onSubmit={handleConfirmProject}
+            onCancel={onCancel}
+            loading={submitting}
+            submitLabel="确认并开始分析"
+            showAdvancedFields={true}
+          />
         </div>
       )}
 
-      {step === 'analyzing' && (
-        <div className="text-center py-12">
-          <Loader2 className="w-12 h-12 mx-auto text-orange-500 animate-spin mb-4" />
-          <h3 className="text-lg font-medium mb-2">AI 正在深度分析...</h3>
-          <p className="text-sm text-gray-500">正在分析人物关系、剧情线、伏笔等结构，请稍候</p>
+      {/* Step: AI 分析中 */}
+      {step === 'analyzing' && projectId && (
+        <div className="space-y-6">
+          <AnalysisTaskPanel projectId={projectId} compact={false} />
+          {!taskPollingActive && !taskId && (
+            <div className="text-center py-6">
+              <Loader2 className="w-8 h-8 mx-auto text-orange-500 animate-spin mb-3" />
+              <p className="text-sm text-gray-500">正在启动分析任务...</p>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Step: 完成 - 展示多维度信息 */}
+      {/* Step: 完成 */}
       {step === 'complete' && (
         <div className="space-y-6">
           <div className="text-center">
@@ -348,12 +495,11 @@ export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
             </div>
             <h3 className="text-lg font-medium mb-1">分析完成！</h3>
             <p className="text-sm text-gray-500">
-              已成功分析 {analysisCount} 个维度的内容
+              已成功分析 {analysisCount} 个维度，提取 {charactersCount} 个角色档案
             </p>
           </div>
 
-          {/* 提取的元数据 */}
-          {extractionResult && (
+          {projectId && (
             <Card>
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
@@ -365,32 +511,25 @@ export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <div className="text-gray-500 mb-1">小说标题</div>
-                    <div className="font-medium">{extractionResult.title || selectedFile?.name}</div>
+                    <div className="font-medium">{extractedMeta?.title || selectedFile?.name}</div>
                   </div>
                   <div>
                     <div className="text-gray-500 mb-1">小说类型</div>
-                    <div className="font-medium">{extractionResult.genre || '未识别'}</div>
+                    <div className="font-medium">{extractedMeta?.genre || '未识别'}</div>
                   </div>
                   <div>
                     <div className="text-gray-500 mb-1">写作风格</div>
-                    <div className="font-medium">{extractionResult.writingStyle || '未识别'}</div>
-                  </div>
-                  <div>
-                    <div className="text-gray-500 mb-1">总字数</div>
-                    <div className="font-medium">
-                      {extractionResult.wordCount ? `${(extractionResult.wordCount / 10000).toFixed(1)}万字` : '-'}
-                    </div>
+                    <div className="font-medium">{extractedMeta?.writingStyle || '未识别'}</div>
                   </div>
                   <div>
                     <div className="text-gray-500 mb-1">章节数</div>
-                    <div className="font-medium">{extractionResult.chapterCount || '-'} 章</div>
+                    <div className="font-medium">{extractedMeta?.chapterCount || '-'} 章</div>
                   </div>
                 </div>
               </CardContent>
             </Card>
           )}
 
-          {/* 多维度分析结果 */}
           {projectId && (
             <BookAnalysisPanel projectId={projectId} />
           )}
