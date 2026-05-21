@@ -87,7 +87,13 @@ export function BookAnalysisPanel({ projectId, refreshSeed = 0, navigationReques
   }, [filterDimension, projectId])
 
   useEffect(() => {
-    loadAnalyses()
+    const timer = window.setTimeout(() => {
+      void loadAnalyses()
+    }, 0)
+
+    return () => {
+      window.clearTimeout(timer)
+    }
   }, [loadAnalyses, refreshSeed])
 
   const groupedByVolume = useMemo(() => {
@@ -107,13 +113,34 @@ export function BookAnalysisPanel({ projectId, refreshSeed = 0, navigationReques
     return map
   }, [analyses])
 
-  const storyOverview = (analysisMap.get(`-1:${AnalysisDimension.STORY_OVERVIEW}`)?.analysisData || {}) as Record<string, unknown>
-  const readingExperience = (analysisMap.get(`-1:${AnalysisDimension.READING_EXPERIENCE}`)?.analysisData || {}) as ReadingExperienceData
-  const characterRelation = (analysisMap.get(`-1:${AnalysisDimension.CHARACTER_RELATION}`)?.analysisData || {}) as Record<string, unknown>
-  const plotLine = (analysisMap.get(`-1:${AnalysisDimension.PLOT_LINE}`)?.analysisData || {}) as Record<string, unknown>
-  const foreshadowing = (analysisMap.get(`-1:${AnalysisDimension.FORESHADOWING}`)?.analysisData || {}) as Record<string, unknown>
-  const chapterStructure = (analysisMap.get(`-1:${AnalysisDimension.CHAPTER_STRUCTURE}`)?.analysisData || {}) as Record<string, unknown>
-  const worldSetting = (analysisMap.get(`-1:${AnalysisDimension.WORLD_SETTING}`)?.analysisData || {}) as Record<string, unknown>
+  const storyOverview = useMemo(
+    () => (analysisMap.get(`-1:${AnalysisDimension.STORY_OVERVIEW}`)?.analysisData || {}) as Record<string, unknown>,
+    [analysisMap]
+  )
+  const readingExperience = useMemo(
+    () => (analysisMap.get(`-1:${AnalysisDimension.READING_EXPERIENCE}`)?.analysisData || {}) as ReadingExperienceData,
+    [analysisMap]
+  )
+  const characterRelation = useMemo(
+    () => (analysisMap.get(`-1:${AnalysisDimension.CHARACTER_RELATION}`)?.analysisData || {}) as Record<string, unknown>,
+    [analysisMap]
+  )
+  const plotLine = useMemo(
+    () => (analysisMap.get(`-1:${AnalysisDimension.PLOT_LINE}`)?.analysisData || {}) as Record<string, unknown>,
+    [analysisMap]
+  )
+  const foreshadowing = useMemo(
+    () => (analysisMap.get(`-1:${AnalysisDimension.FORESHADOWING}`)?.analysisData || {}) as Record<string, unknown>,
+    [analysisMap]
+  )
+  const chapterStructure = useMemo(
+    () => (analysisMap.get(`-1:${AnalysisDimension.CHAPTER_STRUCTURE}`)?.analysisData || {}) as Record<string, unknown>,
+    [analysisMap]
+  )
+  const worldSetting = useMemo(
+    () => (analysisMap.get(`-1:${AnalysisDimension.WORLD_SETTING}`)?.analysisData || {}) as Record<string, unknown>,
+    [analysisMap]
+  )
   
   useEffect(() => {
     let cancelled = false
@@ -1494,21 +1521,22 @@ function StoryOverviewView({
   onFocusAnchor?: (anchorId: string) => void
   selectedChapterNo?: number | null
 }) {
-  const [activeStage, setActiveStage] = useState<number | null>(null)
   const summary = stringValue(data.summary)
   const outline = (data.outline || {}) as Record<string, unknown>
-  const stageBreakdown = Array.isArray(outline.stageBreakdown) ? outline.stageBreakdown as Array<Record<string, unknown>> : []
+  const stageBreakdown = useMemo(
+    () => (Array.isArray(outline.stageBreakdown) ? outline.stageBreakdown as Array<Record<string, unknown>> : []),
+    [outline.stageBreakdown]
+  )
+  const [manualActiveStage, setManualActiveStage] = useState<number | null>(null)
 
-  useEffect(() => {
-    if (!focusedAnchor?.startsWith('timeline-stage-')) return
+  const focusedStageIndex = useMemo(() => {
+    if (!focusedAnchor?.startsWith('timeline-stage-')) return null
     const index = Number(focusedAnchor.split('-').at(-1))
-    if (!Number.isNaN(index)) {
-      setActiveStage(index)
-    }
+    return Number.isNaN(index) ? null : index
   }, [focusedAnchor])
 
-  useEffect(() => {
-    if (selectedChapterNo === null || selectedChapterNo === undefined) return
+  const selectedStageIndex = useMemo(() => {
+    if (selectedChapterNo === null || selectedChapterNo === undefined) return null
     const matchedIndex = stageBreakdown.findIndex(stage => {
       const range = stringValue(stage.chapterRange)
       const start = rangeStart(range, 0)
@@ -1519,10 +1547,10 @@ function StoryOverviewView({
       }
       return false
     })
-    if (matchedIndex >= 0) {
-      setActiveStage(matchedIndex)
-    }
+    return matchedIndex >= 0 ? matchedIndex : null
   }, [selectedChapterNo, stageBreakdown])
+
+  const activeStage = focusedStageIndex ?? selectedStageIndex ?? manualActiveStage
 
   return (
     <div className="space-y-3 text-sm">
@@ -1536,7 +1564,7 @@ function StoryOverviewView({
               id={`timeline-stage-${index}`}
               type="button"
               onClick={() => {
-                setActiveStage(index)
+                setManualActiveStage(index)
                 onFocusAnchor?.(`timeline-stage-${index}`)
               }}
               className={`w-full rounded-xl border px-3 py-2 text-left transition-colors ${
@@ -1688,23 +1716,22 @@ function ForeshadowingView({
   onFocusAnchor?: (anchorId: string) => void
   selectedChapterNo?: number | null
 }) {
-  const items = Array.isArray(data.items) ? data.items as Array<Record<string, unknown>> : []
-  const [activeChapterNo, setActiveChapterNo] = useState<number | null>(null)
-  useEffect(() => {
-    if (!focusedAnchor?.startsWith('foreshadow-chapter-')) return
+  const items = useMemo(
+    () => (Array.isArray(data.items) ? data.items as Array<Record<string, unknown>> : []),
+    [data.items]
+  )
+  const [manualActiveChapterNo, setManualActiveChapterNo] = useState<number | null>(null)
+  const focusedChapterNo = useMemo(() => {
+    if (!focusedAnchor?.startsWith('foreshadow-chapter-')) return null
     const chapterNo = Number(focusedAnchor.split('-').at(-1))
-    if (!Number.isNaN(chapterNo)) {
-      setActiveChapterNo(chapterNo)
-    }
+    return Number.isNaN(chapterNo) ? null : chapterNo
   }, [focusedAnchor])
-
-  useEffect(() => {
-    if (selectedChapterNo === null || selectedChapterNo === undefined) return
+  const matchedSelectedChapterNo = useMemo(() => {
+    if (selectedChapterNo === null || selectedChapterNo === undefined) return null
     const matched = items.find(item => Number(item.chapter || 0) === selectedChapterNo)
-    if (matched) {
-      setActiveChapterNo(selectedChapterNo)
-    }
+    return matched ? selectedChapterNo : null
   }, [items, selectedChapterNo])
+  const activeChapterNo = focusedChapterNo ?? matchedSelectedChapterNo ?? manualActiveChapterNo
 
   const activeItems = useMemo(() => {
     if (activeChapterNo === null) return []
@@ -1733,7 +1760,7 @@ function ForeshadowingView({
           id={`foreshadow-chapter-${String(item.chapter || index + 1)}`}
           type="button"
           onClick={() => {
-            setActiveChapterNo(Number(item.chapter || index + 1))
+            setManualActiveChapterNo(Number(item.chapter || index + 1))
             onFocusAnchor?.(`foreshadow-chapter-${String(item.chapter || index + 1)}`)
           }}
           className={`w-full rounded-xl border px-3 py-3 text-left transition-colors ${
@@ -1775,25 +1802,24 @@ function ChapterStructureView({
   plotLine?: Record<string, unknown>
   foreshadowing?: Record<string, unknown>
 }) {
-  const chapters = Array.isArray(data.chapters) ? data.chapters as Array<Record<string, unknown>> : []
+  const chapters = useMemo(
+    () => (Array.isArray(data.chapters) ? data.chapters as Array<Record<string, unknown>> : []),
+    [data.chapters]
+  )
   const arcAnalysis = stringValue(data.arcAnalysis)
   const pacingAssessment = stringValue(data.pacingAssessment)
-  const [activeChapterNo, setActiveChapterNo] = useState<number | null>(null)
-  useEffect(() => {
-    if (!focusedAnchor?.startsWith('chapter-no-')) return
+  const [manualActiveChapterNo, setManualActiveChapterNo] = useState<number | null>(null)
+  const focusedChapterNo = useMemo(() => {
+    if (!focusedAnchor?.startsWith('chapter-no-')) return null
     const chapterNo = Number(focusedAnchor.split('-').at(-1))
-    if (!Number.isNaN(chapterNo)) {
-      setActiveChapterNo(chapterNo)
-    }
+    return Number.isNaN(chapterNo) ? null : chapterNo
   }, [focusedAnchor])
-
-  useEffect(() => {
-    if (selectedChapterNo === null || selectedChapterNo === undefined) return
+  const matchedSelectedChapterNo = useMemo(() => {
+    if (selectedChapterNo === null || selectedChapterNo === undefined) return null
     const matched = chapters.find(chapter => Number(chapter.number || 0) === selectedChapterNo)
-    if (matched) {
-      setActiveChapterNo(selectedChapterNo)
-    }
+    return matched ? selectedChapterNo : null
   }, [chapters, selectedChapterNo])
+  const activeChapterNo = focusedChapterNo ?? matchedSelectedChapterNo ?? manualActiveChapterNo
 
   const relatedItems = useMemo(() => {
     if (activeChapterNo === null) return { foreshadow: [], turning: [] as Array<Record<string, unknown>> }
@@ -1838,7 +1864,7 @@ function ChapterStructureView({
               id={`chapter-no-${String(chapter.number || index + 1)}`}
               type="button"
               onClick={() => {
-                setActiveChapterNo(Number(chapter.number || index + 1))
+                setManualActiveChapterNo(Number(chapter.number || index + 1))
                 onFocusAnchor?.(`chapter-no-${String(chapter.number || index + 1)}`)
               }}
               className={`flex w-full items-start gap-2 rounded-xl border px-3 py-2 text-left transition-colors ${

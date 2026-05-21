@@ -57,7 +57,6 @@ const volumeLabel = (vol: number) => {
 export function AnalysisTaskPanel({ projectId, onTaskComplete, compact = false }: AnalysisTaskPanelProps) {
   const [task, setTask] = useState<AnalysisTask | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // 获取任务状态
@@ -79,7 +78,13 @@ export function AnalysisTaskPanel({ projectId, onTaskComplete, compact = false }
 
   // 初始加载
   useEffect(() => {
-    fetchTask(true)
+    const timer = window.setTimeout(() => {
+      void fetchTask(true)
+    }, 0)
+
+    return () => {
+      window.clearTimeout(timer)
+    }
   }, [fetchTask])
 
   // 轮询活跃任务
@@ -223,10 +228,10 @@ export function AnalysisTaskPanel({ projectId, onTaskComplete, compact = false }
         )}
       </div>
 
-      {error && (
+      {task.errorMessage && (
         <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm rounded-lg">
           <AlertCircle className="h-4 w-4" />
-          {error}
+          {task.errorMessage}
         </div>
       )}
     </div>

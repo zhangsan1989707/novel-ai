@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { tryCatch, error } from '@/lib/api-response'
 import { batchChapterDeslopper } from '@/lib/agents/deslopper'
+import { countChapterWords, syncProjectChapterWordCount } from '@/lib/novel/chapter-word-count'
 
 const batchOptimizeSchema = z.object({
   projectId: z.number().int().positive(),
@@ -67,11 +68,14 @@ export async function POST(request: NextRequest) {
             where: { id: result.chapterId },
             data: {
               content: result.revisedContent,
-              wordCount: result.revisedContent.replace(/\s/g, '').length,
+              wordCount: countChapterWords(result.revisedContent),
             },
           })
           updatedChapters.push(result.chapterId)
         }
+      }
+      if (updatedChapters.length > 0) {
+        await syncProjectChapterWordCount(prisma, data.projectId)
       }
       results.forEach(r => {
         if (updatedChapters.includes(r.chapterId)) {

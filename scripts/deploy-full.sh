@@ -114,6 +114,10 @@ DEPLOY_DIR="/opt/novel-ai"
 
 cd "$DEPLOY_DIR"
 
+echo "🗑️ 清理旧的构建文件..."
+rm -rf .next
+rm -rf node_modules/.prisma
+
 echo "📦 解压文件..."
 tar -xzf novel-ai-code.tar.gz 2>/dev/null || true
 rm -f novel-ai-code.tar.gz

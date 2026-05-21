@@ -1,21 +1,10 @@
-import { headers } from 'next/headers'
 import { notFound } from 'next/navigation'
 import { ChapterGenerateClient } from '@/components/chapter'
+import { fetchInternalApi } from '@/lib/server/internal-api'
 
 async function fetchChapter(projectId: number, chapterId: number) {
-  const headerList = await headers()
-  const host = headerList.get('x-forwarded-host') || headerList.get('host') || '127.0.0.1:3200'
-  const forwardedProto = headerList.get('x-forwarded-proto')
-  const protocol = forwardedProto?.split(',')[0]?.trim()
-    || (host.includes('localhost') || host.startsWith('127.0.0.1') ? 'http' : 'https')
-  const cookie = headerList.get('cookie')
-  const authorization = headerList.get('authorization')
-  const res = await fetch(new URL(`/api/novel/projects/${projectId}/chapters/${chapterId}`, `${protocol}://${host}`), {
+  const res = await fetchInternalApi(`/api/novel/projects/${projectId}/chapters/${chapterId}`, {
     cache: 'no-store',
-    headers: {
-      ...(cookie ? { cookie } : {}),
-      ...(authorization ? { authorization } : {}),
-    },
   })
 
   if (res.status === 404) {

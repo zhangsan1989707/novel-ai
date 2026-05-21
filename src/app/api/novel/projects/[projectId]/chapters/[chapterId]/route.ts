@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { logError } from '@/lib/logger'
-import { countChineseWords } from '@/lib/utils'
+import { countChapterWords, getProjectChapterWordCount } from '@/lib/novel/chapter-word-count'
 
 // ============================================
 // Schema 验证
@@ -31,7 +31,7 @@ interface RouteParams {
 export async function GET(request: NextRequest, { params }: RouteParams) {
   let chapterIdNum: number | null = null
   try {
-    const { projectId, chapterId } = await params
+    const { chapterId } = await params
     chapterIdNum = parseInt(chapterId)
 
     if (isNaN(chapterIdNum)) {
@@ -76,7 +76,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 export async function PUT(request: NextRequest, { params }: RouteParams) {
   let chapterIdNum: number | null = null
   try {
-    const { projectId, chapterId } = await params
+    const { chapterId } = await params
     chapterIdNum = parseInt(chapterId)
 
     if (isNaN(chapterIdNum)) {
@@ -103,10 +103,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
 
     // 计算字数变化
-    const oldWordCount = oldChapter.content ? countChineseWords(oldChapter.content) : 0
+    const oldWordCount = countChapterWords(oldChapter.content)
     const newContent = validatedData.content !== undefined ? validatedData.content : oldChapter.content
-    const newWordCount = newContent ? countChineseWords(newContent) : 0
-    const wordCountDiff = newWordCount - oldWordCount
+    const newWordCount = countChapterWords(newContent)
 
     // 保存版本记录（如果内容有变化）
     if (validatedData.content && validatedData.content !== oldChapter.content) {
@@ -134,14 +133,13 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     })
 
     // 更新项目总字数
-    if (wordCountDiff !== 0) {
-      await prisma.novelProject.update({
-        where: { id: oldChapter.projectId },
-        data: {
-          currentWordCount: { increment: wordCountDiff },
-        },
-      })
-    }
+    const currentWordCount = await getProjectChapterWordCount(prisma, oldChapter.projectId)
+    await prisma.novelProject.update({
+      where: { id: oldChapter.projectId },
+      data: {
+        currentWordCount,
+      },
+    })
 
     return NextResponse.json({ success: true, data: chapter })
   } catch (error) {
@@ -166,7 +164,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   let chapterIdNum: number | null = null
   try {
-    const { projectId, chapterId } = await params
+    const { chapterId } = await params
     chapterIdNum = parseInt(chapterId)
 
     if (isNaN(chapterIdNum)) {
@@ -193,14 +191,13 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     })
 
     // 更新项目总字数
-    if (chapter.wordCount > 0) {
-      await prisma.novelProject.update({
-        where: { id: chapter.projectId },
-        data: {
-          currentWordCount: { decrement: chapter.wordCount },
-        },
-      })
-    }
+    const currentWordCount = await getProjectChapterWordCount(prisma, chapter.projectId)
+    await prisma.novelProject.update({
+      where: { id: chapter.projectId },
+      data: {
+        currentWordCount,
+      },
+    })
 
     return NextResponse.json({ success: true, data: { id: chapterIdNum } })
   } catch (error) {

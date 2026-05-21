@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import type { AgentType, Prisma, NovelChapter } from '@prisma/client'
-import { countChineseWords } from '@/lib/utils'
+import { countChapterWords, getProjectChapterWordCount } from '@/lib/novel/chapter-word-count'
 import { saveChapterSummary } from '@/lib/memory/chapter-summary'
 import { batchCreatePlotlines, batchResolvePlotlines } from '@/lib/memory/plotline-tracker'
 import { batchUpdateCharacterProfiles } from '@/lib/memory/character-memory'
@@ -28,14 +28,6 @@ function markFailure(status: ProjectionStatusMap, key: string, error: unknown): 
   status[key] = `failed:${error instanceof Error ? error.message : String(error)}`
 }
 
-async function computeProjectWordCount(projectId: number): Promise<number> {
-  const totalWordCount = await prisma.novelChapter.aggregate({
-    where: { projectId, status: 'COMPLETED' },
-    _sum: { wordCount: true },
-  })
-  return totalWordCount._sum.wordCount || 0
-}
-
 export async function runChapterProjectionWriters(
   context: ChapterProjectionContext
 ): Promise<ChapterProjectionResult> {
@@ -51,7 +43,7 @@ export async function runChapterProjectionWriters(
     rag: 'pending',
   }
 
-  const finalWordCount = countChineseWords(context.payload.content || '')
+  const finalWordCount = countChapterWords(context.payload.content)
   const chapterReady = context.payload.qualityStatus === 'completed'
 
   try {
@@ -144,7 +136,7 @@ export async function runChapterProjectionWriters(
   }
 
   try {
-    const currentWordCount = await computeProjectWordCount(context.projectId)
+    const currentWordCount = await getProjectChapterWordCount(prisma, context.projectId)
     await prisma.novelProject.update({
       where: { id: context.projectId },
       data: { currentWordCount },

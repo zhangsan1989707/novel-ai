@@ -7,7 +7,8 @@ import { getCurrentUserId } from '@/lib/auth'
 import { createProviderFromDefaultConfig } from '@/lib/ai'
 import { parseAiJsonObject } from '@/lib/engine/ai-json'
 import { queueProjectBootstrap } from '@/lib/engine/auto-maintenance'
-import { splitIntoChapters, countContentWords } from '@/lib/analysis/chapter-utils'
+import { splitIntoChapters } from '@/lib/analysis/chapter-utils'
+import { countChapterWords, syncProjectChapterWordCount } from '@/lib/novel/chapter-word-count'
 
 // ============================================
 // 工具函数
@@ -137,7 +138,7 @@ export async function POST(request: NextRequest) {
 
     if (!projectId || isNaN(projectId)) {
       // 1. AI 提取元数据（含高级设定）
-      let extractedMeta = {
+      const extractedMeta = {
         title: sourceName || file.name.replace(/\.(txt|epub)$/i, ''),
         genre: undefined as string | undefined,
         writingStyle: undefined as string | undefined,
@@ -296,7 +297,7 @@ ${contentPreview}
       chapterNumber: idx + 1,
       title: ch.title,
       content: ch.content,
-      wordCount: countContentWords(ch.content),
+      wordCount: countChapterWords(ch.content),
       status: 'REVIEWING' as const,
     }))
 
@@ -306,6 +307,7 @@ ${contentPreview}
       })
       chaptersCreated = chapterData.length
     }
+    await syncProjectChapterWordCount(prisma, projectId)
 
     return NextResponse.json({
       success: true,

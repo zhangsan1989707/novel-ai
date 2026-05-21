@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { tryCatch, error } from '@/lib/api-response'
 import { chapterDeslopper } from '@/lib/agents/deslopper'
 import { analyzeChapterQuality } from '@/lib/knowledge/chapter-quality'
+import { countChapterWords, syncProjectChapterWordCount } from '@/lib/novel/chapter-word-count'
 
 const optimizeSchema = z.object({
   projectId: z.number().int().positive(),
@@ -53,7 +54,7 @@ export async function POST(request: NextRequest) {
 
     // 如果设置了自动保存，则更新章节
     if (data.autoSave && result.revisedContent !== chapter.content) {
-      const wordCount = result.revisedContent.replace(/\s/g, '').length
+      const wordCount = countChapterWords(result.revisedContent)
       await prisma.novelChapter.update({
         where: { id: data.chapterId },
         data: {
@@ -61,6 +62,7 @@ export async function POST(request: NextRequest) {
           wordCount,
         },
       })
+      await syncProjectChapterWordCount(prisma, data.projectId)
       result.autoApplied = true
     }
 

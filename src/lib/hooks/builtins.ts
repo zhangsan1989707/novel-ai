@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { ProjectStatus } from '@prisma/client'
 import type { Prisma } from '@prisma/client'
 import type { HookContext, HookResult } from './types'
+import { countChapterWords } from '@/lib/novel/chapter-word-count'
 
 export async function onProjectCreate(context: HookContext): Promise<HookResult> {
   const { projectId } = context
@@ -88,7 +89,7 @@ export async function onChapterGenerateEnd(context: HookContext): Promise<HookRe
   return {
     action: 'continue',
     message: '章节生成完成，项目状态已更新',
-    data: { wordCount: content?.length || 0 },
+    data: { wordCount: countChapterWords(content) },
   }
 }
 
@@ -175,7 +176,7 @@ export async function onPreContextCompress(context: HookContext): Promise<HookRe
   }
 }
 
-export async function onPostContextCompress(_context: HookContext): Promise<HookResult> {
+export async function onPostContextCompress(): Promise<HookResult> {
   return {
     action: 'warn',
     message: '上下文已压缩，建议读取进度快照以恢复关键信息',

@@ -105,7 +105,13 @@ export function BookAnalysisDashboard({
   }, [projectId])
 
   useEffect(() => {
-    loadAnalyses()
+    const timer = window.setTimeout(() => {
+      void loadAnalyses()
+    }, 0)
+
+    return () => {
+      window.clearTimeout(timer)
+    }
   }, [loadAnalyses, refreshSeed])
 
   const analysisMap = useMemo(() => {

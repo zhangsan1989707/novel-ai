@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { logError } from '@/lib/logger'
-import { countContentWords } from '@/lib/analysis/chapter-utils'
+import { countChapterWords, syncProjectChapterWordCount } from '@/lib/novel/chapter-word-count'
 
 const normalizeSchema = z.object({
   chapters: z.array(z.object({
@@ -30,8 +30,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const body = await request.json()
     const { chapters } = normalizeSchema.parse(body)
-    const totalWordCount = chapters.reduce((sum, chapter) => sum + countContentWords(chapter.content), 0)
-
     await prisma.$transaction(async (tx) => {
       await tx.novelChapter.deleteMany({ where: { projectId: projectIdNum! } })
 
@@ -42,14 +40,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           sortOrder: index,
           title: chapter.title.trim(),
           content: chapter.content.trim(),
-          wordCount: countContentWords(chapter.content),
+          wordCount: countChapterWords(chapter.content),
           status: 'REVIEWING',
         })),
-      })
-
-      await tx.novelProject.update({
-        where: { id: projectIdNum! },
-        data: { currentWordCount: totalWordCount },
       })
 
       await Promise.all([
@@ -61,6 +54,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         tx.character.deleteMany({ where: { projectId: projectIdNum! } }),
       ])
     })
+
+    const totalWordCount = await syncProjectChapterWordCount(prisma, projectIdNum)
 
     return NextResponse.json({
       success: true,

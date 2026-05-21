@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { logError } from '@/lib/logger'
+import { countChapterWords, getProjectChapterWordCount } from '@/lib/novel/chapter-word-count'
 
 // ============================================
 // Schema 验证
@@ -118,24 +119,24 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       )
     }
 
+    const chapterWordCount = countChapterWords(validatedData.content)
+
     const chapter = await prisma.novelChapter.create({
       data: {
         ...validatedData,
         projectId: projectIdNum,
-        wordCount: validatedData.content ? validatedData.content.length : 0,
+        wordCount: chapterWordCount,
       },
     })
 
-    // 更新项目字数
-    if (validatedData.content) {
-      await prisma.novelProject.update({
-        where: { id: projectIdNum },
-        data: {
-          currentWordCount: { increment: validatedData.content.length },
-          status: 'WRITING',
-        },
-      })
-    }
+    const currentWordCount = await getProjectChapterWordCount(prisma, projectIdNum)
+    await prisma.novelProject.update({
+      where: { id: projectIdNum },
+      data: {
+        currentWordCount,
+        status: 'WRITING',
+      },
+    })
 
     return NextResponse.json({ success: true, data: chapter }, { status: 201 })
   } catch (error) {
