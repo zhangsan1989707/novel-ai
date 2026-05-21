@@ -103,6 +103,22 @@ export function AnalysisTaskPanel({ projectId, onTaskComplete, compact = false }
     }
   }, [task?.status, fetchTask])
 
+  // 尚未创建任务时也继续刷新 latest，避免任务刚创建时面板一直停留在空态
+  useEffect(() => {
+    if (!loading && !task) {
+      pollIntervalRef.current = setInterval(() => {
+        fetchTask(true)
+      }, 2000)
+    }
+
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current)
+        pollIntervalRef.current = null
+      }
+    }
+  }, [loading, task, fetchTask])
+
   // 任务完成时通知父组件
   useEffect(() => {
     if (task?.status === 'COMPLETED' && task.startedAt) {
@@ -124,7 +140,7 @@ export function AnalysisTaskPanel({ projectId, onTaskComplete, compact = false }
   if (!task) {
     return (
       <div className="rounded-lg border border-dashed border-gray-300 bg-white p-4 text-sm text-gray-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400">
-        分析任务尚未创建，系统会自动发起拆书分析并在这里显示进度。
+        暂无分析任务记录，任务创建后会在这里显示进度和完成情况。
       </div>
     )
   }

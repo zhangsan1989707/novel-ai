@@ -376,6 +376,14 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 }
 
 /**
+ * PATCH /api/novel/projects/{projectId}
+ * 兼容部分前端调用
+ */
+export async function PATCH(request: NextRequest, context: RouteParams) {
+  return PUT(request, context)
+}
+
+/**
  * DELETE /api/novel/projects/{projectId}
  * 删除项目
  */

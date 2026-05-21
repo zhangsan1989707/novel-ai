@@ -231,7 +231,7 @@ export function BookAnalysisDashboard({
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <BookOpen className="h-5 w-5 text-amber-600" />
-          <span className="font-medium">拆书总览</span>
+          <span className="font-medium">结果总览</span>
         </div>
         <button
           onClick={loadAnalyses}
@@ -335,19 +335,31 @@ export function BookAnalysisDashboard({
         </div>
         <DraggableTimeline
           events={timelineEvents}
-          className="h-[220px]"
+          totalChapters={chapters.length}
+          className="min-h-[360px]"
           onEventClick={(event) => {
-            const nextTab = event.type === 'setting' ? 'world' : event.type === 'character' ? 'characters' : 'plot'
+            const nextTab =
+              event.type === 'setting'
+                ? 'world'
+                : event.type === 'character'
+                  ? 'characters'
+                  : event.type === 'power'
+                    ? 'structure'
+                    : 'plot'
             const nextDimension = event.type === 'setting'
               ? AnalysisDimension.WORLD_SETTING
               : event.type === 'character'
                 ? AnalysisDimension.CHARACTER_RELATION
-                : AnalysisDimension.PLOT_LINE
+                : event.type === 'power'
+                  ? AnalysisDimension.READING_EXPERIENCE
+                  : AnalysisDimension.PLOT_LINE
             const nextSection = event.type === 'setting'
               ? 'overview-panel'
               : event.type === 'character'
                 ? 'details-panel'
-                : 'timeline-panel'
+                : event.type === 'power'
+                  ? 'details-panel'
+                  : 'timeline-panel'
 
             setActiveTab(nextTab)
             jumpToPanel({
@@ -399,7 +411,7 @@ export function BookAnalysisDashboard({
               </div>
               {timelineEvents.length > 0 && (
                 <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-950/20">
-                  总览已提取 {timelineEvents.length} 个关键时间节点，可拖动时间轴查看章节分布。
+                  总览已提取 {timelineEvents.length} 个关键时间节点。支持按类型筛选、拖动和缩放时间轴查看章节分布。
                 </div>
               )}
               <button
@@ -410,7 +422,7 @@ export function BookAnalysisDashboard({
                 })}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800 transition-colors hover:border-amber-300 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-200"
               >
-                查看完整分析工作台
+                查看分析明细
                 <ChevronRight className="h-4 w-4" />
               </button>
             </div>

@@ -285,7 +285,7 @@ export function BookAnalysisPanel({ projectId, refreshSeed = 0, navigationReques
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <BookOpen className="h-5 w-5 text-amber-600" />
-          <span className="font-medium">拆书分析工作台</span>
+          <span className="font-medium">分析明细</span>
         </div>
         <div className="flex items-center gap-2">
           <select

@@ -43,6 +43,17 @@ export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
 
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  const readJsonResponse = useCallback(async <T,>(res: Response): Promise<T | null> => {
+    const text = await res.text()
+    if (!text.trim()) return null
+    try {
+      return JSON.parse(text) as T
+    } catch (error) {
+      console.warn('Unexpected non-JSON response:', error)
+      return null
+    }
+  }, [])
+
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     setIsDragging(true)
@@ -97,9 +108,21 @@ export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
         body: formData,
       })
 
-      const uploadData = await uploadRes.json()
+      const uploadData = await readJsonResponse<{ success: boolean; data?: { projectId: number; chapterCount: number }; error?: { message?: string } }>(uploadRes)
+      if (!uploadData) {
+        setError('文件上传失败')
+        setStep('upload')
+        setSubmitting(false)
+        return
+      }
       if (!uploadData.success) {
         setError(uploadData.error?.message || '文件上传失败')
+        setStep('upload')
+        setSubmitting(false)
+        return
+      }
+      if (!uploadData.data) {
+        setError('文件上传失败')
         setStep('upload')
         setSubmitting(false)
         return
@@ -128,8 +151,8 @@ export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
       }
 
       const projectRes = await fetch(`/api/novel/projects/${newProjectId}`)
-      const projectData = await projectRes.json()
-      if (projectData.success) {
+      const projectData = await readJsonResponse<{ success: boolean; data?: any; error?: { message?: string } }>(projectRes)
+      if (projectData?.success && projectData.data) {
         const p = projectData.data
         resolvedMeta = {
           title: p.title || selectedFile.name.replace(/\.(txt|epub)$/i, ''),
@@ -153,8 +176,14 @@ export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
       setFlowProgress(55)
       setFlowMessage('正在加载章节切分结果')
       const chapterRes = await fetch(`/api/novel/projects/${newProjectId}/chapters?includeContent=true`)
-      const chapterData = await chapterRes.json()
+      const chapterData = await readJsonResponse<{ success: boolean; data?: Array<{ title: string; content?: string }> }>(chapterRes)
+      if (!chapterData) {
+        throw new Error('无法读取章节内容')
+      }
       if (chapterData.success) {
+        if (!chapterData.data) {
+          throw new Error('无法读取章节内容')
+        }
         const normalizedChapters = normalizeChapterReviewItems(
           chapterData.data.map((chapter: { title: string; content?: string }) => ({
             title: chapter.title,
@@ -186,21 +215,28 @@ export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
     pollIntervalRef.current = setInterval(async () => {
       if (!tid) return
       try {
-        const res = await fetch(`/api/novel/projects/${targetProjectId}/analysis-task`)
-        const data = await res.json()
-        if (data.success && data.data) {
-          if (data.data.status === 'COMPLETED') {
-            setAnalysisCount(data.data.totalDimensions || 0)
-            setFlowProgress(100)
-            setFlowMessage('AI 拆书分析完成')
-            clearInterval(pollIntervalRef.current!)
-            pollIntervalRef.current = null
-            setTaskPollingActive(false)
-
-            // 触发后续流程
-            await postAnalysisTasks(targetProjectId)
-            setStep('complete')
-          } else if (data.data.status === 'FAILED') {
+        const res = await fetch(`/api/novel/projects/${targetProjectId}/analysis-task?latest=true`)
+        const data = await readJsonResponse<{
+          success: boolean
+          data?: {
+            id: string
+            status: string
+            totalDimensions?: number
+            progress?: number
+            errorMessage?: string | null
+          } | null
+        }>(res)
+        if (data?.success && data.data) {
+        if (data.data.status === 'COMPLETED') {
+          setAnalysisCount(data.data.totalDimensions || 0)
+          setFlowProgress(100)
+          setFlowMessage('AI 拆书分析完成')
+          clearInterval(pollIntervalRef.current!)
+          pollIntervalRef.current = null
+          setTaskPollingActive(false)
+          setStep('complete')
+          void postAnalysisTasks(targetProjectId)
+        } else if (data.data.status === 'FAILED') {
             setError(data.data.errorMessage || '分析任务失败')
             setFlowMessage('分析失败')
             clearInterval(pollIntervalRef.current!)
@@ -208,6 +244,9 @@ export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
             setTaskPollingActive(false)
             setStep('analyzing')
           }
+        } else if (data?.success && !data.data) {
+          // 任务还在创建/切换过程中，继续轮询 latest 直到拿到任务
+          return
         }
       } catch (err) {
         console.error('Poll error:', err)
@@ -218,25 +257,29 @@ export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
   const postAnalysisTasks = async (targetProjectId: number) => {
     if (!targetProjectId) return
 
-    // RAG 索引重建
-    await fetch(`/api/novel/projects/${targetProjectId}/rag/rebuild`, {
-      method: 'POST',
-    }).catch(() => {
-      console.warn('RAG 索引重建失败')
-    })
+    try {
+      // RAG 索引重建
+      await fetch(`/api/novel/projects/${targetProjectId}/rag/rebuild`, {
+        method: 'POST',
+      }).catch(() => {
+        console.warn('RAG 索引重建失败')
+      })
 
-    // 提取角色档案
-    const charRes = await fetch('/api/novel/ai/extract-characters', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectId: targetProjectId }),
-    }).catch(() => null)
+      // 提取角色档案
+      const charRes = await fetch('/api/novel/ai/extract-characters', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: targetProjectId }),
+      }).catch(() => null)
 
-    if (charRes) {
-      const charData = await charRes.json().catch(() => null)
-      if (charData?.success) {
-        setCharactersCount(charData.data.charactersCreated || 0)
+      if (charRes) {
+        const charData = await readJsonResponse<{ success: boolean; data?: { charactersCreated?: number } }>(charRes)
+        if (charData?.success && charData.data) {
+          setCharactersCount(charData.data.charactersCreated || 0)
+        }
       }
+    } catch (err) {
+      console.warn('后处理任务执行失败:', err)
     }
   }
 
@@ -253,7 +296,7 @@ export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
       setFlowProgress(84)
       setFlowMessage('正在保存项目设定')
       const updateRes = await fetch(`/api/novel/projects/${targetProjectId}`, {
-        method: 'PATCH',
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title: meta.title,
@@ -271,7 +314,10 @@ export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
         }),
       })
 
-      const updateData = await updateRes.json()
+      const updateData = await readJsonResponse<{ success: boolean; error?: { message?: string } }>(updateRes)
+      if (!updateData) {
+        throw new Error('项目设定保存失败')
+      }
       if (!updateData.success) {
         console.warn('Project update failed:', updateData.error)
       }
@@ -298,15 +344,25 @@ export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
         }),
       })
 
-      const data = await res.json()
+      const data = await readJsonResponse<{ success: boolean; data?: { task: { status: string; totalDimensions?: number; progress?: number; id: string } }; error?: { message?: string } }>(res)
+      if (!data) {
+        setError('创建分析任务失败')
+        setStep('upload')
+        return
+      }
       if (data.success) {
+        if (!data.data?.task) {
+          setError('创建分析任务失败')
+          setStep('upload')
+          return
+        }
         if (data.data.task.status === 'COMPLETED') {
           // 已有完成的任务（复用）
           setAnalysisCount(data.data.task.totalDimensions || 0)
           setFlowProgress(100)
           setFlowMessage('分析已完成')
-          await postAnalysisTasks(targetProjectId)
           setStep('complete')
+          void postAnalysisTasks(targetProjectId)
         } else {
           // 开始轮询任务状态
           setFlowProgress(Math.max(92, data.data.task.progress || 0))

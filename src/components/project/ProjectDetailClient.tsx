@@ -821,21 +821,6 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
 
       {isAnalyzeMode ? (
         <div className="space-y-6">
-          <Card className="border-amber-200 bg-amber-50/60 dark:border-amber-900/40 dark:bg-amber-950/20">
-            <CardContent className="p-5">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <div className="text-sm font-medium text-amber-700 dark:text-amber-300">拆书模式</div>
-                  <h2 className="mt-1 text-lg font-semibold text-gray-900 dark:text-white">只读分析工作台</h2>
-                  <p className="mt-2 text-sm text-gray-700 dark:text-gray-300">
-                    这里用于查看 AI 自动完成的拆书结果，不提供章节编辑、设定维护或总控配置入口。
-                  </p>
-                </div>
-                <Badge variant="secondary">AI 自动分析</Badge>
-              </div>
-            </CardContent>
-          </Card>
-
           <AnalysisWorkbench projectId={projectId} />
         </div>
       ) : (
