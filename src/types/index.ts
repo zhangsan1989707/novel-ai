@@ -464,39 +464,6 @@ export const STEERING_ACTIONS: SteeringAction[] = [
 ]
 
 // ============================================
-// 生成流水线 (Generation Pipeline)
-// ============================================
-
-export type PipelineStep = 'blueprint' | 'arc_plan' | 'chapter_list' | 'write' | 'validate' | 'polish' | 'deslop' | 'summarize'
-
-export const PIPELINE_STEP_LABELS: Record<PipelineStep, string> = {
-  blueprint: '生成蓝图',
-  arc_plan: 'Arc 规划',
-  chapter_list: '章节目录',
-  write: '逐章写作',
-  validate: '内容校验',
-  polish: '润色优化',
-  deslop: '去 AI 味',
-  summarize: '生成摘要',
-}
-
-export type JobStatus = 'pending' | 'running' | 'completed' | 'failed' | 'paused'
-
-export interface GenerationJobInfo {
-  id: number
-  projectId: number
-  type: string
-  status: JobStatus
-  currentStep: PipelineStep | null
-  stepIndex: number
-  totalChapters: number
-  currentChapter: number
-  retryCount: number
-  progress: number
-  errorMessage?: string
-}
-
-// ============================================
 // 平台模板 (Platform Template)
 // ============================================
 

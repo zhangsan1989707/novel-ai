@@ -1,14 +1,13 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Button, Card, CardContent, CardHeader, CardTitle, Badge, Progress, Modal, toast, MoreActionsMenu } from '@/components/ui'
 import { BlueprintConsole, ProjectBaseInfoForm, ProjectBaseInfoFormData } from '@/components/project'
 import { Toolbox, CharacterPanel } from '@/components/ai'
 import { CoverGenerator, ResearchPanel, ReviewPanel, DeslopPanel, ExportPanel, AnalysisWorkbench } from '@/components/ai'
-import { BookOpen, Clock, Target, Users, Layers, Search, ClipboardList, Rocket, Shield, Sparkles, ChevronRight, ChevronDown, Wrench, Eye, Play, Pause, AlertCircle, CheckCircle2, Loader2, Download } from 'lucide-react'
+import { BookOpen, Clock, Target, Users, Layers, Search, ClipboardList, Shield, Sparkles, ChevronRight, ChevronDown, Wrench, Eye, AlertCircle, CheckCircle2, Download } from 'lucide-react'
 import type { ProjectStatus } from '@/types'
-import type { PipelineRuntimeState } from '@/lib/engine/pipeline-runtime'
 import type { BlueprintConsoleSnapshot } from '@/lib/engine/blueprint-console'
 
 interface Chapter {
@@ -147,18 +146,6 @@ interface Project {
   updatedAt: string
 }
 
-interface PipelineStatus {
-  status: 'IDLE' | 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'PAUSED'
-  currentStep: string
-  progress: number
-  currentChapter: number
-  totalChapters: number
-  error?: string
-  pipelineJobId?: number
-  runtime?: PipelineRuntimeState
-  updatedAt?: string
-}
-
 const chapterStatusMap: Record<string, { label: string; variant: 'default' | 'primary' | 'secondary' | 'success' | 'warning' | 'danger' }> = {
   DRAFT: { label: '未写作', variant: 'default' },
   GENERATING: { label: '生成中', variant: 'primary' },
@@ -173,57 +160,10 @@ const projectStatusMap: Record<ProjectStatus, { label: string; variant: 'default
   PAUSED: { label: '已暂停', variant: 'warning' },
 }
 
-const pipelineStatusMap: Record<PipelineStatus['status'], string> = {
-  IDLE: '空闲',
-  PENDING: '准备中',
-  RUNNING: '运行中',
-  COMPLETED: '已完成',
-  FAILED: '失败',
-  PAUSED: '已暂停',
-}
-
-const pipelineStepMap: Record<string, string> = {
-  BLUEPRINT: '蓝图生成',
-  ARC_PLAN: '阶段规划',
-  CHAPTER_LIST: '章节目录',
-  WRITE: '章节写作',
-  SUMMARIZE: '总结收尾',
-  PLANNER: '章节策划',
-  WRITER: '正文写作',
-  SUMMARIZER: '摘要整理',
-  DB_WRITE: '结果回写',
-  RESEARCH: '资料整理',
-  DESLOPPER: '去AI味',
-  VALIDATOR: '一致性校验',
-  PLAN: '策划',
-  REVIEW: '审稿',
-  POLISH: '润色',
-  DRAFT: '草稿生成',
-  VALIDATE: '校验',
-  INITIALIZE: '初始化',
-}
-
 const healthLevelMap: Record<NonNullable<Project['preflight']>['healthLevel'], { label: string; variant: 'success' | 'warning' | 'danger' }> = {
   healthy: { label: '健康', variant: 'success' },
   warning: { label: '告警', variant: 'warning' },
   critical: { label: '严重', variant: 'danger' },
-}
-
-function getPipelineStatusLabel(status: PipelineStatus['status']) {
-  return pipelineStatusMap[status] || status
-}
-
-function getPipelineStepLabel(step: string) {
-  if (!step) return '初始化'
-  return pipelineStepMap[step.toUpperCase()] || step
-}
-
-function formatDuration(durationMs?: number) {
-  if (!durationMs || durationMs <= 0) return '-'
-  if (durationMs < 1000) return `${durationMs}ms`
-  const seconds = durationMs / 1000
-  if (seconds < 60) return `${seconds.toFixed(1)}s`
-  return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`
 }
 
 type DashboardTab = 'dashboard' | 'settings' | 'analysis' | 'characters'
@@ -272,12 +212,7 @@ export default function ProjectDetailPage() {
   const [showExportModal, setShowExportModal] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [pipelineStarting, setPipelineStarting] = useState(false)
   const [activeTab, setActiveTab] = useState<DashboardTab>('dashboard')
-
-  const [pipeline, setPipeline] = useState<PipelineStatus | null>(null)
-  const lastPipelineStatusRef = useRef<PipelineStatus['status'] | null>(null)
-  const pipelineStreamRef = useRef<EventSource | null>(null)
   const maintenanceActive = Boolean(
     project?.maintenanceSummary?.bootstrapQueued ||
     project?.maintenanceSummary?.bootstrapRunning ||
@@ -313,21 +248,6 @@ export default function ProjectDetailPage() {
     }
   }, [projectId])
 
-  const applyPipelineSnapshot = useCallback((nextPipeline: PipelineStatus) => {
-    const nextStatus = nextPipeline.status
-    const prevStatus = lastPipelineStatusRef.current
-    setPipeline(nextPipeline)
-    lastPipelineStatusRef.current = nextStatus
-
-    if (nextStatus === 'COMPLETED' && prevStatus !== 'COMPLETED') {
-      toast.success(`AI 生成完成，共生成 ${nextPipeline.totalChapters} 章`)
-      fetchProject()
-    } else if (nextStatus === 'FAILED' && prevStatus !== 'FAILED') {
-      toast.error(nextPipeline.error || 'AI 生成失败')
-      fetchProject()
-    }
-  }, [fetchProject])
-
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void fetchProject()
@@ -343,52 +263,7 @@ export default function ProjectDetailPage() {
     return () => window.clearInterval(timer)
   }, [fetchProject, projectInitializing])
 
-  useEffect(() => {
-    let timer: ReturnType<typeof setInterval> | null = null
 
-    const pollPipeline = async () => {
-      try {
-        const res = await fetch(`/api/novel/projects/${projectId}/pipeline/status`)
-        const data = await res.json()
-        if (data.success) {
-          applyPipelineSnapshot(data.data)
-        }
-      } catch {
-        // silent fail on polling errors
-      }
-    }
-
-    pollPipeline()
-
-    timer = setInterval(pollPipeline, 3000)
-    return () => {
-      if (timer) clearInterval(timer)
-    }
-  }, [projectId, applyPipelineSnapshot])
-
-  useEffect(() => {
-    const eventSource = new EventSource(`/api/novel/projects/${projectId}/pipeline/stream`)
-    pipelineStreamRef.current = eventSource
-
-    eventSource.addEventListener('pipeline', (event) => {
-      try {
-        const payload = JSON.parse((event as MessageEvent).data) as PipelineStatus
-        applyPipelineSnapshot(payload)
-      } catch {
-        // ignore parse errors
-      }
-    })
-
-    eventSource.onerror = () => {
-      eventSource.close()
-      pipelineStreamRef.current = null
-    }
-
-    return () => {
-      eventSource.close()
-      pipelineStreamRef.current = null
-    }
-  }, [projectId, applyPipelineSnapshot])
 
   const handleUpdate = async (formData: ProjectBaseInfoFormData) => {
     setSubmitting(true)
@@ -433,72 +308,6 @@ export default function ProjectDetailPage() {
     }
   }
 
-  const handleResumePipeline = async () => {
-    try {
-      const res = await fetch(`/api/novel/projects/${projectId}/pipeline/resume`, {
-        method: 'POST',
-      })
-      const data = await res.json()
-      if (data.success) {
-        toast.success('AI 生成已恢复')
-        fetchProject()
-      } else {
-        toast.error(data.error?.message || '恢复失败')
-      }
-    } catch {
-      toast.error('恢复失败')
-    }
-  }
-
-  const handlePausePipeline = async () => {
-    try {
-      const res = await fetch(`/api/novel/projects/${projectId}/pipeline/pause`, {
-        method: 'POST',
-      })
-      const data = await res.json()
-      if (data.success) {
-        toast.success('AI 生成已暂停')
-        fetchProject()
-      } else {
-        toast.error(data.error?.message || '暂停失败')
-      }
-    } catch {
-      toast.error('暂停失败')
-    }
-  }
-
-  const handleStartPipeline = async () => {
-    if (projectInitializing) {
-      toast.error('创作系统仍在初始化，请完成后再开始 AI 生成')
-      return
-    }
-
-    setPipelineStarting(true)
-    try {
-      const res = await fetch(`/api/novel/projects/${projectId}/pipeline/start`, {
-        method: 'POST',
-      })
-      const data = await res.json()
-      if (data.success) {
-        toast.success('AI 生成已启动')
-        setPipeline({
-          status: 'PENDING',
-          currentStep: 'BLUEPRINT',
-          progress: 0,
-          currentChapter: 0,
-          totalChapters: 0,
-          pipelineJobId: data.data.jobId,
-        })
-      } else {
-        toast.error(data.error?.message || '启动失败')
-      }
-    } catch {
-      toast.error('启动 AI 生成失败')
-    } finally {
-      setPipelineStarting(false)
-    }
-  }
-
   const openChapterPreview = (chapter: Chapter) => {
     setPreviewChapter(chapter)
     setShowChapterPreview(true)
@@ -516,7 +325,7 @@ export default function ProjectDetailPage() {
       id: 'cover',
       label: '封面生成',
       description: 'AI生成小说封面',
-      icon: <Rocket className="h-4 w-4" />,
+      icon: <Sparkles className="h-4 w-4" />,
       onClick: () => setShowCoverModal(true),
     },
     {
@@ -576,8 +385,6 @@ export default function ProjectDetailPage() {
   const completedChapters = project.chapters.filter(c => c.status === 'COMPLETED').length
   const reviewingChapters = project.chapters.filter(c => c.status === 'REVIEWING').length
   const arcGroups = groupChaptersByArc(project)
-  const liveChapter = pipeline?.runtime?.currentChapter || null
-  const recentChapterRuns = pipeline?.runtime?.recentChapters || []
   const hasBoundModel = Boolean(project.aiModelConfig)
 
   return (
@@ -594,113 +401,6 @@ export default function ProjectDetailPage() {
         <span className="text-gray-900 dark:text-white font-medium">{project.title}</span>
       </div>
 
-      {/* Pipeline Progress Panel */}
-      {pipeline && (pipeline.status === 'RUNNING' || pipeline.status === 'PENDING' || pipeline.status === 'PAUSED') && (
-        <div className={`mb-4 rounded-lg px-4 py-3 ${
-          pipeline.status === 'PAUSED'
-            ? 'border border-amber-200 bg-amber-50 dark:border-amber-900/60 dark:bg-amber-900/20'
-            : 'border border-blue-200 bg-blue-50 dark:border-blue-900/60 dark:bg-blue-900/20'
-        }`}>
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <Loader2
-                className={`h-4 w-4 ${
-                  pipeline.status === 'PAUSED'
-                    ? 'text-amber-600'
-                    : 'text-blue-600'
-                } ${pipeline.status === 'RUNNING' ? 'animate-spin' : ''}`}
-              />
-              <span className={`text-sm font-medium ${
-                pipeline.status === 'PAUSED'
-                  ? 'text-amber-700 dark:text-amber-300'
-                  : 'text-blue-700 dark:text-blue-300'
-              }`}>
-                {pipeline.status === 'PENDING'
-                  ? 'AI 生成准备中'
-                  : pipeline.status === 'PAUSED'
-                    ? 'AI 生成已暂停'
-                    : `AI 生成${getPipelineStatusLabel(pipeline.status)}`}
-              </span>
-            </div>
-            <span className={`text-xs ${pipeline.status === 'PAUSED' ? 'text-amber-500' : 'text-blue-500'}`}>{pipeline.progress}%</span>
-          </div>
-          <Progress value={pipeline.progress} max={100} size="sm" />
-          <div className={`flex items-center justify-between mt-2 text-xs ${
-            pipeline.status === 'PAUSED'
-              ? 'text-amber-600 dark:text-amber-400'
-              : 'text-blue-600 dark:text-blue-400'
-          }`}>
-            <span>
-              <span className="font-medium">{getPipelineStepLabel(pipeline.currentStep)}</span>
-            </span>
-            <span>
-              第 {pipeline.currentChapter} / {pipeline.totalChapters} 章
-            </span>
-          </div>
-          {liveChapter && (
-            <div className={`mt-3 rounded-md px-3 py-2 text-xs ${
-              pipeline.status === 'PAUSED'
-                ? 'bg-amber-50/80 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300'
-                : 'bg-blue-50/80 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300'
-            }`}>
-              <div className="flex items-center justify-between gap-3">
-                <span>当前章节：第 {liveChapter.chapterNumber} 章 {liveChapter.title || ''}</span>
-                <span>{getPipelineStepLabel(liveChapter.currentPhase || liveChapter.currentAgent || 'WRITE')}</span>
-              </div>
-              <div className="mt-1 flex items-center justify-between gap-3">
-                <span>已写 {liveChapter.currentWordCount} / {liveChapter.targetWordCount} 字</span>
-                <span>最近阶段耗时：{formatDuration(pipeline.runtime?.lastPhaseDurationMs)}</span>
-              </div>
-              {liveChapter.lastMessage && (
-                <div className="mt-1 truncate">{liveChapter.lastMessage}</div>
-              )}
-            </div>
-          )}
-          <div className="mt-3 flex items-center gap-2">
-            {pipeline.status === 'RUNNING' || pipeline.status === 'PENDING' ? (
-              <Button variant="outline" size="sm" onClick={handlePausePipeline} className="gap-1.5">
-                <Pause className="h-3.5 w-3.5" />
-                暂停
-              </Button>
-            ) : (
-              <Button variant="primary" size="sm" onClick={handleResumePipeline} className="gap-1.5">
-                <Play className="h-3.5 w-3.5" />
-                继续运行
-              </Button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {pipeline && pipeline.status === 'FAILED' && (
-        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-900/60 dark:bg-red-900/20">
-          <div className="flex items-center gap-2 mb-2">
-            <AlertCircle className="h-4 w-4 text-red-600" />
-              <span className="text-sm font-medium text-red-700 dark:text-red-300">
-              AI 生成失败
-            </span>
-          </div>
-          {pipeline.error && (
-            <p className="text-sm text-red-600 dark:text-red-400 mb-3">{pipeline.error}</p>
-          )}
-          <Button variant="outline" size="sm" onClick={handleResumePipeline} className="gap-1.5">
-            <Play className="h-3.5 w-3.5" />
-            恢复运行
-          </Button>
-        </div>
-      )}
-
-      {pipeline && pipeline.status === 'COMPLETED' && (
-        <div className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 dark:border-green-900/60 dark:bg-green-900/20">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="h-4 w-4 text-green-600" />
-            <span className="text-sm font-medium text-green-700 dark:text-green-300">
-              AI 生成完成，共生成 {pipeline.totalChapters} 章
-            </span>
-          </div>
-        </div>
-      )}
-
       {/* Project Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
@@ -711,17 +411,6 @@ export default function ProjectDetailPage() {
           {project.genre && <Badge variant="outline">{project.genre}</Badge>}
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={handleStartPipeline}
-            loading={pipelineStarting}
-            disabled={pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING' || pipeline?.status === 'PAUSED' || !hasBoundModel || projectInitializing}
-            className="gap-1.5"
-          >
-            <Rocket className="h-4 w-4" />
-            {projectInitializing ? '初始化中' : '开始 AI 生成'}
-          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -856,19 +545,8 @@ export default function ProjectDetailPage() {
                     <div className="text-center py-12">
                       <BookOpen className="h-10 w-10 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
                       <p className="text-sm text-gray-500 dark:text-gray-400">
-                        暂无章节，开始 AI 生成后会自动生成
+                        暂无章节
                       </p>
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        onClick={handleStartPipeline}
-                        loading={pipelineStarting}
-                        disabled={pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING' || pipeline?.status === 'PAUSED' || !hasBoundModel || projectInitializing}
-                        className="mt-4 gap-1.5"
-                      >
-                        <Rocket className="h-4 w-4" />
-                        {projectInitializing ? '初始化中' : '开始 AI 生成'}
-                      </Button>
                     </div>
                   ) : (
                     <div className="space-y-6">
@@ -917,68 +595,6 @@ export default function ProjectDetailPage() {
                   )}
                 </CardContent>
               </Card>
-
-              {pipeline && (liveChapter || recentChapterRuns.length > 0) && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-base">
-                      <Clock className="h-5 w-5 text-blue-600" />
-                      AI 生成进度
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    {liveChapter && (
-                      <div className="rounded-md border border-blue-100 bg-blue-50/70 px-3 py-3 dark:border-blue-900/40 dark:bg-blue-950/20">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                            第 {liveChapter.chapterNumber} 章 {liveChapter.title || ''}
-                          </div>
-                          <Badge variant="primary">
-                            {getPipelineStepLabel(liveChapter.currentPhase || liveChapter.currentAgent || 'WRITE')}
-                          </Badge>
-                        </div>
-                        <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-600 dark:text-gray-400">
-                          <div>当前字数：{liveChapter.currentWordCount}</div>
-                          <div>目标字数：{liveChapter.targetWordCount}</div>
-                          <div>Planner：{formatDuration(liveChapter.phaseTimings.planner)}</div>
-                          <div>Writer：{formatDuration(liveChapter.phaseTimings.writer)}</div>
-                          <div>Summarizer：{formatDuration(liveChapter.phaseTimings.summarizer)}</div>
-                          <div>DB 回写：{formatDuration(liveChapter.phaseTimings.db_write)}</div>
-                        </div>
-                        {liveChapter.lastMessage && (
-                          <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{liveChapter.lastMessage}</p>
-                        )}
-                      </div>
-                    )}
-
-                    {recentChapterRuns.length > 0 && (
-                      <div className="space-y-2">
-                        {recentChapterRuns.slice(0, 4).map((chapterRun) => (
-                          <div
-                            key={`${chapterRun.chapterNumber}-${chapterRun.startedAt}`}
-                            className="rounded-md border border-gray-200 px-3 py-2 text-xs dark:border-gray-800"
-                          >
-                            <div className="flex items-center justify-between gap-3">
-                              <span className="font-medium text-gray-900 dark:text-gray-100">
-                                第 {chapterRun.chapterNumber} 章 {chapterRun.title || ''}
-                              </span>
-                              <span className={chapterRun.status === 'FAILED' ? 'text-red-500' : 'text-green-600 dark:text-green-400'}>
-                                {chapterRun.status === 'FAILED' ? '失败' : chapterRun.qualityStatus === 'reviewing' ? '待审稿' : '完成'}
-                              </span>
-                            </div>
-                            <div className="mt-1 grid grid-cols-2 gap-2 text-gray-500 dark:text-gray-400">
-                              <div>Planner：{formatDuration(chapterRun.phaseTimings.planner)}</div>
-                              <div>Writer：{formatDuration(chapterRun.phaseTimings.writer)}</div>
-                              <div>Summarizer：{formatDuration(chapterRun.phaseTimings.summarizer)}</div>
-                              <div>DB 回写：{formatDuration(chapterRun.phaseTimings.db_write)}</div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
 
               {project.recentCommits && project.recentCommits.length > 0 && (
                 <Card>
