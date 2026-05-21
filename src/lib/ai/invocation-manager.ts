@@ -43,6 +43,7 @@ export const DEFAULT_FALLBACK_CONFIG: FallbackConfig = {
     AIVendor.OPENAI,
     AIVendor.ANTHROPIC,
     AIVendor.MINIMAX,
+    AIVendor.MIMO,
     AIVendor.VOLCENGINE
   ],
   useDefaultFallback: true

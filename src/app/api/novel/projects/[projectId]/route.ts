@@ -3,7 +3,7 @@ import { PlotlineStatus } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { logError } from '@/lib/logger'
-import { getRAGDocumentCount } from '@/lib/engine/rag-vector'
+import { getRAGDocumentCount, getRagRuntimeStatus } from '@/lib/engine/rag-vector'
 import { buildProjectHealthReport } from '@/lib/engine/project-health'
 import { buildBlueprintConsoleSnapshot } from '@/lib/engine/blueprint-console'
 import { getDefaultAIConfigRecord } from '@/lib/ai/factory'
@@ -46,6 +46,12 @@ function buildProjectPreflight(project: {
   automationState?: {
     bootstrapQueued?: boolean
     ragQueued?: boolean
+  }
+  ragRuntime?: {
+    inFlight: boolean
+    cooldownRemainingMs: number
+    embeddingFallbackActive: boolean
+    lastError?: string | null
   }
 }) {
   return buildProjectHealthReport(project)
@@ -296,6 +302,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       plotlines: project.plotlines,
       villains: project.villains,
       worldState: project.worldState,
+      ragRuntime: getRagRuntimeStatus(id),
       automationState: {
         bootstrapQueued: maintenanceSummary.bootstrapQueued || maintenanceSummary.bootstrapRunning,
         ragQueued: maintenanceSummary.ragQueued || maintenanceSummary.ragRunning,

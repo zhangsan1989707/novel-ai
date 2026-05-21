@@ -33,6 +33,8 @@ fi
 # 构建并启动服务
 docker-compose up -d --build
 
+bash scripts/ensure-pgvector.sh docker-compose.yml
+
 # 等待服务启动
 echo -e "${GREEN}⏳ 等待服务启动...${NC}"
 sleep 5

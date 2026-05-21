@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:15-alpine
+    image: ${POSTGRES_IMAGE:-pgvector/pgvector:pg15}
     container_name: novelai-db
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-novelai}
@@ -10,6 +10,7 @@ services:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init/001-enable-pgvector.sql:/docker-entrypoint-initdb.d/001-enable-pgvector.sql:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U novelai -d novel_ai"]

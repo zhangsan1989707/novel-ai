@@ -41,6 +41,9 @@ docker compose build --no-cache
 echo "🔄 重启容器..."
 docker compose up -d --force-recreate
 
+echo "🧩 启用 pgvector 扩展..."
+bash scripts/ensure-pgvector.sh docker-compose.yml
+
 echo "⏳ 等待服务启动..."
 sleep 10
 

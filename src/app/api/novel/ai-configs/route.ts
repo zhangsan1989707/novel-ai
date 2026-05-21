@@ -14,6 +14,9 @@ const createAIConfigSchema = z.object({
   modelId: z.string().min(1, '请输入模型 ID'),
   apiKey: z.string().min(1, '请输入 API Key'),
   apiEndpoint: z.string().optional(),
+  embeddingVendor: z.nativeEnum(AIVendor).optional(),
+  embeddingApiKey: z.string().optional(),
+  embeddingApiEndpoint: z.string().optional(),
   embeddingModelId: z.string().optional(),
   embeddingDimensions: z.number().int().positive().optional(),
   isDefault: z.boolean().default(false),
@@ -36,6 +39,7 @@ export async function GET() {
     const safeConfigs = configs.map((config) => ({
       ...config,
       apiKey: config.apiKey ? `${config.apiKey.slice(0, 4)}${'*'.repeat(Math.max(0, config.apiKey.length - 8))}${config.apiKey.slice(-4)}` : null,
+      embeddingApiKey: config.embeddingApiKey ? `${config.embeddingApiKey.slice(0, 4)}${'*'.repeat(Math.max(0, config.embeddingApiKey.length - 8))}${config.embeddingApiKey.slice(-4)}` : null,
     }))
 
     return NextResponse.json({

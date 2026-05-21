@@ -1,7 +1,7 @@
 import { getMinimumChapterWordCount } from '@/lib/ai/chapter-quality'
 import { PlotlineStatus } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { getRAGDocumentCount } from './rag-vector'
+import { getRAGDocumentCount, getRagRuntimeStatus } from './rag-vector'
 
 export type HealthSeverity = 'error' | 'warning' | 'info'
 export type HealthLevel = 'critical' | 'warning' | 'healthy'
@@ -47,6 +47,12 @@ export interface ProjectHealthInput {
     bootstrapQueued?: boolean
     ragQueued?: boolean
   }
+  ragRuntime?: {
+    inFlight: boolean
+    cooldownRemainingMs: number
+    embeddingFallbackActive: boolean
+    lastError?: string | null
+  }
 }
 
 export interface ProjectHealthReport {
@@ -76,6 +82,9 @@ export interface ProjectHealthReport {
   resolvedPlotlineCount: number
   researchRefCount: number
   ragDocumentCount: number
+  ragRebuildInFlight: boolean
+  ragRebuildCooldownRemainingMs: number
+  ragEmbeddingFallbackActive: boolean
   chapterSummaryCoverage: number
   volumeSummaryCoverage: number
   memoryCoverageScore: number
@@ -103,11 +112,12 @@ type HealthSummary = Omit<ProjectHealthReport, 'primaryAction' | 'recommendation
 function buildPrimaryAction(report: HealthSummary): string {
   if (!report.hasModel) return '先绑定 AI 模型'
   if (!report.hasBlueprint || !report.hasArcPlans || !report.hasStoryState) return '系统正在自动初始化'
+  if (report.ragRebuildInFlight) return 'RAG 索引正在后台重建'
   if (report.emptyCompletedChapters > 0) return '回看短章并重算投影'
   if (report.recentCommitFailures > 0) return '重放失败的章节提交'
   if (report.overduePlotlineCount > 0) return '回收过期伏笔'
   if (report.chapterSummaryCoverage < 80 && report.completedChapters >= 5) return '补齐章节摘要'
-  if (report.ragDocumentCount === 0 && (report.completedChapters > 0 || report.bookSummaryCount > 0)) return '系统正在自动重建 RAG 索引'
+  if (report.ragDocumentCount === 0 && (report.completedChapters > 0 || report.bookSummaryCount > 0)) return report.ragRebuildCooldownRemainingMs > 0 ? 'RAG 索引冷却中，稍后自动重建' : '系统正在自动重建 RAG 索引'
   if (report.wordCountComplianceRate < 80 && report.completedChapters > 0) return '提高章节字数门槛'
   if (report.strandScore < 45 && report.hasBlueprint && report.hasArcPlans) return '补强伏笔与摘要链路'
   return '继续生产'
@@ -143,6 +153,12 @@ function buildRecommendations(report: HealthSummary): string[] {
   if (report.ragDocumentCount === 0 && (report.completedChapters > 0 || report.chapterSummaryCount > 0 || report.volumeSummaryCount > 0 || report.bookSummaryCount > 0)) {
     recommendations.push('RAG 索引正在自动重建，完成后会恢复语义检索')
   }
+  if (report.ragRebuildInFlight) {
+    recommendations.push('RAG 索引正在后台重建，完成后会自动恢复语义检索')
+  }
+  if (report.ragEmbeddingFallbackActive) {
+    recommendations.push('RAG embedding 当前使用本地回退模式，建议补齐独立 embedding 配置')
+  }
 
   if (recommendations.length === 0) {
     recommendations.push('当前健康状态正常，可继续生产')
@@ -158,6 +174,12 @@ export function buildProjectHealthReport(input: ProjectHealthInput): ProjectHeal
   const hasStoryState = Boolean(input.storyState)
   const hasWorldState = Boolean(input.worldState)
   const hasFinalBoss = input.villains.some(v => v.isFinalBoss)
+  const ragRuntime = input.ragRuntime || {
+    inFlight: false,
+    cooldownRemainingMs: 0,
+    embeddingFallbackActive: false,
+    lastError: null,
+  }
 
   const completedChapters = input.chapters.filter(chapter => chapter.status === 'COMPLETED')
   const reviewingChapters = input.chapters.filter(chapter => chapter.status === 'REVIEWING')
@@ -286,6 +308,17 @@ export function buildProjectHealthReport(input: ProjectHealthInput): ProjectHeal
   if (input.ragDocumentCount === 0 && (completedChapters.length > 0 || input.chapterSummaryCount > 0 || input.volumeSummaryCount > 0 || input.bookSummaryCount > 0)) {
     issues.push({ severity: input.automationState?.ragQueued ? 'info' : 'warning', code: 'RAG_INDEX_MISSING', message: input.automationState?.ragQueued ? 'RAG 索引正在自动重建' : 'RAG 索引尚未建立或为空，语义检索会先触发重建' })
   }
+  if (input.ragRuntime?.inFlight) {
+    issues.push({ severity: 'info', code: 'RAG_REBUILD_RUNNING', message: 'RAG 索引正在后台重建' })
+  } else if (input.ragRuntime?.cooldownRemainingMs && input.ragRuntime.cooldownRemainingMs > 0) {
+    issues.push({ severity: 'info', code: 'RAG_REBUILD_COOLDOWN', message: `RAG 索引处于冷却中，约 ${Math.ceil(input.ragRuntime.cooldownRemainingMs / 1000)} 秒后可再次自动重建` })
+  }
+  if (input.ragRuntime?.embeddingFallbackActive) {
+    issues.push({ severity: 'warning', code: 'RAG_EMBEDDING_FALLBACK', message: 'RAG embedding 当前使用本地回退向量，语义质量会下降' })
+  }
+  if (input.ragRuntime?.lastError) {
+    issues.push({ severity: 'warning', code: 'RAG_REBUILD_LAST_ERROR', message: `RAG 最近一次重建失败：${input.ragRuntime.lastError}` })
+  }
   if (completedChapters.length >= 5 && chapterSummaryCoverage < 80) {
     issues.push({ severity: 'warning', code: 'CHAPTER_SUMMARY_COVERAGE_LOW', message: `章节摘要覆盖率仅 ${chapterSummaryCoverage}%` })
   }
@@ -323,6 +356,9 @@ export function buildProjectHealthReport(input: ProjectHealthInput): ProjectHeal
     resolvedPlotlineCount: input.resolvedPlotlineCount,
     researchRefCount: input.researchRefCount,
     ragDocumentCount: input.ragDocumentCount,
+    ragRebuildInFlight: ragRuntime.inFlight,
+    ragRebuildCooldownRemainingMs: ragRuntime.cooldownRemainingMs,
+    ragEmbeddingFallbackActive: ragRuntime.embeddingFallbackActive,
     chapterSummaryCoverage,
     volumeSummaryCoverage,
     memoryCoverageScore,
@@ -438,5 +474,6 @@ export async function loadProjectHealthReport(projectId: number): Promise<Projec
     resolvedPlotlineCount,
     researchRefCount,
     ragDocumentCount,
+    ragRuntime: getRagRuntimeStatus(projectId),
   })
 }

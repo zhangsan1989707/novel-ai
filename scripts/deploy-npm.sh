@@ -38,6 +38,9 @@ GIT_TERMINAL_PROMPT=0 git reset --hard origin/dev
 echo "🐳 启动 PostgreSQL 数据库..."
 docker compose -f docker-compose.db.yml up -d
 
+echo "🧩 启用 pgvector 扩展..."
+bash scripts/ensure-pgvector.sh docker-compose.db.yml
+
 echo "⏳ 等待数据库就绪..."
 sleep 10
 

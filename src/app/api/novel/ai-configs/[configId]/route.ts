@@ -14,6 +14,9 @@ const updateAIConfigSchema = z.object({
   modelId: z.string().min(1).optional(),
   apiKey: z.string().optional(), // 允许为空，表示不更新
   apiEndpoint: z.string().optional(),
+  embeddingVendor: z.nativeEnum(AIVendor).optional(),
+  embeddingApiKey: z.string().optional(),
+  embeddingApiEndpoint: z.string().optional(),
   embeddingModelId: z.string().optional(),
   embeddingDimensions: z.number().int().positive().optional(),
   isDefault: z.boolean().optional(),
@@ -56,6 +59,7 @@ export async function GET(
     const safeConfig = {
       ...config,
       apiKey: config.apiKey ? `${config.apiKey.slice(0, 4)}${'*'.repeat(Math.max(0, config.apiKey.length - 8))}${config.apiKey.slice(-4)}` : null,
+      embeddingApiKey: config.embeddingApiKey ? `${config.embeddingApiKey.slice(0, 4)}${'*'.repeat(Math.max(0, config.embeddingApiKey.length - 8))}${config.embeddingApiKey.slice(-4)}` : null,
     }
 
     return NextResponse.json({ success: true, data: safeConfig })

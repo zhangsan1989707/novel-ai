@@ -48,6 +48,14 @@ const DEFAULT_PRICING = {
       'MiniMax-Text-01': { input: 0.5, output: 1.5 }
     }
   },
+  [AIVendor.MIMO]: {
+    input: 1.0,
+    output: 2.0,
+    defaultModel: 'mimo-v2.5-pro',
+    models: {
+      'mimo-v2.5-pro': { input: 1.0, output: 2.0 }
+    }
+  },
   [AIVendor.VOLCENGINE]: { 
     input: 1.5, 
     output: 4.5, 

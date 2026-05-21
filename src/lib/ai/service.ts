@@ -41,13 +41,29 @@ export interface GenerateOptions {
  */
 export class AIService {
   private static attachEmbeddingConfig(config: AIConfig): AIConfig {
+    const embeddingVendor = this.resolveEmbeddingVendor(config.vendor, config.embeddingVendor)
+    const defaultEmbeddingConfig = this.getDefaultConfig(embeddingVendor)
     const embeddingDimensions = Number(
-      config.embeddingDimensions || process.env.AI_EMBEDDING_DIMENSIONS || 256
+      config.embeddingDimensions
+      || defaultEmbeddingConfig.embeddingDimensions
+      || process.env.AI_EMBEDDING_DIMENSIONS
+      || 256
     )
-    const embeddingModelId = this.resolveEmbeddingModelId(config.vendor, config.modelId)
+    const embeddingModelId = config.embeddingModelId
+      || defaultEmbeddingConfig.embeddingModelId
+      || this.resolveEmbeddingModelId(embeddingVendor, config.modelId)
+    const embeddingApiKey = config.embeddingApiKey
+      || defaultEmbeddingConfig.embeddingApiKey
+      || config.apiKey
+    const embeddingApiEndpoint = config.embeddingApiEndpoint
+      || defaultEmbeddingConfig.embeddingApiEndpoint
+      || defaultEmbeddingConfig.apiEndpoint
 
     return {
       ...config,
+      embeddingVendor,
+      embeddingApiKey,
+      embeddingApiEndpoint,
       embeddingModelId,
       embeddingDimensions: Number.isFinite(embeddingDimensions) && embeddingDimensions > 0
         ? embeddingDimensions
@@ -102,6 +118,9 @@ export class AIService {
           modelId: project.aiModelConfig.modelId,
           apiKey: project.aiModelConfig.apiKey || '',
           apiEndpoint: project.aiModelConfig.apiEndpoint || undefined,
+          embeddingVendor: project.aiModelConfig.embeddingVendor as AIVendor | undefined,
+          embeddingApiKey: project.aiModelConfig.embeddingApiKey || undefined,
+          embeddingApiEndpoint: project.aiModelConfig.embeddingApiEndpoint || undefined,
           embeddingModelId: project.aiModelConfig.embeddingModelId || undefined,
           embeddingDimensions: project.aiModelConfig.embeddingDimensions || undefined,
         }
@@ -120,6 +139,9 @@ export class AIService {
           modelId: dbConfig.modelId,
           apiKey: dbConfig.apiKey || '',
           apiEndpoint: dbConfig.apiEndpoint || undefined,
+          embeddingVendor: dbConfig.embeddingVendor as AIVendor | undefined,
+          embeddingApiKey: dbConfig.embeddingApiKey || undefined,
+          embeddingApiEndpoint: dbConfig.embeddingApiEndpoint || undefined,
           embeddingModelId: dbConfig.embeddingModelId || undefined,
           embeddingDimensions: dbConfig.embeddingDimensions || undefined,
         }
@@ -147,6 +169,9 @@ export class AIService {
           modelId: defaultConfig.modelId,
           apiKey: defaultConfig.apiKey || '',
           apiEndpoint: defaultConfig.apiEndpoint || undefined,
+          embeddingVendor: defaultConfig.embeddingVendor as AIVendor | undefined,
+          embeddingApiKey: defaultConfig.embeddingApiKey || undefined,
+          embeddingApiEndpoint: defaultConfig.embeddingApiEndpoint || undefined,
           embeddingModelId: defaultConfig.embeddingModelId || undefined,
           embeddingDimensions: defaultConfig.embeddingDimensions || undefined,
         }
@@ -202,17 +227,18 @@ export class AIService {
 
       if (project?.aiModelConfig) {
         const projectVendor = project.aiModelConfig.vendor as AIVendor
-        vendor = this.resolveEmbeddingVendor(projectVendor)
-          config = vendor === projectVendor
-          ? {
-              vendor,
-              modelId: project.aiModelConfig.modelId,
-              apiKey: project.aiModelConfig.apiKey || '',
-              apiEndpoint: project.aiModelConfig.apiEndpoint || undefined,
-              embeddingModelId: project.aiModelConfig.embeddingModelId || undefined,
-              embeddingDimensions: project.aiModelConfig.embeddingDimensions || undefined,
-            }
-          : this.getDefaultConfig(vendor)
+        vendor = this.resolveEmbeddingVendor(projectVendor, project.aiModelConfig.embeddingVendor as AIVendor | undefined)
+        config = {
+          vendor: projectVendor,
+          modelId: project.aiModelConfig.modelId,
+          apiKey: project.aiModelConfig.apiKey || '',
+          apiEndpoint: project.aiModelConfig.apiEndpoint || undefined,
+          embeddingVendor: project.aiModelConfig.embeddingVendor as AIVendor | undefined,
+          embeddingApiKey: project.aiModelConfig.embeddingApiKey || undefined,
+          embeddingApiEndpoint: project.aiModelConfig.embeddingApiEndpoint || undefined,
+          embeddingModelId: project.aiModelConfig.embeddingModelId || undefined,
+          embeddingDimensions: project.aiModelConfig.embeddingDimensions || undefined,
+        }
       }
     }
 
@@ -223,17 +249,18 @@ export class AIService {
 
       if (dbConfig) {
         const dbVendor = dbConfig.vendor as AIVendor
-        vendor = this.resolveEmbeddingVendor(dbVendor)
-        config = vendor === dbVendor
-          ? {
-              vendor,
-              modelId: dbConfig.modelId,
-              apiKey: dbConfig.apiKey || '',
-              apiEndpoint: dbConfig.apiEndpoint || undefined,
-              embeddingModelId: dbConfig.embeddingModelId || undefined,
-              embeddingDimensions: dbConfig.embeddingDimensions || undefined,
-            }
-          : this.getDefaultConfig(vendor)
+        vendor = this.resolveEmbeddingVendor(dbVendor, dbConfig.embeddingVendor as AIVendor | undefined)
+        config = {
+          vendor: dbVendor,
+          modelId: dbConfig.modelId,
+          apiKey: dbConfig.apiKey || '',
+          apiEndpoint: dbConfig.apiEndpoint || undefined,
+          embeddingVendor: dbConfig.embeddingVendor as AIVendor | undefined,
+          embeddingApiKey: dbConfig.embeddingApiKey || undefined,
+          embeddingApiEndpoint: dbConfig.embeddingApiEndpoint || undefined,
+          embeddingModelId: dbConfig.embeddingModelId || undefined,
+          embeddingDimensions: dbConfig.embeddingDimensions || undefined,
+        }
       }
     }
 
@@ -253,17 +280,18 @@ export class AIService {
 
       if (defaultConfig) {
         const defaultVendor = defaultConfig.vendor as AIVendor
-        vendor = this.resolveEmbeddingVendor(defaultVendor)
-        config = vendor === defaultVendor
-          ? {
-              vendor,
-              modelId: defaultConfig.modelId,
-              apiKey: defaultConfig.apiKey || '',
-              apiEndpoint: defaultConfig.apiEndpoint || undefined,
-              embeddingModelId: defaultConfig.embeddingModelId || undefined,
-              embeddingDimensions: defaultConfig.embeddingDimensions || undefined,
-            }
-          : this.getDefaultConfig(vendor)
+        vendor = this.resolveEmbeddingVendor(defaultVendor, defaultConfig.embeddingVendor as AIVendor | undefined)
+        config = {
+          vendor: defaultVendor,
+          modelId: defaultConfig.modelId,
+          apiKey: defaultConfig.apiKey || '',
+          apiEndpoint: defaultConfig.apiEndpoint || undefined,
+          embeddingVendor: defaultConfig.embeddingVendor as AIVendor | undefined,
+          embeddingApiKey: defaultConfig.embeddingApiKey || undefined,
+          embeddingApiEndpoint: defaultConfig.embeddingApiEndpoint || undefined,
+          embeddingModelId: defaultConfig.embeddingModelId || undefined,
+          embeddingDimensions: defaultConfig.embeddingDimensions || undefined,
+        }
       }
     }
 
@@ -273,32 +301,71 @@ export class AIService {
     }
 
     config = this.attachEmbeddingConfig(config)
+    const embeddingConfig = this.resolveEmbeddingProviderConfig(config)
 
-    if (!config.embeddingModelId) {
+    if (!embeddingConfig.embeddingModelId) {
       throw new Error(
-        `Embedding model is not configured for vendor ${config.vendor}. Set EMBEDDING_MODEL_ID or ${config.vendor.toUpperCase()}_EMBEDDING_MODEL_ID.`
+        `Embedding model is not configured for vendor ${embeddingConfig.vendor}. Set EMBEDDING_MODEL_ID or ${embeddingConfig.vendor.toUpperCase()}_EMBEDDING_MODEL_ID.`
       )
     }
 
     logger.info(
-      { vendor: config.vendor, modelId: config.embeddingModelId, projectId },
+      { vendor: embeddingConfig.vendor, modelId: embeddingConfig.embeddingModelId, projectId },
       'Created embedding AI provider'
     )
 
-    return getTraceableAIProvider(config.vendor, config, {
+    return getTraceableAIProvider(embeddingConfig.vendor, embeddingConfig, {
       userId,
       projectId,
       usageType: options?.usageType || 'RAG_EMBEDDING',
     })
   }
 
-  private static resolveEmbeddingVendor(vendor?: AIVendor): AIVendor {
+  private static resolveEmbeddingProviderConfig(config: AIConfig): AIConfig {
+    const embeddingVendor = this.resolveEmbeddingVendor(config.vendor, config.embeddingVendor)
+    const defaultEmbeddingConfig = this.getDefaultConfig(embeddingVendor)
+    const embeddingModelId = config.embeddingModelId
+      || defaultEmbeddingConfig.embeddingModelId
+      || this.resolveEmbeddingModelId(embeddingVendor, config.modelId)
+    const embeddingApiKey = config.embeddingApiKey
+      || defaultEmbeddingConfig.embeddingApiKey
+      || config.apiKey
+    const embeddingApiEndpoint = config.embeddingApiEndpoint
+      || defaultEmbeddingConfig.embeddingApiEndpoint
+      || defaultEmbeddingConfig.apiEndpoint
+    const embeddingDimensions = Number(
+      config.embeddingDimensions
+      || defaultEmbeddingConfig.embeddingDimensions
+      || process.env.AI_EMBEDDING_DIMENSIONS
+      || 256
+    )
+
+    return {
+      vendor: embeddingVendor,
+      modelId: embeddingModelId || defaultEmbeddingConfig.modelId,
+      apiKey: embeddingApiKey || '',
+      apiEndpoint: embeddingApiEndpoint,
+      embeddingVendor,
+      embeddingApiKey: embeddingApiKey || '',
+      embeddingApiEndpoint,
+      embeddingModelId: embeddingModelId || undefined,
+      embeddingDimensions: Number.isFinite(embeddingDimensions) && embeddingDimensions > 0
+        ? embeddingDimensions
+        : 256,
+    }
+  }
+
+  private static resolveEmbeddingVendor(vendor?: AIVendor, embeddingVendor?: AIVendor): AIVendor {
     const envVendor = process.env.EMBEDDING_VENDOR?.toUpperCase()
     if (envVendor && Object.values(AIVendor).includes(envVendor as AIVendor)) {
       return envVendor as AIVendor
     }
 
-    if (vendor && vendor !== AIVendor.ANTHROPIC) {
+    if (embeddingVendor) {
+      return embeddingVendor
+    }
+
+    if (vendor && vendor !== AIVendor.ANTHROPIC && vendor !== AIVendor.MIMO) {
       return vendor
     }
 
@@ -315,6 +382,9 @@ export class AIService {
           vendor: AIVendor.OPENAI,
           modelId: process.env.OPENAI_MODEL_ID || 'gpt-4o',
           apiKey: process.env.OPENAI_API_KEY || '',
+          embeddingVendor: AIVendor.OPENAI,
+          embeddingApiKey: process.env.OPENAI_EMBEDDING_API_KEY || process.env.EMBEDDING_API_KEY || process.env.OPENAI_API_KEY || '',
+          embeddingApiEndpoint: process.env.OPENAI_API_ENDPOINT || undefined,
           embeddingModelId: process.env.OPENAI_EMBEDDING_MODEL_ID || process.env.EMBEDDING_MODEL_ID || 'text-embedding-3-small',
           embeddingDimensions: Number(process.env.AI_EMBEDDING_DIMENSIONS || 256),
         }
@@ -329,8 +399,20 @@ export class AIService {
           vendor: AIVendor.ALIBABA,
           modelId: process.env.DASHSCOPE_MODEL_ID || 'qwen-max',
           apiKey: process.env.DASHSCOPE_API_KEY || '',
+          embeddingVendor: AIVendor.ALIBABA,
+          embeddingApiKey: process.env.ALIBABA_EMBEDDING_API_KEY || process.env.DASHSCOPE_EMBEDDING_API_KEY || process.env.EMBEDDING_API_KEY || process.env.DASHSCOPE_API_KEY || '',
+          embeddingApiEndpoint: process.env.ALIBABA_EMBEDDING_API_ENDPOINT || process.env.DASHSCOPE_EMBEDDING_API_ENDPOINT || undefined,
           embeddingModelId: process.env.ALIBABA_EMBEDDING_MODEL_ID || process.env.EMBEDDING_MODEL_ID,
           embeddingDimensions: Number(process.env.AI_EMBEDDING_DIMENSIONS || 256),
+        }
+      case AIVendor.MIMO:
+        return {
+          vendor: AIVendor.MIMO,
+          modelId: process.env.MIMO_MODEL_ID || 'mimo-v2.5-pro',
+          apiKey: process.env.MIMO_API_KEY || '',
+          apiEndpoint: process.env.MIMO_API_ENDPOINT || 'https://token-plan-cn.xiaomimimo.com/v1',
+          embeddingVendor: AIVendor.OPENAI,
+          embeddingApiKey: process.env.OPENAI_EMBEDDING_API_KEY || process.env.EMBEDDING_API_KEY || process.env.OPENAI_API_KEY || '',
         }
       case AIVendor.VOLCENGINE:
         return {
@@ -338,6 +420,9 @@ export class AIService {
           modelId: process.env.VOLCENGINE_MODEL_ID || 'ark-code-latest',
           apiKey: process.env.VOLCENGINE_API_KEY || '',
           apiEndpoint: process.env.VOLCENGINE_API_ENDPOINT || 'https://ark.cn-beijing.volces.com/api/coding/v3',
+          embeddingVendor: AIVendor.VOLCENGINE,
+          embeddingApiKey: process.env.VOLCENGINE_EMBEDDING_API_KEY || process.env.EMBEDDING_API_KEY || process.env.VOLCENGINE_API_KEY || '',
+          embeddingApiEndpoint: process.env.VOLCENGINE_EMBEDDING_API_ENDPOINT || undefined,
           embeddingModelId: process.env.VOLCENGINE_EMBEDDING_MODEL_ID || process.env.EMBEDDING_MODEL_ID,
           embeddingDimensions: Number(process.env.AI_EMBEDDING_DIMENSIONS || 256),
         }
@@ -347,6 +432,9 @@ export class AIService {
           modelId: process.env.ZHIPU_MODEL_ID || 'glm-4-0520',
           apiKey: process.env.ZHIPU_API_KEY || '',
           apiEndpoint: process.env.ZHIPU_API_ENDPOINT || 'https://open.bigmodel.cn/api/paas/v4',
+          embeddingVendor: AIVendor.ZHIPU,
+          embeddingApiKey: process.env.ZHIPU_EMBEDDING_API_KEY || process.env.EMBEDDING_API_KEY || process.env.ZHIPU_API_KEY || '',
+          embeddingApiEndpoint: process.env.ZHIPU_EMBEDDING_API_ENDPOINT || undefined,
           embeddingModelId: process.env.ZHIPU_EMBEDDING_MODEL_ID || process.env.EMBEDDING_MODEL_ID,
           embeddingDimensions: Number(process.env.AI_EMBEDDING_DIMENSIONS || 256),
         }
@@ -356,6 +444,9 @@ export class AIService {
           vendor: AIVendor.DEEPSEEK,
           modelId: process.env.DEEPSEEK_MODEL_ID || 'deepseek-chat',
           apiKey: process.env.DEEPSEEK_API_KEY || '',
+          embeddingVendor: AIVendor.DEEPSEEK,
+          embeddingApiKey: process.env.DEEPSEEK_EMBEDDING_API_KEY || process.env.EMBEDDING_API_KEY || process.env.DEEPSEEK_API_KEY || '',
+          embeddingApiEndpoint: process.env.DEEPSEEK_EMBEDDING_API_ENDPOINT || undefined,
           embeddingModelId: process.env.DEEPSEEK_EMBEDDING_MODEL_ID || process.env.EMBEDDING_MODEL_ID,
           embeddingDimensions: Number(process.env.AI_EMBEDDING_DIMENSIONS || 256),
         }

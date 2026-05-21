@@ -76,6 +76,14 @@ const MODEL_CAPABILITIES: Record<string, ModelCapability[]> = {
     { type: 'WRITER', strengths: ['中文优化', '网文熟悉'], weaknesses: ['英文内容一般'], recommendedFor: ['中文网文'] },
     { type: 'SUMMARIZER', strengths: ['中文理解好'], weaknesses: [], recommendedFor: ['中文摘要'] },
   ],
+  'mimo-v2.5-pro': [
+    { type: 'WRITER', strengths: ['长文生成稳定', '推理能力强'], weaknesses: ['生态较新'], recommendedFor: ['长篇写作', 'Agent 任务'] },
+    { type: 'PLANNER', strengths: ['结构规划清晰'], weaknesses: [], recommendedFor: ['大纲设计', '阶段规划'] },
+    { type: 'POLISHER', strengths: ['语义润色自然'], weaknesses: [], recommendedFor: ['内容润色'] },
+    { type: 'VALIDATOR', strengths: ['检查细致'], weaknesses: [], recommendedFor: ['质量校验'] },
+    { type: 'SUMMARIZER', strengths: ['压缩摘要能力稳定'], weaknesses: [], recommendedFor: ['章节摘要', '全书摘要'] },
+    { type: 'ANALYZER', strengths: ['分析能力强'], weaknesses: [], recommendedFor: ['拆解分析'] },
+  ],
 }
 
 const DEFAULT_CONFIG: RouteConfig = {
@@ -163,17 +171,19 @@ export async function selectModel(
     AIVendor.OPENAI,
     AIVendor.ANTHROPIC,
     AIVendor.ALIBABA,
+    AIVendor.MINIMAX,
+    AIVendor.MIMO,
     AIVendor.ZHIPU,
   ]
 
   // 根据不同 Agent 类型推荐不同模型
   const modelPriority: Record<string, AIVendor[]> = {
-    WRITER: [AIVendor.ANTHROPIC, AIVendor.DEEPSEEK, AIVendor.OPENAI],
-    PLANNER: [AIVendor.DEEPSEEK, AIVendor.OPENAI, AIVendor.ANTHROPIC],
-    POLISHER: [AIVendor.DEEPSEEK, AIVendor.OPENAI],
-    VALIDATOR: [AIVendor.ANTHROPIC, AIVendor.OPENAI, AIVendor.DEEPSEEK],
-    SUMMARIZER: [AIVendor.DEEPSEEK, AIVendor.ALIBABA, AIVendor.OPENAI],
-    ANALYZER: [AIVendor.ANTHROPIC, AIVendor.OPENAI, AIVendor.DEEPSEEK],
+    WRITER: [AIVendor.ANTHROPIC, AIVendor.DEEPSEEK, AIVendor.MIMO, AIVendor.OPENAI],
+    PLANNER: [AIVendor.DEEPSEEK, AIVendor.MIMO, AIVendor.OPENAI, AIVendor.ANTHROPIC],
+    POLISHER: [AIVendor.DEEPSEEK, AIVendor.MIMO, AIVendor.OPENAI],
+    VALIDATOR: [AIVendor.ANTHROPIC, AIVendor.OPENAI, AIVendor.DEEPSEEK, AIVendor.MIMO],
+    SUMMARIZER: [AIVendor.DEEPSEEK, AIVendor.MIMO, AIVendor.ALIBABA, AIVendor.OPENAI],
+    ANALYZER: [AIVendor.ANTHROPIC, AIVendor.OPENAI, AIVendor.DEEPSEEK, AIVendor.MIMO],
   }
 
   const priorityOrder = modelPriority[agentType] || vendors
@@ -283,6 +293,14 @@ function getRecommendedModels(
       VALIDATOR: ['abab6-chat'],
       SUMMARIZER: ['abab6-chat'],
       ANALYZER: ['abab6-chat'],
+    },
+    [AIVendor.MIMO]: {
+      WRITER: ['mimo-v2.5-pro'],
+      PLANNER: ['mimo-v2.5-pro'],
+      POLISHER: ['mimo-v2.5-pro'],
+      VALIDATOR: ['mimo-v2.5-pro'],
+      SUMMARIZER: ['mimo-v2.5-pro'],
+      ANALYZER: ['mimo-v2.5-pro'],
     },
     [AIVendor.VOLCENGINE]: {
       WRITER: ['doubao-pro-32k'],

@@ -58,6 +58,7 @@ interface RagDocumentRow {
   content: string
   metadata: Prisma.JsonValue
   embedding: Prisma.JsonValue | string | null
+  score?: number | string | null
 }
 
 const DEFAULT_CONFIG: VectorConfig = {
@@ -68,11 +69,27 @@ const DEFAULT_CONFIG: VectorConfig = {
 
 const VECTOR_DIMENSION = 256
 const EMBEDDING_CACHE_LIMIT = 2000
-const embeddingProviderCache = new Map<number, Promise<Awaited<ReturnType<typeof createEmbeddingProviderPromise>>>>()
-const embeddingVectorCache = new Map<string, number[]>()
+const RAG_REBUILD_COOLDOWN_MS = Number(process.env.RAG_REBUILD_COOLDOWN_MS || 3 * 60 * 1000)
+const EMBEDDING_PROVIDER_TTL_MS = Number(process.env.EMBEDDING_PROVIDER_TTL_MS || 10 * 60 * 1000)
+
+interface EmbeddingProviderCacheEntry {
+  promise: Promise<Awaited<ReturnType<typeof createEmbeddingProviderPromise>>>
+  createdAt: number
+}
+
+const embeddingProviderCache = new Map<number, EmbeddingProviderCacheEntry>()
+const embeddingVectorCache = new Map<string, { embedding: number[], timestamp: number }>()
 let embeddingFallbackWarned = false
 let ragDocumentsMissingWarned = false
 let ragEmbeddingStorageModePromise: Promise<'jsonb' | 'vector' | null> | null = null
+type RagRebuildState = {
+  inFlight: boolean
+  lastAttemptAt: number
+  lastSuccessAt: number | null
+  lastError: string | null
+}
+
+const ragRebuildState = new Map<number, RagRebuildState>()
 
 function isMissingRagDocumentsError(error: unknown): boolean {
   return (
@@ -87,6 +104,74 @@ function warnMissingRagDocumentsTable(projectId?: number) {
   if (!ragDocumentsMissingWarned) {
     logger.warn({ projectId }, 'rag_documents table is missing, fallback RAG operations to no-op')
     ragDocumentsMissingWarned = true
+  }
+}
+
+function getRagRebuildState(projectId: number): RagRebuildState {
+  let state = ragRebuildState.get(projectId)
+  if (!state) {
+    state = {
+      inFlight: false,
+      lastAttemptAt: 0,
+      lastSuccessAt: null,
+      lastError: null,
+    }
+    ragRebuildState.set(projectId, state)
+  }
+  return state
+}
+
+function canStartRagRebuild(projectId: number): { allowed: boolean; reason?: string } {
+  const state = getRagRebuildState(projectId)
+  if (state.inFlight) {
+    return { allowed: false, reason: 'rebuild_in_flight' }
+  }
+
+  const elapsed = Date.now() - state.lastAttemptAt
+  if (state.lastAttemptAt > 0 && elapsed < RAG_REBUILD_COOLDOWN_MS) {
+    return { allowed: false, reason: 'cooldown' }
+  }
+
+  return { allowed: true }
+}
+
+function markRagRebuildStarted(projectId: number) {
+  const state = getRagRebuildState(projectId)
+  state.inFlight = true
+  state.lastAttemptAt = Date.now()
+  state.lastError = null
+}
+
+function markRagRebuildFinished(projectId: number, error?: unknown) {
+  const state = getRagRebuildState(projectId)
+  state.inFlight = false
+  if (error) {
+    state.lastError = error instanceof Error ? error.message : String(error)
+    return
+  }
+  state.lastSuccessAt = Date.now()
+  state.lastError = null
+}
+
+export function getRagRuntimeStatus(projectId: number): {
+  inFlight: boolean
+  cooldownRemainingMs: number
+  lastAttemptAt: number | null
+  lastSuccessAt: number | null
+  lastError: string | null
+  embeddingFallbackActive: boolean
+} {
+  const state = getRagRebuildState(projectId)
+  const cooldownRemainingMs = state.lastAttemptAt > 0
+    ? Math.max(0, RAG_REBUILD_COOLDOWN_MS - (Date.now() - state.lastAttemptAt))
+    : 0
+  return {
+    inFlight: state.inFlight,
+    cooldownRemainingMs,
+    lastAttemptAt: state.lastAttemptAt || null,
+    lastSuccessAt: state.lastSuccessAt,
+    lastError: state.lastError,
+    embeddingFallbackActive: embeddingFallbackWarned,
   }
 }
 
@@ -276,7 +361,9 @@ function serializeEmbeddingVector(embedding: number[]): string {
 }
 
 function getEmbeddingCacheKey(projectId: number, text: string): string {
-  return `${projectId}:${text.slice(0, 512)}:${text.length}`
+  const crypto = require('crypto')
+  const hash = crypto.createHash('sha256').update(text).digest('hex')
+  return `${projectId}:${hash}`
 }
 
 async function createEmbeddingProviderPromise(projectId: number) {
@@ -287,10 +374,23 @@ async function createEmbeddingProviderPromise(projectId: number) {
 }
 
 async function getEmbeddingProvider(projectId: number) {
-  if (!embeddingProviderCache.has(projectId)) {
-    embeddingProviderCache.set(projectId, createEmbeddingProviderPromise(projectId))
+  const now = Date.now()
+  const cached = embeddingProviderCache.get(projectId)
+  
+  if (cached && now - cached.createdAt < EMBEDDING_PROVIDER_TTL_MS) {
+    return cached.promise
   }
-  return embeddingProviderCache.get(projectId)!
+
+  const promise = createEmbeddingProviderPromise(projectId)
+  embeddingProviderCache.set(projectId, { promise, createdAt: now })
+  
+  try {
+    await promise
+  } catch {
+    embeddingProviderCache.delete(projectId)
+  }
+  
+  return promise
 }
 
 async function getRagEmbeddingStorageMode(): Promise<'jsonb' | 'vector' | null> {
@@ -322,6 +422,11 @@ function toStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.map(item => String(item)).filter(Boolean) : []
 }
 
+type RagDbClient = {
+  $executeRaw: typeof prisma.$executeRaw
+  $queryRaw: typeof prisma.$queryRaw
+}
+
 async function upsertRagDocuments(
   docs: Array<{
     projectId: number
@@ -334,7 +439,8 @@ async function upsertRagDocuments(
     metadata?: Record<string, unknown>
     embedding: number[]
     embeddingModel?: string
-  }>
+  }>,
+  db: RagDbClient = prisma
 ): Promise<void> {
   if (!(await hasRagDocumentsTable())) {
     return
@@ -344,7 +450,7 @@ async function upsertRagDocuments(
     const storageMode = await getRagEmbeddingStorageMode()
     for (const doc of docs) {
       if (storageMode === 'vector') {
-        await prisma.$executeRaw`
+        await db.$executeRaw`
           INSERT INTO rag_documents (
             id,
             project_id,
@@ -387,7 +493,7 @@ async function upsertRagDocuments(
         continue
       }
 
-      await prisma.$executeRaw`
+      await db.$executeRaw`
         INSERT INTO rag_documents (
           id,
           project_id,
@@ -437,13 +543,13 @@ async function upsertRagDocuments(
   }
 }
 
-async function deleteRagDocumentsByProject(projectId: number): Promise<void> {
+async function deleteRagDocumentsByProject(projectId: number, db: RagDbClient = prisma): Promise<void> {
   if (!(await hasRagDocumentsTable())) {
     return
   }
 
   try {
-    await prisma.$executeRaw`
+    await db.$executeRaw`
       DELETE FROM rag_documents
       WHERE project_id = ${projectId}
     `
@@ -456,13 +562,13 @@ async function deleteRagDocumentsByProject(projectId: number): Promise<void> {
   }
 }
 
-async function countRagDocuments(projectId: number): Promise<number> {
+async function countRagDocuments(projectId: number, db: RagDbClient = prisma): Promise<number> {
   if (!(await hasRagDocumentsTable())) {
     return 0
   }  
 
   try {
-    const rows = await prisma.$queryRaw<Array<{ count: bigint }>>`
+    const rows = await db.$queryRaw<Array<{ count: bigint }>>`
       SELECT COUNT(*)::bigint AS count
       FROM rag_documents
       WHERE project_id = ${projectId}
@@ -492,7 +598,7 @@ async function generateEmbedding(
   const cacheKey = getEmbeddingCacheKey(projectId, normalizedText)
   const cached = embeddingVectorCache.get(cacheKey)
   if (cached) {
-    return cached.slice()
+    return cached.embedding.slice()
   }
 
   try {
@@ -507,11 +613,18 @@ async function generateEmbedding(
       user: projectId > 0 ? String(projectId) : undefined,
     })
     const normalizedEmbedding = normalizeEmbeddingDimensions(embedding, VECTOR_DIMENSION)
-    embeddingVectorCache.set(cacheKey, normalizedEmbedding)
+    embeddingVectorCache.set(cacheKey, { embedding: normalizedEmbedding, timestamp: Date.now() })
     if (embeddingVectorCache.size > EMBEDDING_CACHE_LIMIT) {
-      const firstKey = embeddingVectorCache.keys().next().value
-      if (firstKey) {
-        embeddingVectorCache.delete(firstKey)
+      let oldestKey: string | null = null
+      let oldestTimestamp = Date.now()
+      for (const [key, entry] of embeddingVectorCache) {
+        if (entry.timestamp < oldestTimestamp) {
+          oldestTimestamp = entry.timestamp
+          oldestKey = key
+        }
+      }
+      if (oldestKey) {
+        embeddingVectorCache.delete(oldestKey)
       }
     }
     return normalizedEmbedding.slice()
@@ -524,7 +637,7 @@ async function generateEmbedding(
       )
     }
     const fallbackEmbedding = buildVector(normalizedText, VECTOR_DIMENSION)
-    embeddingVectorCache.set(cacheKey, fallbackEmbedding)
+    embeddingVectorCache.set(cacheKey, { embedding: fallbackEmbedding, timestamp: Date.now() })
     return fallbackEmbedding.slice()
   }
 }
@@ -629,25 +742,51 @@ async function searchIndexedRagDocuments(
 
   let rows: RagDocumentRow[]
   try {
-    rows = await prisma.$queryRaw<RagDocumentRow[]>(Prisma.sql`
-      SELECT
-        id,
-        project_id,
-        source_type,
-        source_id,
-        chapter_no,
-        chunk_no,
-        title,
-        content,
-        metadata,
-        embedding::text AS embedding
-      FROM rag_documents
-      WHERE project_id = ${projectId}
-        ${typeClause}
-        ${chapterClause}
-        ${tagClause}
-        ${chapterLimitClause}
-    `)
+    const storageMode = await getRagEmbeddingStorageMode()
+    if (storageMode === 'vector') {
+      rows = await prisma.$queryRaw<RagDocumentRow[]>(Prisma.sql`
+        SELECT
+          id,
+          project_id,
+          source_type,
+          source_id,
+          chapter_no,
+          chunk_no,
+          title,
+          content,
+          metadata,
+          embedding::text AS embedding,
+          1 - (embedding <=> ${serializeEmbeddingVector(queryEmbedding)}::vector) AS score
+        FROM rag_documents
+        WHERE project_id = ${projectId}
+          ${typeClause}
+          ${chapterClause}
+          ${tagClause}
+          ${chapterLimitClause}
+        ORDER BY embedding <=> ${serializeEmbeddingVector(queryEmbedding)}::vector ASC
+        LIMIT ${topK}
+      `)
+    } else {
+      rows = await prisma.$queryRaw<RagDocumentRow[]>(Prisma.sql`
+        SELECT
+          id,
+          project_id,
+          source_type,
+          source_id,
+          chapter_no,
+          chunk_no,
+          title,
+          content,
+          metadata,
+          embedding::text AS embedding
+        FROM rag_documents
+        WHERE project_id = ${projectId}
+          ${typeClause}
+          ${chapterClause}
+          ${tagClause}
+          ${chapterLimitClause}
+      `)
+    }
   } catch (error) {
     if (isMissingRagDocumentsError(error)) {
       warnMissingRagDocumentsTable(projectId)
@@ -659,14 +798,18 @@ async function searchIndexedRagDocuments(
   return rows
     .map(row => {
       const storedEmbedding = parseStoredEmbedding(row.embedding)
-      const score = cosineSimilarity(queryEmbedding, storedEmbedding)
+      const score = typeof row.score === 'number'
+        ? row.score
+        : typeof row.score === 'string'
+          ? Number(row.score) || cosineSimilarity(queryEmbedding, storedEmbedding)
+          : cosineSimilarity(queryEmbedding, storedEmbedding)
       const metadata = row.metadata && typeof row.metadata === 'object' ? row.metadata as Record<string, unknown> : {}
       const chunkType = (metadata.type as ChunkMetadata['type']) || (row.source_type === 'chapter' ? 'plot' : 'setting')
       const importance = Number(metadata.importance ?? 1)
       const chunk: SemanticChunk = {
         id: row.id,
         content: row.content,
-        embedding: queryEmbedding,
+        embedding: storedEmbedding,
         metadata: {
           projectId: row.project_id,
           chapterNo: row.chapter_no,
@@ -792,245 +935,265 @@ async function indexChapterSemanticChunks(
 }
 
 export async function rebuildProjectRAGIndex(projectId: number): Promise<{ indexedCount: number; rebuiltAt: Date }> {
-  const [
-    chapters,
-    chapterSummaries,
-    volumeSummaries,
-    bookSummary,
-    characters,
-    plotlines,
-    researchRefs,
-  ] = await Promise.all([
-    prisma.novelChapter.findMany({
-      where: { projectId, content: { not: null } },
-      select: { chapterNumber: true, title: true, content: true },
-      orderBy: { chapterNumber: 'asc' },
-    }),
-    prisma.chapterSummary.findMany({
-      where: { projectId },
-      select: { chapterNo: true, summary: true, keyEvents: true, emotionalTone: true, plantedPlotlines: true, resolvedPlotlines: true },
-      orderBy: { chapterNo: 'asc' },
-    }),
-    prisma.volumeSummary.findMany({
-      where: { projectId },
-      select: { volumeNumber: true, summary: true, keyEvents: true, plantedPlotlines: true, resolvedPlotlines: true },
-      orderBy: { volumeNumber: 'asc' },
-    }),
-    prisma.bookSummary.findUnique({
-      where: { projectId },
-    }),
-    prisma.character.findMany({
-      where: { projectId },
-      select: { name: true, role: true, appearance: true, personality: true, background: true, aliases: true, catchphrases: true, currentState: true, lastUpdated: true },
-    }),
-    prisma.plotline.findMany({
-      where: { projectId },
-      select: { id: true, description: true, status: true, plantedAt: true, resolvedAt: true, plannedAt: true },
-      orderBy: { plantedAt: 'asc' },
-    }),
-    prisma.researchRef.findMany({
-      where: { projectId },
-      select: { id: true, topic: true, summary: true, keyFacts: true, creativeMaterials: true },
-      orderBy: { createdAt: 'desc' },
-    }),
-  ])
-
-  const docs: Array<Parameters<typeof upsertRagDocuments>[0][number]> = []
-
-  for (const chapter of chapters) {
-    const chapterText = chapter.content || ''
-    const chunks = await semanticChunking(chapterText, { chunkSize: 1200, overlap: 120, splitBy: 'paragraph' })
-    for (const [index, chunk] of chunks.entries()) {
-      docs.push({
-        projectId,
-        sourceType: 'chapter',
-        sourceId: `chapter:${chapter.chapterNumber}`,
-        chapterNo: chapter.chapterNumber,
-        chunkNo: index,
-        title: index === 0 ? chapter.title : null,
-        content: chunk.text,
-        metadata: {
-          type: deriveChunkType(chunk.text),
-          importance: index === 0 ? 1 : 0.8,
-        },
-        embedding: await generateEmbedding(buildDocumentText(chapter.title, chunk.text)),
-      })
+  const guard = canStartRagRebuild(projectId)
+  if (!guard.allowed) {
+    logger.info(
+      { projectId, reason: guard.reason },
+      'Skip RAG rebuild because another rebuild is active or in cooldown'
+    )
+    return {
+      indexedCount: await countRagDocuments(projectId),
+      rebuiltAt: new Date(),
     }
   }
 
-  for (const summary of chapterSummaries) {
-    const keyEvents = toStringArray(summary.keyEvents)
-    const plantedPlotlines = toStringArray(summary.plantedPlotlines)
-    const resolvedPlotlines = toStringArray(summary.resolvedPlotlines)
-    const content = [
-      `第${summary.chapterNo}章摘要：${summary.summary}`,
-      keyEvents.length > 0 ? `关键事件：${keyEvents.join('；')}` : '',
-      summary.emotionalTone ? `情绪：${summary.emotionalTone}` : '',
-      plantedPlotlines.length > 0 ? `埋设伏笔：${plantedPlotlines.join('；')}` : '',
-      resolvedPlotlines.length > 0 ? `回收伏笔：${resolvedPlotlines.join('；')}` : '',
-    ].filter(Boolean).join('\n')
+  markRagRebuildStarted(projectId)
+  try {
+    const [
+      chapters,
+      chapterSummaries,
+      volumeSummaries,
+      bookSummary,
+      characters,
+      plotlines,
+      researchRefs,
+    ] = await Promise.all([
+      prisma.novelChapter.findMany({
+        where: { projectId, content: { not: null } },
+        select: { chapterNumber: true, title: true, content: true },
+        orderBy: { chapterNumber: 'asc' },
+      }),
+      prisma.chapterSummary.findMany({
+        where: { projectId },
+        select: { chapterNo: true, summary: true, keyEvents: true, emotionalTone: true, plantedPlotlines: true, resolvedPlotlines: true },
+        orderBy: { chapterNo: 'asc' },
+      }),
+      prisma.volumeSummary.findMany({
+        where: { projectId },
+        select: { volumeNumber: true, summary: true, keyEvents: true, plantedPlotlines: true, resolvedPlotlines: true },
+        orderBy: { volumeNumber: 'asc' },
+      }),
+      prisma.bookSummary.findUnique({
+        where: { projectId },
+      }),
+      prisma.character.findMany({
+        where: { projectId },
+        select: { name: true, role: true, appearance: true, personality: true, background: true, aliases: true, catchphrases: true, currentState: true, lastUpdated: true },
+      }),
+      prisma.plotline.findMany({
+        where: { projectId },
+        select: { id: true, description: true, status: true, plantedAt: true, resolvedAt: true, plannedAt: true },
+        orderBy: { plantedAt: 'asc' },
+      }),
+      prisma.researchRef.findMany({
+        where: { projectId },
+        select: { id: true, topic: true, summary: true, keyFacts: true, creativeMaterials: true },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ])
 
-    docs.push({
-      projectId,
-      sourceType: 'chapter_summary',
-      sourceId: `chapter_summary:${summary.chapterNo}`,
-      chapterNo: summary.chapterNo,
-      chunkNo: 0,
-      title: `第${summary.chapterNo}章摘要`,
-      content,
-      metadata: { type: 'plot', importance: 1, source: 'chapter_summary' },
-      embedding: await generateEmbedding(content),
-    })
-  }
+    const docs: Array<Parameters<typeof upsertRagDocuments>[0][number]> = []
 
-  for (const volume of volumeSummaries) {
-    const keyEvents = toStringArray(volume.keyEvents)
-    const plantedPlotlines = toStringArray(volume.plantedPlotlines)
-    const resolvedPlotlines = toStringArray(volume.resolvedPlotlines)
-    const content = [
-      `第${volume.volumeNumber}卷摘要：${volume.summary}`,
-      keyEvents.length > 0 ? `关键事件：${keyEvents.join('；')}` : '',
-      plantedPlotlines.length > 0 ? `埋设伏笔：${plantedPlotlines.join('；')}` : '',
-      resolvedPlotlines.length > 0 ? `回收伏笔：${resolvedPlotlines.join('；')}` : '',
-    ].filter(Boolean).join('\n')
+    for (const chapter of chapters) {
+      const chapterText = chapter.content || ''
+      const chunks = await semanticChunking(chapterText, { chunkSize: 1200, overlap: 120, splitBy: 'paragraph' })
+      for (const [index, chunk] of chunks.entries()) {
+        docs.push({
+          projectId,
+          sourceType: 'chapter',
+          sourceId: `chapter:${chapter.chapterNumber}`,
+          chapterNo: chapter.chapterNumber,
+          chunkNo: index,
+          title: index === 0 ? chapter.title : null,
+          content: chunk.text,
+          metadata: {
+            type: deriveChunkType(chunk.text),
+            importance: index === 0 ? 1 : 0.8,
+          },
+          embedding: await generateEmbedding(buildDocumentText(chapter.title, chunk.text)),
+        })
+      }
+    }
 
-    docs.push({
-      projectId,
-      sourceType: 'volume_summary',
-      sourceId: `volume_summary:${volume.volumeNumber}`,
-      chapterNo: volume.volumeNumber * 1000,
-      chunkNo: 0,
-      title: `第${volume.volumeNumber}卷摘要`,
-      content,
-      metadata: { type: 'plot', importance: 0.95, source: 'volume_summary' },
-      embedding: await generateEmbedding(content),
-    })
-  }
+    for (const summary of chapterSummaries) {
+      const keyEvents = toStringArray(summary.keyEvents)
+      const plantedPlotlines = toStringArray(summary.plantedPlotlines)
+      const resolvedPlotlines = toStringArray(summary.resolvedPlotlines)
+      const content = [
+        `第${summary.chapterNo}章摘要：${summary.summary}`,
+        keyEvents.length > 0 ? `关键事件：${keyEvents.join('；')}` : '',
+        summary.emotionalTone ? `情绪：${summary.emotionalTone}` : '',
+        plantedPlotlines.length > 0 ? `埋设伏笔：${plantedPlotlines.join('；')}` : '',
+        resolvedPlotlines.length > 0 ? `回收伏笔：${resolvedPlotlines.join('；')}` : '',
+      ].filter(Boolean).join('\n')
 
-  if (bookSummary) {
-    const characterArcs = Array.isArray(bookSummary.characterArcs)
-      ? (bookSummary.characterArcs as Array<Record<string, unknown> | null>)
-      : []
-    const characterArcLines = characterArcs
-      .map(item => {
-        const record = item || {}
-        const name = String(record.name || record.characterId || '未知角色')
-        const description = String(record.arcDescription || '')
-        return description ? `${name}:${description}` : name
+      docs.push({
+        projectId,
+        sourceType: 'chapter_summary',
+        sourceId: `chapter_summary:${summary.chapterNo}`,
+        chapterNo: summary.chapterNo,
+        chunkNo: 0,
+        title: `第${summary.chapterNo}章摘要`,
+        content,
+        metadata: { type: 'plot', importance: 1, source: 'chapter_summary' },
+        embedding: await generateEmbedding(content),
       })
-      .filter(Boolean)
-    const content = [
-      `全书摘要：${bookSummary.summary}`,
-      `主线：${bookSummary.mainPlot}`,
-      bookSummary.thematicElements.length > 0 ? `主题：${bookSummary.thematicElements.join('；')}` : '',
-      bookSummary.subPlots.length > 0 ? `副线：${bookSummary.subPlots.join('；')}` : '',
-      characterArcLines.length > 0 ? `人物弧线：${characterArcLines.join('；')}` : '',
-    ].filter(Boolean).join('\n')
+    }
 
-    docs.push({
-      projectId,
-      sourceType: 'book_summary',
-      sourceId: 'book_summary',
-      chapterNo: 0,
-      chunkNo: 0,
-      title: '全书摘要',
-      content,
-      metadata: { type: 'plot', importance: 1, source: 'book_summary' },
-      embedding: await generateEmbedding(content),
+    for (const volume of volumeSummaries) {
+      const keyEvents = toStringArray(volume.keyEvents)
+      const plantedPlotlines = toStringArray(volume.plantedPlotlines)
+      const resolvedPlotlines = toStringArray(volume.resolvedPlotlines)
+      const content = [
+        `第${volume.volumeNumber}卷摘要：${volume.summary}`,
+        keyEvents.length > 0 ? `关键事件：${keyEvents.join('；')}` : '',
+        plantedPlotlines.length > 0 ? `埋设伏笔：${plantedPlotlines.join('；')}` : '',
+        resolvedPlotlines.length > 0 ? `回收伏笔：${resolvedPlotlines.join('；')}` : '',
+      ].filter(Boolean).join('\n')
+
+      docs.push({
+        projectId,
+        sourceType: 'volume_summary',
+        sourceId: `volume_summary:${volume.volumeNumber}`,
+        chapterNo: volume.volumeNumber * 1000,
+        chunkNo: 0,
+        title: `第${volume.volumeNumber}卷摘要`,
+        content,
+        metadata: { type: 'plot', importance: 0.95, source: 'volume_summary' },
+        embedding: await generateEmbedding(content),
+      })
+    }
+
+    if (bookSummary) {
+      const characterArcs = Array.isArray(bookSummary.characterArcs)
+        ? (bookSummary.characterArcs as Array<Record<string, unknown> | null>)
+        : []
+      const characterArcLines = characterArcs
+        .map(item => {
+          const record = item || {}
+          const name = String(record.name || record.characterId || '未知角色')
+          const description = String(record.arcDescription || '')
+          return description ? `${name}:${description}` : name
+        })
+        .filter(Boolean)
+      const content = [
+        `全书摘要：${bookSummary.summary}`,
+        `主线：${bookSummary.mainPlot}`,
+        bookSummary.thematicElements.length > 0 ? `主题：${bookSummary.thematicElements.join('；')}` : '',
+        bookSummary.subPlots.length > 0 ? `副线：${bookSummary.subPlots.join('；')}` : '',
+        characterArcLines.length > 0 ? `人物弧线：${characterArcLines.join('；')}` : '',
+      ].filter(Boolean).join('\n')
+
+      docs.push({
+        projectId,
+        sourceType: 'book_summary',
+        sourceId: 'book_summary',
+        chapterNo: 0,
+        chunkNo: 0,
+        title: '全书摘要',
+        content,
+        metadata: { type: 'plot', importance: 1, source: 'book_summary' },
+        embedding: await generateEmbedding(content),
+      })
+    }
+
+    for (const character of characters) {
+      const aliases = toStringArray(character.aliases)
+      const catchphrases = toStringArray(character.catchphrases)
+      const content = [
+        `角色：${character.name}`,
+        `角色定位：${character.role}`,
+        character.appearance ? `外貌：${character.appearance}` : '',
+        character.personality ? `性格：${character.personality}` : '',
+        character.background ? `背景：${character.background}` : '',
+        aliases.length > 0 ? `别名：${aliases.join('；')}` : '',
+        catchphrases.length > 0 ? `口头禅：${catchphrases.join('；')}` : '',
+        character.currentState ? `状态：${JSON.stringify(character.currentState)}` : '',
+        character.lastUpdated ? `最近更新：第${character.lastUpdated}章` : '',
+      ].filter(Boolean).join('\n')
+
+      docs.push({
+        projectId,
+        sourceType: 'character',
+        sourceId: `character:${character.name}`,
+        chapterNo: character.lastUpdated || 0,
+        chunkNo: 0,
+        title: character.name,
+        content,
+        metadata: {
+          type: 'character',
+          characters: [character.name],
+          importance: character.role === CharacterRole.PROTAGONIST ? 1 : 0.8,
+          source: 'character',
+        },
+        embedding: await generateEmbedding(content),
+      })
+    }
+
+    for (const plotline of plotlines) {
+      const content = [
+        `伏笔/剧情线：${plotline.description}`,
+        plotline.status ? `状态：${plotline.status}` : '',
+        plotline.plannedAt ? `计划回收：第${plotline.plannedAt}章` : '',
+        plotline.resolvedAt ? `回收章节：第${plotline.resolvedAt}章` : '',
+        `埋设章节：第${plotline.plantedAt}章`,
+      ].filter(Boolean).join('\n')
+
+      docs.push({
+        projectId,
+        sourceType: 'plotline',
+        sourceId: `plotline:${plotline.id}`,
+        chapterNo: plotline.plantedAt,
+        chunkNo: 0,
+        title: plotline.description,
+        content,
+        metadata: {
+          type: 'plot',
+          importance: plotline.status === PlotlineStatus.RESOLVED ? 0.7 : 1,
+          tags: [plotline.status],
+          source: 'plotline',
+        },
+        embedding: await generateEmbedding(content),
+      })
+    }
+
+    for (const ref of researchRefs) {
+      const keyFacts = toStringArray(ref.keyFacts)
+      const creativeMaterials = toStringArray(ref.creativeMaterials)
+      const content = [
+        `研究主题：${ref.topic}`,
+        ref.summary,
+        keyFacts.length > 0 ? `关键事实：${keyFacts.join('；')}` : '',
+        creativeMaterials.length > 0 ? `创作素材：${creativeMaterials.join('；')}` : '',
+      ].filter(Boolean).join('\n')
+
+      docs.push({
+        projectId,
+        sourceType: 'research',
+        sourceId: `research:${ref.id}`,
+        chapterNo: 0,
+        chunkNo: 0,
+        title: ref.topic,
+        content,
+        metadata: {
+          type: 'setting',
+          importance: 0.7,
+          source: 'research',
+        },
+        embedding: await generateEmbedding(content),
+      })
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await deleteRagDocumentsByProject(projectId, tx)
+      await upsertRagDocuments(docs, tx)
     })
+    markRagRebuildFinished(projectId)
+    return { indexedCount: docs.length, rebuiltAt: new Date() }
+  } catch (error) {
+    markRagRebuildFinished(projectId, error)
+    throw error
   }
-
-  for (const character of characters) {
-    const aliases = toStringArray(character.aliases)
-    const catchphrases = toStringArray(character.catchphrases)
-    const content = [
-      `角色：${character.name}`,
-      `角色定位：${character.role}`,
-      character.appearance ? `外貌：${character.appearance}` : '',
-      character.personality ? `性格：${character.personality}` : '',
-      character.background ? `背景：${character.background}` : '',
-      aliases.length > 0 ? `别名：${aliases.join('；')}` : '',
-      catchphrases.length > 0 ? `口头禅：${catchphrases.join('；')}` : '',
-      character.currentState ? `状态：${JSON.stringify(character.currentState)}` : '',
-      character.lastUpdated ? `最近更新：第${character.lastUpdated}章` : '',
-    ].filter(Boolean).join('\n')
-
-    docs.push({
-      projectId,
-      sourceType: 'character',
-      sourceId: `character:${character.name}`,
-      chapterNo: character.lastUpdated || 0,
-      chunkNo: 0,
-      title: character.name,
-      content,
-      metadata: {
-        type: 'character',
-        characters: [character.name],
-        importance: character.role === CharacterRole.PROTAGONIST ? 1 : 0.8,
-        source: 'character',
-      },
-      embedding: await generateEmbedding(content),
-    })
-  }
-
-  for (const plotline of plotlines) {
-    const content = [
-      `伏笔/剧情线：${plotline.description}`,
-      plotline.status ? `状态：${plotline.status}` : '',
-      plotline.plannedAt ? `计划回收：第${plotline.plannedAt}章` : '',
-      plotline.resolvedAt ? `回收章节：第${plotline.resolvedAt}章` : '',
-      `埋设章节：第${plotline.plantedAt}章`,
-    ].filter(Boolean).join('\n')
-
-    docs.push({
-      projectId,
-      sourceType: 'plotline',
-      sourceId: `plotline:${plotline.id}`,
-      chapterNo: plotline.plantedAt,
-      chunkNo: 0,
-      title: plotline.description,
-      content,
-      metadata: {
-        type: 'plot',
-        importance: plotline.status === PlotlineStatus.RESOLVED ? 0.7 : 1,
-        tags: [plotline.status],
-        source: 'plotline',
-      },
-      embedding: await generateEmbedding(content),
-    })
-  }
-
-  for (const ref of researchRefs) {
-    const keyFacts = toStringArray(ref.keyFacts)
-    const creativeMaterials = toStringArray(ref.creativeMaterials)
-    const content = [
-      `研究主题：${ref.topic}`,
-      ref.summary,
-      keyFacts.length > 0 ? `关键事实：${keyFacts.join('；')}` : '',
-      creativeMaterials.length > 0 ? `创作素材：${creativeMaterials.join('；')}` : '',
-    ].filter(Boolean).join('\n')
-
-    docs.push({
-      projectId,
-      sourceType: 'research',
-      sourceId: `research:${ref.id}`,
-      chapterNo: 0,
-      chunkNo: 0,
-      title: ref.topic,
-      content,
-      metadata: {
-        type: 'setting',
-        importance: 0.7,
-        source: 'research',
-      },
-      embedding: await generateEmbedding(content),
-    })
-  }
-
-  await deleteRagDocumentsByProject(projectId)
-  await upsertRagDocuments(docs)
-
-  return { indexedCount: docs.length, rebuiltAt: new Date() }
 }
 
 /**
@@ -1056,7 +1219,20 @@ export async function semanticSearch(
   })
 
   if (candidates.length === 0) {
-    await rebuildProjectRAGIndex(projectId)
+    const rebuildGuard = canStartRagRebuild(projectId)
+    if (rebuildGuard.allowed) {
+      try {
+        await rebuildProjectRAGIndex(projectId)
+        logger.info({ projectId }, 'RAG index rebuilt after empty search result')
+      } catch (error) {
+        logger.warn({ error, projectId }, 'RAG rebuild failed after empty search result')
+      }
+    } else {
+      logger.info(
+        { projectId, reason: rebuildGuard.reason },
+        'Skip RAG rebuild trigger after empty search result'
+      )
+    }
     candidates = await searchIndexedRagDocuments(projectId, queryEmbedding, {
       topK,
       filter,

@@ -33,6 +33,12 @@ vi.mock('@/lib/ai/providers', () => ({
     setConfig: vi.fn(),
     validateConfig: vi.fn().mockReturnValue(true),
   })),
+  MiMoProvider: vi.fn().mockImplementation(() => ({
+    name: 'Xiaomi MiMo',
+    vendor: AIVendor.MIMO,
+    setConfig: vi.fn(),
+    validateConfig: vi.fn().mockReturnValue(true),
+  })),
   VolcEngineProvider: vi.fn().mockImplementation(() => ({
     name: 'VolcEngine',
     vendor: AIVendor.VOLCENGINE,
@@ -83,6 +89,7 @@ describe('AI Provider Factory', () => {
       expect(vendors).toContain(AIVendor.ANTHROPIC)
       expect(vendors).toContain(AIVendor.ALIBABA)
       expect(vendors).toContain(AIVendor.MINIMAX)
+      expect(vendors).toContain(AIVendor.MIMO)
       expect(vendors).toContain(AIVendor.VOLCENGINE)
       expect(vendors).toContain(AIVendor.ZHIPU)
     })
@@ -118,7 +125,7 @@ describe('AI Provider Factory', () => {
     it('should return list of supported providers', async () => {
       const { getSupportedAIProviders } = await import('@/lib/ai/factory')
       const providers = getSupportedAIProviders()
-      expect(providers.length).toBe(7)
+      expect(providers.length).toBe(8)
       expect(providers.find(p => p.vendor === AIVendor.DEEPSEEK)?.name).toBe('DeepSeek')
     })
   })

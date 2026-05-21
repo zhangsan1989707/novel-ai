@@ -41,6 +41,7 @@ export enum AIVendor {
   ALIBABA = 'ALIBABA',
   DEEPSEEK = 'DEEPSEEK',
   MINIMAX = 'MINIMAX',
+  MIMO = 'MIMO',
   VOLCENGINE = 'VOLCENGINE',
   ZHIPU = 'ZHIPU',
 }
@@ -337,6 +338,11 @@ export interface AIConfig {
   modelId: string
   apiKey: string
   apiEndpoint?: string
+  embeddingVendor?: AIVendor
+  embeddingApiKey?: string
+  embeddingApiEndpoint?: string
+  embeddingModelId?: string
+  embeddingDimensions?: number
 }
 
 export interface GenerationResult {

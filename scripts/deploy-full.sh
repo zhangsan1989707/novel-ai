@@ -131,6 +131,9 @@ sed -i 's|localhost:5432|localhost:5433|g' .env .env.local 2>/dev/null || true
 echo "🐳 启动数据库..."
 docker compose -f docker-compose.db.yml up -d 2>/dev/null || true
 
+echo "🧩 启用 pgvector 扩展..."
+bash scripts/ensure-pgvector.sh docker-compose.db.yml
+
 echo "⏳ 等待数据库就绪..."
 sleep 5
 

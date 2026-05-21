@@ -12,6 +12,9 @@ interface AIConfig {
   modelId: string
   apiKey: string | null
   apiEndpoint?: string | null
+  embeddingVendor?: AIVendor | null
+  embeddingApiKey?: string | null
+  embeddingApiEndpoint?: string | null
   embeddingModelId?: string | null
   embeddingDimensions?: number | null
   isDefault: boolean
@@ -26,6 +29,7 @@ const vendorOptions = [
   { label: 'Anthropic (Claude)', value: AIVendor.ANTHROPIC },
   { label: '阿里云 (通义千问)', value: AIVendor.ALIBABA },
   { label: 'MiniMax', value: AIVendor.MINIMAX },
+  { label: '小米 MiMo', value: AIVendor.MIMO },
   { label: '火山引擎 (字节)', value: AIVendor.VOLCENGINE },
   { label: '智谱 AI (GLM)', value: AIVendor.ZHIPU },
 ]
@@ -36,6 +40,7 @@ const vendorLabels: Record<AIVendor, string> = {
   [AIVendor.ALIBABA]: '阿里云',
   [AIVendor.DEEPSEEK]: 'DeepSeek',
   [AIVendor.MINIMAX]: 'MiniMax',
+  [AIVendor.MIMO]: '小米 MiMo',
   [AIVendor.VOLCENGINE]: '火山引擎',
   [AIVendor.ZHIPU]: '智谱 AI',
 }
@@ -46,17 +51,29 @@ const defaultModelIds: Record<AIVendor, string> = {
   [AIVendor.ALIBABA]: 'qwen-max',
   [AIVendor.DEEPSEEK]: 'deepseek-v4-flash',
   [AIVendor.MINIMAX]: 'MiniMax-Text-01',
+  [AIVendor.MIMO]: 'mimo-v2.5-pro',
   [AIVendor.VOLCENGINE]: 'ark-code-latest',
   [AIVendor.ZHIPU]: 'GLM-4.5-Air',
 }
 
 const defaultApiEndpoints: Partial<Record<AIVendor, string>> = {
+  [AIVendor.MIMO]: 'https://token-plan-cn.xiaomimimo.com/v1',
   [AIVendor.VOLCENGINE]: 'https://ark.cn-beijing.volces.com/api/coding/v3',
   [AIVendor.ZHIPU]: 'https://open.bigmodel.cn/api/paas/v4',
 }
 
 const defaultEmbeddingModelIds: Partial<Record<AIVendor, string>> = {
   [AIVendor.OPENAI]: 'text-embedding-3-small',
+}
+
+const defaultEmbeddingApiEndpoints: Partial<Record<AIVendor, string>> = {
+  [AIVendor.MIMO]: 'https://token-plan-cn.xiaomimimo.com/v1',
+  [AIVendor.VOLCENGINE]: 'https://ark.cn-beijing.volces.com/api/coding/v3',
+  [AIVendor.ZHIPU]: 'https://open.bigmodel.cn/api/paas/v4',
+}
+
+const defaultEmbeddingApiKeys: Partial<Record<AIVendor, string>> = {
+  [AIVendor.OPENAI]: '',
 }
 
 const defaultEmbeddingDimensions = 256
@@ -77,6 +94,9 @@ export default function SettingsPage() {
     modelId: '',
     apiKey: '',
     apiEndpoint: '',
+    embeddingVendor: AIVendor.OPENAI,
+    embeddingApiKey: '',
+    embeddingApiEndpoint: '',
     embeddingModelId: '',
     embeddingDimensions: String(defaultEmbeddingDimensions),
     isDefault: false,
@@ -113,6 +133,9 @@ export default function SettingsPage() {
         modelId: config.modelId,
         apiKey: '',
         apiEndpoint: config.apiEndpoint || '',
+        embeddingVendor: config.embeddingVendor || AIVendor.OPENAI,
+        embeddingApiKey: '',
+        embeddingApiEndpoint: config.embeddingApiEndpoint || '',
         embeddingModelId: config.embeddingModelId || '',
         embeddingDimensions: String(config.embeddingDimensions || defaultEmbeddingDimensions),
         isDefault: config.isDefault,
@@ -125,6 +148,9 @@ export default function SettingsPage() {
         modelId: defaultModelIds[AIVendor.DEEPSEEK],
         apiKey: '',
         apiEndpoint: defaultApiEndpoints[AIVendor.DEEPSEEK] || '',
+        embeddingVendor: AIVendor.OPENAI,
+        embeddingApiKey: '',
+        embeddingApiEndpoint: defaultEmbeddingApiEndpoints[AIVendor.OPENAI] || '',
         embeddingModelId: defaultEmbeddingModelIds[AIVendor.DEEPSEEK] || '',
         embeddingDimensions: String(defaultEmbeddingDimensions),
         isDefault: false,
@@ -156,12 +182,19 @@ export default function SettingsPage() {
       const res = await fetch('/api/novel/ai-configs/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          vendor: formData.vendor,
-          modelId: formData.modelId,
-          apiKey: formData.apiKey,
-          apiEndpoint: formData.apiEndpoint || undefined,
-        }),
+      body: JSON.stringify({
+        vendor: formData.vendor,
+        modelId: formData.modelId,
+        apiKey: formData.apiKey,
+        apiEndpoint: formData.apiEndpoint || undefined,
+        embeddingVendor: formData.embeddingVendor || undefined,
+        embeddingApiKey: formData.embeddingApiKey || undefined,
+        embeddingApiEndpoint: formData.embeddingApiEndpoint || undefined,
+        embeddingModelId: formData.embeddingModelId || undefined,
+        embeddingDimensions: formData.embeddingDimensions
+          ? Number(formData.embeddingDimensions)
+          : undefined,
+      }),
       })
 
       const data = await res.json()
@@ -201,6 +234,9 @@ export default function SettingsPage() {
             ...formData, 
             id: editingConfig.id,
             apiKey: formData.apiKey.trim() || undefined,
+            embeddingApiKey: formData.embeddingApiKey.trim() || undefined,
+            embeddingVendor: formData.embeddingVendor || undefined,
+            embeddingApiEndpoint: formData.embeddingApiEndpoint.trim() || undefined,
             embeddingModelId: formData.embeddingModelId.trim() || undefined,
             embeddingDimensions: formData.embeddingDimensions.trim()
               ? Number(formData.embeddingDimensions)
@@ -209,6 +245,9 @@ export default function SettingsPage() {
         : {
             ...formData,
             apiKey: formData.apiKey.trim(),
+            embeddingApiKey: formData.embeddingApiKey.trim(),
+            embeddingVendor: formData.embeddingVendor,
+            embeddingApiEndpoint: formData.embeddingApiEndpoint.trim() || undefined,
             embeddingModelId: formData.embeddingModelId.trim() || undefined,
             embeddingDimensions: formData.embeddingDimensions.trim()
               ? Number(formData.embeddingDimensions)
@@ -355,6 +394,9 @@ export default function SettingsPage() {
                         <p>模型: {config.modelId}</p>
                         <p>API Key: {config.apiKey ? '已配置' : '未设置'}</p>
                         {config.apiEndpoint && <p>端点: {config.apiEndpoint}</p>}
+                        {config.embeddingVendor ? <p>Embedding 提供商: {vendorLabels[config.embeddingVendor as AIVendor]}</p> : null}
+                        {config.embeddingApiEndpoint && <p>Embedding 端点: {config.embeddingApiEndpoint}</p>}
+                        {config.embeddingApiKey && <p>Embedding Key: 已配置</p>}
                         {config.embeddingModelId && <p>Embedding: {config.embeddingModelId}</p>}
                         {config.embeddingDimensions && <p>Embedding 维度: {config.embeddingDimensions}</p>}
                       </div>
@@ -434,7 +476,6 @@ export default function SettingsPage() {
                 vendor: e.target.value as AIVendor,
                 modelId: defaultModelIds[e.target.value as AIVendor],
                 apiEndpoint: defaultApiEndpoints[e.target.value as AIVendor] || '',
-                embeddingModelId: defaultEmbeddingModelIds[e.target.value as AIVendor] || formData.embeddingModelId,
               })}
             />
 
@@ -473,9 +514,37 @@ export default function SettingsPage() {
             <div>
               <p className="text-sm font-medium text-gray-900 dark:text-white">RAG 向量化设置</p>
               <p className="text-xs text-gray-500 mt-1">
-                用于章节检索和记忆召回。若留空，系统会尝试使用默认 embedding 配置。
+                用于章节检索和记忆召回。可单独指定 embedding 提供商、端点和密钥。
               </p>
             </div>
+            <Select
+              label="Embedding 提供商"
+              options={vendorOptions}
+              value={formData.embeddingVendor || AIVendor.OPENAI}
+              onChange={(e) => {
+                const embeddingVendor = e.target.value as AIVendor
+                setFormData({
+                  ...formData,
+                  embeddingVendor,
+                  embeddingApiEndpoint: formData.embeddingApiEndpoint || defaultEmbeddingApiEndpoints[embeddingVendor] || '',
+                  embeddingApiKey: formData.embeddingApiKey || defaultEmbeddingApiKeys[embeddingVendor] || '',
+                  embeddingModelId: formData.embeddingModelId || defaultEmbeddingModelIds[embeddingVendor] || '',
+                })
+              }}
+            />
+            <Input
+              label="Embedding API Key（可选）"
+              type={showApiKey ? "text" : "password"}
+              placeholder="如：向量服务对应的 API Key"
+              value={formData.embeddingApiKey}
+              onChange={(e) => setFormData({ ...formData, embeddingApiKey: e.target.value })}
+            />
+            <Input
+              label="Embedding 端点 (可选)"
+              placeholder="如：https://api.openai.com/v1"
+              value={formData.embeddingApiEndpoint}
+              onChange={(e) => setFormData({ ...formData, embeddingApiEndpoint: e.target.value })}
+            />
             <Input
               label="Embedding 模型 ID（可选）"
               placeholder="如：text-embedding-3-small"

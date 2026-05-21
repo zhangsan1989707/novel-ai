@@ -9,6 +9,9 @@ export interface AIConfig {
   modelId: string
   apiKey: string
   apiEndpoint?: string
+  embeddingVendor?: AIVendor
+  embeddingApiKey?: string
+  embeddingApiEndpoint?: string
   embeddingModelId?: string
   embeddingDimensions?: number
 }

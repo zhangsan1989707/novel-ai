@@ -53,6 +53,7 @@ enum AIVendor {
   ALIBABA    // 阿里云 (通义千问)
   DEEPSEEK   // DeepSeek
   MINIMAX    // MiniMax
+  MIMO       // 小米 MiMo
   VOLCENGINE // 火山引擎 (字节跳动)
   ZHIPU      // 智谱 AI (GLM)
 }
@@ -172,6 +173,9 @@ model AIModelConfig {
   modelId       String          // 实际模型 ID
   apiKey        String?         // API Key（加密存储）
   apiEndpoint   String?         // 自定义端点
+  embeddingVendor      AIVendor?   // 独立 embedding 提供商
+  embeddingApiKey      String?      // 独立 embedding API Key
+  embeddingApiEndpoint String?      // 独立 embedding 端点
   embeddingModelId String?      // 向量模型 ID
   embeddingDimensions Int?       // 向量维度
   isDefault     Boolean         @default(false)
