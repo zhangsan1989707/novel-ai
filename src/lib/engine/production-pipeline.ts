@@ -1,10 +1,12 @@
+import { ArcStage as PrismaArcStage } from '@prisma/client'
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { createProviderFromConfigId, createProviderFromDefaultConfig } from '@/lib/ai/factory'
 import type { AIProvider } from '@/lib/ai/types'
-import type { PipelineStep } from '@/types'
+import type { PipelineStep, StorySteering } from '@/types'
 import { calculateBatchSize } from './batch-planner'
 import { completeJob, failJob, saveCheckpoint, updateJobRuntime, updateJobStep } from './generation-job'
-import { validateAndWarn } from './long-novel-controller'
+import { validateOutline } from './outline-validator'
 import { toInternalArcStage, toInternalPlatform, toPrismaArcStage } from './production-mapping'
 import { runChapterGenerationPipeline } from './orchestrator'
 import { parseAiJsonArray, parseAiJsonObject } from './ai-json'
@@ -14,6 +16,7 @@ import { initStoryState, initWorldState } from './story-state'
 import { loadProjectHealthReport } from './project-health'
 import { syncProjectHealthNotification } from '@/lib/notifications/project-health'
 import type { SSEEvent } from './types'
+import { getPlatformTemplate } from './platform-style'
 
 type ChapterOutline = {
   chapterNumber: number
@@ -27,6 +30,9 @@ type BlueprintOutput = {
   mainlineDirection?: string
   growthDirection?: string
   endingDirection?: string
+  platformStrategy?: string
+  genreStrategy?: string
+  styleStrategy?: string
   constraints?: string[]
 }
 
@@ -40,6 +46,136 @@ type ArcPlanOutput = {
   batchSize?: number
   goals?: string[]
   keyEvents?: string[]
+}
+
+type PlotlineGuard = {
+  description: string
+  plannedAt?: number | null
+  plantedAt?: number | null
+  status?: string | null
+}
+
+const STRATEGY_PREFIXES = {
+  platform: '策略-平台',
+  genre: '策略-题材',
+  style: '策略-风格',
+} as const
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value))
+}
+
+function buildProjectSteering(project: {
+  pace: number | null
+  darkness: number | null
+  humor: number | null
+  romance: number | null
+  powerGrowth: number | null
+  conflictIntensity: number | null
+  mysteryDensity: number | null
+}): StorySteering {
+  return {
+    pace: project.pace ?? 0.5,
+    darkness: project.darkness ?? 0.3,
+    humor: project.humor ?? 0.3,
+    romance: project.romance ?? 0.2,
+    powerGrowth: project.powerGrowth ?? 0.5,
+    conflictIntensity: project.conflictIntensity ?? 0.5,
+    mysteryDensity: project.mysteryDensity ?? 0.3,
+  }
+}
+
+function serializeStrategy(prefix: string, value: string | undefined | null): string | null {
+  const normalized = value?.trim()
+  if (!normalized) return null
+  return `${prefix}:${normalized}`
+}
+
+function extractStrategy(constraints: string[], prefix: string): string | null {
+  const raw = constraints.find(item => item.startsWith(`${prefix}:`))
+  if (!raw) return null
+  return raw.slice(prefix.length + 1).trim() || null
+}
+
+function deriveFallbackStrategies(project: {
+  platform: unknown
+  genre?: string | null
+  writingStyle?: string | null
+  chapterWordCount?: number | null
+  pace: number | null
+  darkness: number | null
+  humor: number | null
+  romance: number | null
+  powerGrowth: number | null
+  conflictIntensity: number | null
+  mysteryDensity: number | null
+}) {
+  const platform = toInternalPlatform(project.platform as never)
+  const template = getPlatformTemplate(platform)
+  const steering = buildProjectSteering(project)
+  const paceText = steering.pace >= 0.68 ? '快节奏推进' : steering.pace <= 0.35 ? '慢热铺垫' : '中速推进'
+  const mysteryText = steering.mysteryDensity >= 0.6 ? '提高悬念留白' : '悬念服务于推进'
+  const conflictText = steering.conflictIntensity >= 0.65 ? '高冲突高反馈' : '稳态冲突递进'
+  const humorText = steering.humor >= 0.6 ? '保留轻松段落' : '减少跳脱桥段'
+  const darknessText = steering.darkness >= 0.6 ? '强化压迫感' : '保持可持续追读基调'
+  const chapterWordTarget = project.chapterWordCount || template.chapterWordTarget
+
+  return {
+    platformStrategy: `平台 ${platform} 以单章约 ${chapterWordTarget} 字、${template.pace} 节奏、${template.cliffhangerDensity} 钩子密度推进，批次目录必须服务持续连载而不是一次性收束。`,
+    genreStrategy: project.genre
+      ? `题材 ${project.genre} 需要持续扩张世界、冲突和成长层级，前中期只兑现阶段成果，不解决终局矛盾。`
+      : '默认采用长篇连载题材策略，前中期保持世界扩张、矛盾升级与持续钩子。',
+    styleStrategy: `风格 ${project.writingStyle || '默认'} 以 ${paceText}、${conflictText}、${mysteryText}、${humorText}、${darknessText} 为约束，并结合 romance=${steering.romance.toFixed(2)} / powerGrowth=${steering.powerGrowth.toFixed(2)} 调整桥段和成长反馈。`,
+  }
+}
+
+function buildBlueprintStrategies(
+  project: {
+    platform: unknown
+    genre?: string | null
+    writingStyle?: string | null
+    chapterWordCount?: number | null
+    pace: number | null
+    darkness: number | null
+    humor: number | null
+    romance: number | null
+    powerGrowth: number | null
+    conflictIntensity: number | null
+    mysteryDensity: number | null
+  },
+  blueprint?: {
+    platformStrategy?: string | null
+    genreStrategy?: string | null
+    styleStrategy?: string | null
+    constraints?: string[] | null
+  } | null
+) {
+  const constraints = (blueprint?.constraints || []).filter(Boolean)
+  const fallback = deriveFallbackStrategies(project)
+  const baseConstraints = constraints.filter(item => !Object.values(STRATEGY_PREFIXES).some(prefix => item.startsWith(`${prefix}:`)))
+  const requiredGuardrails = [
+    '禁止提前结局',
+    '禁止主线终结',
+    '禁止最大反派死亡',
+    '禁止伏笔提前回收',
+    '当前阶段只解决阶段矛盾',
+    '保留后续世界扩张空间',
+  ]
+
+  return {
+    platformStrategy: blueprint?.platformStrategy || extractStrategy(constraints, STRATEGY_PREFIXES.platform) || fallback.platformStrategy,
+    genreStrategy: blueprint?.genreStrategy || extractStrategy(constraints, STRATEGY_PREFIXES.genre) || fallback.genreStrategy,
+    styleStrategy: blueprint?.styleStrategy || extractStrategy(constraints, STRATEGY_PREFIXES.style) || fallback.styleStrategy,
+    guardrails: Array.from(new Set([...baseConstraints, ...requiredGuardrails])),
+  }
+}
+
+function buildPlotlineBrief(plotlines: PlotlineGuard[]): string {
+  if (plotlines.length === 0) return '暂无明确保护中的伏笔，由 AI 维持悬念留白。'
+  return plotlines
+    .slice(0, 8)
+    .map(plotline => `${plotline.description}${plotline.plannedAt ? `（计划第${plotline.plannedAt}章回收）` : ''}`)
+    .join('；')
 }
 
 async function isJobPaused(jobId: number): Promise<boolean> {
@@ -70,6 +206,7 @@ export async function ensureBlueprint(projectId: number, provider: AIProvider) {
 
   const project = await prisma.novelProject.findUnique({ where: { id: projectId } })
   if (!project) throw new Error('项目不存在')
+  const fallbackStrategies = deriveFallbackStrategies(project)
 
   const prompt = `你是 AI 网文导演系统的总策划。请生成 Book Blueprint，只定义长篇方向，不要生成完整章节。
 
@@ -80,6 +217,15 @@ export async function ensureBlueprint(projectId: number, provider: AIProvider) {
 - 一句话卖点：${project.corePitch || project.description || '暂无'}
 - 风格：${project.writingStyle || '默认'}
 - 长度类型：${project.lengthType || 'LONG'}
+- 平台基线策略：${fallbackStrategies.platformStrategy}
+- 题材基线策略：${fallbackStrategies.genreStrategy}
+- 风格基线策略：${fallbackStrategies.styleStrategy}
+
+硬约束：
+- 前 85% 进度不得提前结局、不得主线终结
+- 最大反派不得提前死亡或彻底退场
+- 伏笔不得大面积提前回收
+- 每个阶段只解决阶段矛盾，必须保留后续扩张空间
 
 输出 JSON，不要 markdown：
 {
@@ -88,6 +234,9 @@ export async function ensureBlueprint(projectId: number, provider: AIProvider) {
   "mainlineDirection": "主线推进方向，强调长期矛盾而非提前收束",
   "growthDirection": "主角成长方向",
   "endingDirection": "远景终局可能性，只能作为远景，不决定近期结局",
+  "platformStrategy": "平台策略，说明章节长度、钩子密度、高潮频率如何控制",
+  "genreStrategy": "题材策略，说明世界扩张、冲突形态和读者期待管理",
+  "styleStrategy": "风格策略，说明叙事口吻、爽点组织、去AI味方向",
   "constraints": ["禁止提前大结局", "当前阶段只解决阶段矛盾"]
 }`
 
@@ -120,7 +269,21 @@ export async function ensureBlueprint(projectId: number, provider: AIProvider) {
     mainlineDirection: blueprint.mainlineDirection || '',
     growthDirection: blueprint.growthDirection || '',
     endingDirection: blueprint.endingDirection || '',
-    constraints: Array.isArray(blueprint.constraints) ? blueprint.constraints : [],
+    platformStrategy: blueprint.platformStrategy || fallbackStrategies.platformStrategy,
+    genreStrategy: blueprint.genreStrategy || fallbackStrategies.genreStrategy,
+    styleStrategy: blueprint.styleStrategy || fallbackStrategies.styleStrategy,
+    constraints: Array.from(new Set([
+      ...(Array.isArray(blueprint.constraints) ? blueprint.constraints : []),
+      serializeStrategy(STRATEGY_PREFIXES.platform, blueprint.platformStrategy || fallbackStrategies.platformStrategy),
+      serializeStrategy(STRATEGY_PREFIXES.genre, blueprint.genreStrategy || fallbackStrategies.genreStrategy),
+      serializeStrategy(STRATEGY_PREFIXES.style, blueprint.styleStrategy || fallbackStrategies.styleStrategy),
+      '禁止提前结局',
+      '禁止主线终结',
+      '禁止最大反派死亡',
+      '禁止伏笔提前回收',
+      '当前阶段只解决阶段矛盾',
+      '保留后续世界扩张空间',
+    ].filter((item): item is string => Boolean(item)))),
   }
 
   return prisma.bookBlueprint.create({ data: { projectId, ...data } })
@@ -140,14 +303,17 @@ export async function ensureArcPlans(projectId: number, provider: AIProvider) {
   const stages = ['OPENING', 'GROWTH', 'EXPANSION', 'MID_CONFLICT', 'PRE_FINALE', 'FINALE']
   const chaptersPerStage = Math.ceil(totalChapters / stages.length)
   const platform = toInternalPlatform(project.platform)
+  const blueprintStrategies = buildBlueprintStrategies(project, project.bookBlueprint)
 
   const prompt = `你是 AI 网文导演系统的阶段规划 Agent。请基于 Book Blueprint 生成 Arc Plan。
 
 要求：
 - 只规划阶段，不要列出全书所有章节
 - 前 85% 进度不得出现最终决战、大结局、天下太平、一切结束
+- 不得让主线在中前期收束，不得让最大反派提前死亡
+- 未到计划节点的伏笔不能集中回收
 - 每个 Arc 都要保留后续扩张空间
-- batchSize 范围 10-30
+- batchSize 范围 8-28，且要结合阶段复杂度动态变化
 
 项目信息：
 - 标题：${project.title}
@@ -162,6 +328,10 @@ Book Blueprint：
 - 主线方向：${project.bookBlueprint.mainlineDirection || ''}
 - 成长方向：${project.bookBlueprint.growthDirection || ''}
 - 远景终局：${project.bookBlueprint.endingDirection || ''}
+- 平台策略：${blueprintStrategies.platformStrategy}
+- 题材策略：${blueprintStrategies.genreStrategy}
+- 风格策略：${blueprintStrategies.styleStrategy}
+- 硬约束：${blueprintStrategies.guardrails.join('；')}
 
 输出 JSON 数组，不要 markdown。stage 只能是 OPENING, GROWTH, EXPANSION, MID_CONFLICT, PRE_FINALE, FINALE：
 [
@@ -172,7 +342,14 @@ Book Blueprint：
     "description": "阶段描述",
     "startChapter": 1,
     "endChapter": ${chaptersPerStage},
-    "batchSize": ${calculateBatchSize(platform, 'opening', 0.5, 0.5)},
+    "batchSize": ${calculateBatchSize(platform, 'opening', 0.5, 0.5, {
+      progressRatio: 0.05,
+      stageRemainingChapters: chaptersPerStage,
+      blueprintConstraints: blueprintStrategies.guardrails,
+      genre: project.genre,
+      writingStyle: project.writingStyle,
+      steering: buildProjectSteering(project),
+    })},
     "goals": ["阶段目标"],
     "keyEvents": ["关键事件"]
   }
@@ -207,17 +384,24 @@ Book Blueprint：
     const item = arcPlans[index]
     const arcNumber = item.arcNumber || index + 1
     const stage = toInternalArcStage(item.stage || stages[index] || 'OPENING')
-    const defaultBatchSize = calculateBatchSize(platform, stage, 0.5, 0.5)
+    const defaultBatchSize = calculateBatchSize(platform, stage, 0.5, 0.5, {
+      progressRatio: clamp(index / Math.max(arcPlans.length, 1), 0, 0.95),
+      stageRemainingChapters: Math.max(1, (item.endChapter || Math.min(totalChapters, (index + 1) * chaptersPerStage)) - (item.startChapter || (index * chaptersPerStage + 1)) + 1),
+      blueprintConstraints: blueprintStrategies.guardrails,
+      genre: project.genre,
+      writingStyle: project.writingStyle,
+      steering: buildProjectSteering(project),
+    })
     created.push(await prisma.arcPlan.create({
       data: {
         projectId,
         arcNumber,
         name: item.name || `第${arcNumber}阶段`,
-        stage: toPrismaArcStage(stage) as any,
+        stage: toPrismaArcStage(stage) as PrismaArcStage,
         description: item.description || '',
         startChapter: item.startChapter || (index * chaptersPerStage + 1),
         endChapter: item.endChapter || Math.min(totalChapters, (index + 1) * chaptersPerStage),
-        batchSize: Math.max(10, Math.min(30, item.batchSize || defaultBatchSize)),
+        batchSize: clamp(item.batchSize || defaultBatchSize, 8, 28),
         goals: Array.isArray(item.goals) ? item.goals : [],
         keyEvents: Array.isArray(item.keyEvents) ? item.keyEvents : [],
       },
@@ -234,6 +418,12 @@ async function planChapterBatch(projectId: number, provider: AIProvider): Promis
       bookBlueprint: true,
       arcPlans: { orderBy: { arcNumber: 'asc' } },
       chapters: { orderBy: { chapterNumber: 'asc' } },
+      plotlines: {
+        where: { status: 'OPEN' },
+        orderBy: [{ plannedAt: 'asc' }, { plantedAt: 'asc' }],
+      },
+      storyState: true,
+      villains: true,
       worldState: true,
     },
   })
@@ -252,12 +442,47 @@ async function planChapterBatch(projectId: number, provider: AIProvider): Promis
 
   const startChapter = Math.max(nextChapterNumber, currentArc.startChapter)
   const endLimit = currentArc.endChapter || startChapter + currentArc.batchSize - 1
-  const endChapter = Math.min(endLimit, startChapter + currentArc.batchSize - 1)
   if (startChapter > endLimit) return []
 
   const totalChapters = Math.max(1, Math.ceil((project.targetWordCount || 300000) / (project.chapterWordCount || 3000)))
   const progressRatio = startChapter / totalChapters
   const arcStage = toInternalArcStage(currentArc.stage)
+  const stageRemainingChapters = Math.max(1, endLimit - startChapter + 1)
+  const steering = buildProjectSteering(project)
+  const blueprintStrategies = buildBlueprintStrategies(project, project.bookBlueprint)
+  const activePlotlines: PlotlineGuard[] = project.plotlines.map(plotline => ({
+    description: plotline.description,
+    plannedAt: plotline.plannedAt,
+    plantedAt: plotline.plantedAt,
+    status: plotline.status,
+  }))
+  const dynamicBatchSize = calculateBatchSize(
+    toInternalPlatform(project.platform),
+    arcStage,
+    project.worldState
+      ? clamp((project.worldState.mapLevel + project.worldState.factionCount + project.worldState.powerLevel + project.worldState.civilizationLevel) / 40, 0, 1.2)
+      : 0.45,
+    clamp(activePlotlines.length / 8, 0, 1.4),
+    {
+      progressRatio,
+      stageRemainingChapters,
+      openPlotlineCount: activePlotlines.length,
+      steering,
+      blueprintConstraints: blueprintStrategies.guardrails,
+      hasFinalBossActive: project.villains.some(v => v.isFinalBoss && v.lifecycle === 'active'),
+      genre: project.genre,
+      writingStyle: project.writingStyle,
+    }
+  )
+  const endChapter = Math.min(endLimit, startChapter + dynamicBatchSize - 1)
+
+  if (currentArc.batchSize !== dynamicBatchSize) {
+    await prisma.arcPlan.update({
+      where: { id: currentArc.id },
+      data: { batchSize: dynamicBatchSize },
+    })
+  }
+
   const worldState = project.worldState
     ? `地图层级 ${project.worldState.mapLevel}/10，势力 ${project.worldState.factionCount}，力量上限 ${project.worldState.powerLevel}/10，文明层级 ${project.worldState.civilizationLevel}/10`
     : '世界状态未初始化，需要在当前批次逐步扩张'
@@ -270,6 +495,19 @@ async function planChapterBatch(projectId: number, provider: AIProvider): Promis
       summary: chapter.summary || chapter.title || `第${chapter.chapterNumber}章`,
     }))
 
+  const promptGuardrails = [
+    `【Blueprint 策略】平台：${blueprintStrategies.platformStrategy}`,
+    `【Blueprint 策略】题材：${blueprintStrategies.genreStrategy}`,
+    `【Blueprint 策略】风格：${blueprintStrategies.styleStrategy}`,
+    `【硬约束】${blueprintStrategies.guardrails.join('；')}`,
+    `【批次约束】本批次只规划第 ${startChapter}-${endChapter} 章，共 ${endChapter - startChapter + 1} 章，必须连续编号。`,
+    `【批次约束】禁止提前结局、禁止主线终结、禁止最大反派死亡、禁止伏笔提前回收。`,
+    `【StoryState】当前主冲突：${project.storyState?.mainConflict || '待推进'}；当前章节进度：${project.storyState?.currentChapter || existingMaxChapter}`,
+    `【伏笔保护】${buildPlotlineBrief(activePlotlines)}`,
+    `【反派保护】${project.villains.filter(v => v.isFinalBoss || v.lifecycle === 'active').slice(0, 5).map(v => `${v.name}${v.isFinalBoss ? '（终极反派）' : ''}`).join('；') || '暂无明确反派，但必须避免“一战收官”结构'}`,
+    `【动态批次】推荐批次大小 ${dynamicBatchSize} 章；当前 Arc 剩余 ${stageRemainingChapters} 章。`,
+  ].join('\n')
+
   const prompt = buildChapterListPrompt({
     projectTitle: project.title,
     genre: project.genre || undefined,
@@ -281,7 +519,8 @@ async function planChapterBatch(projectId: number, provider: AIProvider): Promis
       `【关键事件】${currentArc.keyEvents.join('、') || '由 AI 决定'}`,
       `【世界状态】${worldState}`,
       `【当前全书进度】${Math.round(progressRatio * 100)}%`,
-      `【Book Blueprint】核心卖点：${project.bookBlueprint.corePitch}\n世界方向：${project.bookBlueprint.worldDirection || ''}\n主线方向：${project.bookBlueprint.mainlineDirection || ''}`,
+      `【Book Blueprint】核心卖点：${project.bookBlueprint.corePitch}\n世界方向：${project.bookBlueprint.worldDirection || ''}\n主线方向：${project.bookBlueprint.mainlineDirection || ''}\n成长方向：${project.bookBlueprint.growthDirection || ''}\n远景终局：${project.bookBlueprint.endingDirection || ''}`,
+      promptGuardrails,
     ].filter(Boolean).join('\n\n'),
     protagonistProfile: project.protagonistProfile || undefined,
     protagonistGoal: project.protagonistGoal || undefined,
@@ -354,7 +593,18 @@ async function planChapterBatch(projectId: number, provider: AIProvider): Promis
     }
   }
 
-  const validation = validateAndWarn(outlines, progressRatio)
+  const protectedVillains = project.villains
+    .filter(v => v.lifecycle === 'active' && (v.isFinalBoss || v.tier === 'final' || v.tier === 'arc'))
+    .map(v => v.name)
+  const validation = validateOutline(outlines, {
+    progressRatio,
+    currentArcName: currentArc.name,
+    currentArcStage: currentArc.stage,
+    finalBossNames: project.villains.filter(v => v.isFinalBoss).map(v => v.name),
+    protectedVillainNames: protectedVillains,
+    openPlotlines: activePlotlines,
+    blueprintConstraints: blueprintStrategies.guardrails,
+  })
   if (!validation.passed) {
     throw new Error(`当前批次目录触发防提前结局规则：${validation.violations.join('；')}`)
   }
@@ -365,7 +615,7 @@ async function planChapterBatch(projectId: number, provider: AIProvider): Promis
       update: {
         title: outline.title,
         summary: outline.summary,
-        chapterOutline: outline as any,
+        chapterOutline: outline as unknown as Prisma.InputJsonValue,
         sortOrder: outline.chapterNumber,
       },
       create: {
@@ -373,7 +623,7 @@ async function planChapterBatch(projectId: number, provider: AIProvider): Promis
         chapterNumber: outline.chapterNumber,
         title: outline.title,
         summary: outline.summary,
-        chapterOutline: outline as any,
+        chapterOutline: outline as unknown as Prisma.InputJsonValue,
         sortOrder: outline.chapterNumber,
         status: 'DRAFT',
       },

@@ -37,6 +37,7 @@ export interface NovelMetadata {
   chapterCount: number
   createdAt: string
   updatedAt: string
+  reusableContext?: ExportReusableContext
 }
 
 // 导出章节结构
@@ -51,6 +52,53 @@ export interface ExportedChapter {
 export interface ExportedNovel {
   metadata: NovelMetadata
   chapters: ExportedChapter[]
+}
+
+export interface ExportedBlueprint {
+  corePitch: string
+  worldDirection?: string | null
+  mainlineDirection?: string | null
+  growthDirection?: string | null
+  endingDirection?: string | null
+  platformStrategy?: string | null
+  genreStrategy?: string | null
+  styleStrategy?: string | null
+  constraints: string[]
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface ExportedArcPlan {
+  arcNumber: number
+  name: string
+  stage: string
+  description?: string | null
+  batchSize: number
+  startChapter: number
+  endChapter?: number | null
+  goals: string[]
+  keyEvents: string[]
+  isCompleted: boolean
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface ExportedStoryState {
+  currentChapter: number
+  totalPlanned: number
+  mainConflict?: string | null
+  emotionalArc: unknown[]
+  subConflicts: unknown[]
+  metadata?: Record<string, unknown> | null
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface ExportReusableContext {
+  exportedAt: string
+  blueprint?: ExportedBlueprint
+  arcPlans: ExportedArcPlan[]
+  storyState?: ExportedStoryState
 }
 
 // ============================================

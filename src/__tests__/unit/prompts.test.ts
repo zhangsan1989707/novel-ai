@@ -111,7 +111,7 @@ describe('Prompt Builders', () => {
           chapterGoal: '主角发现自己能力',
           mainConflict: '神秘势力追杀',
           keyScenes: [
-            { sceneTitle: '发现', description: '发现神秘物品' },
+            { scene: '发现神秘物品并被迫逃离', characters: ['张三'], emotion: '惊惧' },
           ],
           ending: '成功逃脱',
           foreshadows: ['血脉觉醒'],
@@ -140,6 +140,8 @@ describe('Prompt Builders', () => {
           mainConflict: '测试',
           keyScenes: [],
           ending: '测试',
+          foreshadows: [],
+          resolvedPlotlines: [],
         },
         characterProfiles: '【李四】反派：阴险狡诈',
         recentSummaries: '',
@@ -164,6 +166,8 @@ describe('Prompt Builders', () => {
           mainConflict: '测试',
           keyScenes: [],
           ending: '测试',
+          foreshadows: [],
+          resolvedPlotlines: [],
         },
         characterProfiles: '',
         recentSummaries: '',
@@ -188,6 +192,8 @@ describe('Prompt Builders', () => {
           mainConflict: '测试',
           keyScenes: [],
           ending: '测试',
+          foreshadows: [],
+          resolvedPlotlines: [],
         },
         characterProfiles: '',
         recentSummaries: '',
@@ -211,6 +217,8 @@ describe('Prompt Builders', () => {
           mainConflict: '测试',
           keyScenes: [],
           ending: '测试',
+          foreshadows: [],
+          resolvedPlotlines: [],
         },
         characterProfiles: '',
         recentSummaries: '第1章：主角登场\n第2章：获得能力',
@@ -233,6 +241,8 @@ describe('Prompt Builders', () => {
           mainConflict: '测试',
           keyScenes: [],
           ending: '测试',
+          foreshadows: [],
+          resolvedPlotlines: [],
         },
         characterProfiles: '',
         recentSummaries: '',
@@ -251,6 +261,7 @@ describe('Prompt Builders', () => {
     it('should build prompt with content', () => {
       const input = {
         content: '这是待润色的内容。',
+        chapterNo: 1,
         styleGuide: '热血激昂',
       }
 
@@ -283,6 +294,7 @@ describe('Prompt Builders', () => {
     it('should build prompt for summarization', () => {
       const input = {
         chapterTitle: '第一章',
+        chapterNo: 1,
         chapterContent: '这是待摘要的内容。',
         worldSetting: '修仙世界',
         protagonistProfile: '普通少年',

@@ -5,17 +5,18 @@
 // ================================
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { taskQueue } from '../src/lib/engine/task-queue'
-import { metrics } from '../src/lib/observability/metrics'
+import { taskQueue } from '@/lib/engine/task-queue'
+import { metrics } from '@/lib/observability/metrics'
 
 // ================================
 // 任务队列测试
 // ================================
 
 describe('TaskQueue', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     // 清空队列
-    taskQueue.stop()
+    await taskQueue.stop()
+    taskQueue.start()
   })
 
   it('should create a task', () => {
@@ -97,4 +98,8 @@ describe('Pipeline', () => {
   it('should have pipeline builder', () => {
     expect(true).toBeTruthy()
   })
+})
+
+afterEach(async () => {
+  await taskQueue.stop()
 })

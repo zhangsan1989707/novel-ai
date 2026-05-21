@@ -1,8 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { Card, CardContent, Button, toast } from '@/components/ui'
-import { Sliders, Save } from 'lucide-react'
+import { Card, CardContent, Button, Badge, toast } from '@/components/ui'
+import { Sliders, Save, Sparkles, ShieldAlert } from 'lucide-react'
 import type { StorySteering } from '@/types'
 
 const DIMENSIONS: { key: keyof StorySteering; label: string; minLabel: string; maxLabel: string }[] = [
@@ -19,10 +19,20 @@ interface StorySteeringPanelProps {
   projectId: number
   initialValues?: Partial<StorySteering>
   onSave?: (steering: StorySteering) => void
-  defaultValues?: Partial<StorySteering>
   title?: string
   description?: string
   submitLabel?: string
+  endpoint?: string
+}
+
+const DEFAULT_STEERING: StorySteering = {
+  pace: 0.5,
+  darkness: 0.3,
+  humor: 0.3,
+  romance: 0.2,
+  powerGrowth: 0.5,
+  conflictIntensity: 0.5,
+  mysteryDensity: 0.3,
 }
 
 export function StorySteeringPanel({
@@ -32,37 +42,34 @@ export function StorySteeringPanel({
   title = '风格方向盘',
   description,
   submitLabel = '保存风格指令',
+  endpoint,
 }: StorySteeringPanelProps) {
-  const [steering, setSteering] = useState<StorySteering>({
-    pace: 0.5,
-    darkness: 0.3,
-    humor: 0.3,
-    romance: 0.2,
-    powerGrowth: 0.5,
-    conflictIntensity: 0.5,
-    mysteryDensity: 0.3,
-    ...initialValues,
-  })
+  const [steering, setSteering] = useState<StorySteering>({ ...DEFAULT_STEERING, ...initialValues })
   const [saving, setSaving] = useState(false)
+  const [dirty, setDirty] = useState(false)
 
   const handleSliderChange = (key: keyof StorySteering, value: number) => {
+    setDirty(true)
     setSteering(prev => ({ ...prev, [key]: value }))
   }
 
   const handleSave = async () => {
     setSaving(true)
     try {
-      const res = await fetch(`/api/novel/projects/${projectId}`, {
+      const res = await fetch(endpoint || `/api/novel/projects/${projectId}/steering`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(steering),
       })
-      const data = await res.json()
-      if (data.success) {
-        toast.success('风格指令已保存')
+      const data = await res.json().catch(() => null)
+      if (res.ok && data?.success) {
+        setDirty(false)
+        toast.success('Story Steering 已保存，后续 AI 生成会按新方向偏转')
         onSave?.(steering)
+      } else if (res.status === 404) {
+        toast.error('独立 Story Steering 路由尚未就绪')
       } else {
-        toast.error(data.error?.message || '保存失败')
+        toast.error(data?.error?.message || '保存失败')
       }
     } catch {
       toast.error('保存失败')
@@ -84,22 +91,72 @@ export function StorySteeringPanel({
     { label: '默认', values: { pace: 0.5, conflictIntensity: 0.5, darkness: 0.3, humor: 0.3, romance: 0.2, powerGrowth: 0.5, mysteryDensity: 0.3 } },
   ]
 
+  const steeringSummary = [
+    steering.pace >= 0.75 ? '快节奏推进' : steering.pace <= 0.35 ? '慢热铺陈' : '稳步推进',
+    steering.conflictIntensity >= 0.7 ? '高冲突' : '中等冲突',
+    steering.mysteryDensity >= 0.65 ? '高悬念' : '悬念适中',
+    steering.darkness >= 0.6 ? '黑暗底色' : '偏明亮',
+  ].join(' / ')
+
   return (
     <Card>
       <CardContent className="p-4 space-y-4">
-        <div className="flex items-center gap-2">
-          <Sliders className="h-4 w-4 text-blue-600" />
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{title}</h3>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <Sliders className="h-4 w-4 text-blue-600" />
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{title}</h3>
+            </div>
+            {description && (
+              <p className="mt-2 text-xs leading-5 text-gray-500 dark:text-gray-400">{description}</p>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="secondary">AI 控制卷数与章节结构</Badge>
+            <Badge variant="outline">你只调方向，不改蓝图骨架</Badge>
+          </div>
         </div>
-        {description && (
-          <p className="text-xs leading-5 text-gray-500 dark:text-gray-400">{description}</p>
-        )}
+
+        <div className="grid gap-3 md:grid-cols-2">
+          <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-3 dark:border-blue-900/40 dark:bg-blue-950/20">
+            <div className="flex items-center gap-2 text-xs font-medium text-blue-700 dark:text-blue-300">
+              <Sparkles className="h-3.5 w-3.5" />
+              AI 会读取这组方向
+            </div>
+            <p className="mt-2 text-xs leading-5 text-blue-700/90 dark:text-blue-200/90">
+              NarrativeDirector、Writer、Polisher、Validator 会共同读取当前 Steering，并影响后续蓝图刷新、批次目录和章节风格。
+            </p>
+          </div>
+          <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 dark:border-amber-900/40 dark:bg-amber-950/20">
+            <div className="flex items-center gap-2 text-xs font-medium text-amber-700 dark:text-amber-300">
+              <ShieldAlert className="h-3.5 w-3.5" />
+              不会被你直接改掉的内容
+            </div>
+            <p className="mt-2 text-xs leading-5 text-amber-700/90 dark:text-amber-200/90">
+              卷数、章节数、高潮节点、伏笔回收时机仍由 AI 控制。这里的保存只影响后续生成，不会自动重写已完成章节。
+            </p>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/40">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-xs text-gray-500 dark:text-gray-400">当前方向摘要</div>
+            <Badge variant={dirty ? 'warning' : 'secondary'}>
+              {dirty ? '有未提交修改' : '已同步'}
+            </Badge>
+          </div>
+          <div className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">{steeringSummary}</div>
+        </div>
 
         <div className="flex flex-wrap gap-1.5">
           {presetButtons.map(preset => (
             <button
               key={preset.label}
-              onClick={() => setSteering(prev => ({ ...prev, ...preset.values }))}
+              type="button"
+              onClick={() => {
+                setDirty(true)
+                setSteering(prev => ({ ...prev, ...preset.values }))
+              }}
               className="px-2 py-0.5 text-xs rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-blue-100 dark:hover:bg-blue-900/40 hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
             >
               {preset.label}
@@ -135,7 +192,11 @@ export function StorySteeringPanel({
           ))}
         </div>
 
-        <Button variant="primary" size="sm" onClick={handleSave} loading={saving} className="w-full gap-1.5">
+        <div className="rounded-xl border border-dashed border-gray-200 px-3 py-2 text-[11px] leading-5 text-gray-500 dark:border-gray-800 dark:text-gray-400">
+          提交目标：<code>/api/novel/projects/{projectId}/steering</code>。这条独立路由应只保存 Story Steering，不再复用项目基础信息更新接口。
+        </div>
+
+        <Button variant="primary" size="sm" onClick={handleSave} loading={saving} disabled={!dirty || saving} className="w-full gap-1.5">
           <Save className="h-3.5 w-3.5" />
           {submitLabel}
         </Button>

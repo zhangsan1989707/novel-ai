@@ -26,6 +26,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const project = await prisma.novelProject.findUnique({
       where: { id: projectIdNum },
       include: {
+        bookBlueprint: true,
+        storyState: true,
+        worldState: true,
+        arcPlans: {
+          orderBy: { arcNumber: 'asc' },
+        },
         chapters: {
           orderBy: { chapterNumber: 'asc' },
           select: {
@@ -50,6 +56,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         id: project.id,
         title: project.title,
         outline: project.outline,
+        bookBlueprint: project.bookBlueprint,
+        storyState: project.storyState,
+        worldState: project.worldState,
+        arcPlans: project.arcPlans,
         chapters: project.chapters,
       },
     })

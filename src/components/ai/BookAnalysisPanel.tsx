@@ -22,6 +22,13 @@ import { buildChapterGraph, type ChapterGraph } from '@/lib/analysis/chapter-gra
 interface BookAnalysisPanelProps {
   projectId: number
   refreshSeed?: number
+  navigationRequest?: {
+    id: number
+    sectionId?: string
+    dimension?: AnalysisDimension
+    chapterNo?: number
+    anchorId?: string
+  } | null
 }
 
 interface ReadingExperienceData {
@@ -45,7 +52,7 @@ const scoreLabels: Record<string, string> = {
   readerRetention: '追读驱动',
 }
 
-export function BookAnalysisPanel({ projectId, refreshSeed = 0 }: BookAnalysisPanelProps) {
+export function BookAnalysisPanel({ projectId, refreshSeed = 0, navigationRequest = null }: BookAnalysisPanelProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [analyses, setAnalyses] = useState<BookAnalysis[]>([])
@@ -207,6 +214,37 @@ export function BookAnalysisPanel({ projectId, refreshSeed = 0 }: BookAnalysisPa
     })
   }, [])
 
+  useEffect(() => {
+    if (!navigationRequest) {
+      return
+    }
+
+    const frameId = requestAnimationFrame(() => {
+      if (navigationRequest.chapterNo !== undefined) {
+        setSelectedChapterNo(navigationRequest.chapterNo)
+      }
+
+      if (navigationRequest.anchorId) {
+        setFocusedAnchor(navigationRequest.anchorId)
+        document.getElementById(navigationRequest.anchorId)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
+
+      if (navigationRequest.dimension) {
+        setExpandedVolumes(prev => new Set(prev).add(-1))
+        const el = document.querySelector(
+          `[data-analysis-volume="-1"][data-analysis-dimension="${navigationRequest.dimension}"]`
+        ) as HTMLElement | null
+        el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+
+      if (navigationRequest.sectionId) {
+        document.getElementById(navigationRequest.sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+    })
+
+    return () => cancelAnimationFrame(frameId)
+  }, [navigationRequest])
+
   if (loading && analyses.length === 0) {
     return (
       <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400">
@@ -263,6 +301,9 @@ export function BookAnalysisPanel({ projectId, refreshSeed = 0 }: BookAnalysisPa
           <button onClick={() => focusDimension(AnalysisDimension.STORY_OVERVIEW)} className="rounded-full border border-gray-200 px-3 py-1.5 text-xs text-gray-600 transition-colors hover:border-blue-300 hover:text-blue-600 dark:border-gray-800 dark:text-gray-300">
             结论摘要
           </button>
+          <span className="rounded-full border border-dashed border-gray-200 px-3 py-1.5 text-xs text-gray-500 dark:border-gray-800 dark:text-gray-400">
+            点击总览卡片、时间轴或章节图谱可联动筛选
+          </span>
           {selectedChapterNo !== null && (
             <button
               onClick={clearChapterFocus}
@@ -1665,9 +1706,27 @@ function ForeshadowingView({
     }
   }, [items, selectedChapterNo])
 
+  const activeItems = useMemo(() => {
+    if (activeChapterNo === null) return []
+    return items.filter(item => Number(item.chapter || 0) === activeChapterNo)
+  }, [activeChapterNo, items])
+
   if (items.length === 0) return <EmptyHint text="暂无伏笔数据" />
   return (
     <div className="space-y-2 text-sm">
+      {activeChapterNo !== null && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/40 dark:bg-amber-950/20">
+          <div className="flex items-center justify-between gap-3">
+            <div className="font-medium text-amber-900 dark:text-amber-200">当前章节概览</div>
+            <span className="rounded-full bg-white px-2 py-0.5 text-xs text-amber-700 dark:bg-gray-900 dark:text-amber-300">
+              第{activeChapterNo}章
+            </span>
+          </div>
+          <div className="mt-2 text-sm text-amber-800 dark:text-amber-300">
+            {activeItems.length > 0 ? `本章匹配到 ${activeItems.length} 条伏笔线索，先看上方列表后再展开具体条目。` : '本章暂无直接匹配伏笔。'}
+          </div>
+        </div>
+      )}
       {items.map((item, index) => (
         <button
           key={index}
@@ -1747,9 +1806,30 @@ function ChapterStructureView({
     return { foreshadow: foreshadowItems, turning: turningItems }
   }, [activeChapterNo, foreshadowing, plotLine])
 
+  const activeChapter = useMemo(() => {
+    if (activeChapterNo === null) return null
+    return chapters.find(chapter => Number(chapter.number || 0) === activeChapterNo) || null
+  }, [activeChapterNo, chapters])
+
   if (chapters.length === 0 && !arcAnalysis && !pacingAssessment) return <EmptyHint text="暂无章节结构数据" />
   return (
     <div className="space-y-3 text-sm">
+      {activeChapterNo !== null && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 dark:border-blue-900/40 dark:bg-blue-950/20">
+          <div className="flex items-center justify-between gap-3">
+            <div className="font-medium text-blue-900 dark:text-blue-200">当前章节概览</div>
+            <span className="rounded-full bg-white px-2 py-0.5 text-xs text-blue-700 dark:bg-gray-900 dark:text-blue-300">
+              第{activeChapterNo}章
+            </span>
+          </div>
+          <div className="mt-2 space-y-1 text-sm text-blue-800 dark:text-blue-300">
+            <div>章节功能：{activeChapter ? stringValue(activeChapter.function) || '暂无' : '暂无'}</div>
+            <div>章节标题：{activeChapter ? stringValue(activeChapter.title) || '暂无' : '暂无'}</div>
+            <div>关联伏笔：{relatedItems.foreshadow.length} 条</div>
+            <div>关联转折：{relatedItems.turning.length} 条</div>
+          </div>
+        </div>
+      )}
       {chapters.length > 0 && (
         <div className="space-y-2">
           {chapters.slice(0, 12).map((chapter, index) => (

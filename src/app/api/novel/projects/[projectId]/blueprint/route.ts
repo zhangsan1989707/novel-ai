@@ -55,6 +55,9 @@ export async function POST(
   "mainlineDirection": "主线推进方向（核心冲突、阶段规划）",
   "growthDirection": "主角成长方向（技能、地位、势力、境界等）",
   "endingDirection": "可能的终局方向（仅作为远景参考，不决定具体结局）",
+  "platformStrategy": "平台策略（章节长度、钩子密度、高潮频率）",
+  "genreStrategy": "题材策略（世界扩张、冲突形态、读者期待）",
+  "styleStrategy": "风格策略（叙事口吻、节奏、去AI味方向）",
   "constraints": ["约束条件1", "约束条件2"]
 }`
 
@@ -95,6 +98,9 @@ export async function POST(
       mainlineDirection: (blueprint.mainlineDirection as string) || '',
       growthDirection: (blueprint.growthDirection as string) || '',
       endingDirection: (blueprint.endingDirection as string) || '',
+      platformStrategy: (blueprint.platformStrategy as string) || '',
+      genreStrategy: (blueprint.genreStrategy as string) || '',
+      styleStrategy: (blueprint.styleStrategy as string) || '',
       constraints,
     }
 

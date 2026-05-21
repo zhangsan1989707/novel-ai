@@ -22,7 +22,7 @@ vi.mock('@/lib/prisma', () => {
     }
 
     if (text.includes('SELECT COUNT(*)::bigint AS count')) {
-      return [{ count: 0n }]
+      return [{ count: BigInt(0) }]
     }
 
     return []

@@ -764,6 +764,9 @@ model BookBlueprint {
   mainlineDirection String?
   growthDirection   String?
   endingDirection   String?
+  platformStrategy  String?
+  genreStrategy     String?
+  styleStrategy     String?
   constraints       String[]     @default([])
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt

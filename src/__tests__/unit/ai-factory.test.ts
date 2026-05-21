@@ -140,11 +140,14 @@ describe('BaseAIProvider', () => {
       readonly vendor = AIVendor.DEEPSEEK
       async generate() { return { content: '' } }
       async *generateStream() { yield '' }
+      public exposeEstimateTargetTokens(targetWordCount: number) {
+        return this.estimateTargetTokens(targetWordCount)
+      }
     }
 
     const provider = new TestProvider()
     // 3000 字 * 1.5 = 4500 tokens
-    expect(provider.estimateTargetTokens(3000)).toBe(4500)
+    expect(provider.exposeEstimateTargetTokens(3000)).toBe(4500)
   })
 
   it('should validate config correctly', async () => {
@@ -155,6 +158,9 @@ describe('BaseAIProvider', () => {
       readonly vendor = AIVendor.DEEPSEEK
       async generate() { return { content: '' } }
       async *generateStream() { yield '' }
+      public exposeIsContentSufficient(wordCount: number, targetWordCount: number) {
+        return this.isContentSufficient(wordCount, targetWordCount)
+      }
     }
 
     const provider = new TestProvider()
@@ -186,13 +192,16 @@ describe('BaseAIProvider', () => {
       readonly vendor = AIVendor.DEEPSEEK
       async generate() { return { content: '' } }
       async *generateStream() { yield '' }
+      public exposeIsContentSufficient(wordCount: number, targetWordCount: number) {
+        return this.isContentSufficient(wordCount, targetWordCount)
+      }
     }
 
     const provider = new TestProvider()
 
     // 3000 * 0.9 = 2700, 所以 2800 应该足够，2000 不够
-    expect(provider.isContentSufficient(2800, 3000)).toBe(true)
-    expect(provider.isContentSufficient(2000, 3000)).toBe(false)
-    expect(provider.isContentSufficient(2700, 3000)).toBe(true)
+    expect(provider.exposeIsContentSufficient(2800, 3000)).toBe(true)
+    expect(provider.exposeIsContentSufficient(2000, 3000)).toBe(false)
+    expect(provider.exposeIsContentSufficient(2700, 3000)).toBe(true)
   })
 })

@@ -368,6 +368,9 @@ export async function refreshBlueprintConsole(
         worldDirection: snapshot.world.expansionRoute,
         mainlineDirection: snapshot.blueprintCard.currentMainline,
         growthDirection: snapshot.protagonist.growthRoute,
+        platformStrategy: snapshot.blueprintCard.category,
+        genreStrategy: snapshot.world.summary,
+        styleStrategy: snapshot.style.strategy,
       },
       create: {
         projectId,
@@ -376,6 +379,9 @@ export async function refreshBlueprintConsole(
         mainlineDirection: snapshot.blueprintCard.currentMainline,
         growthDirection: snapshot.protagonist.growthRoute,
         endingDirection: snapshot.world.hiddenHierarchy || snapshot.world.expansionRoute,
+        platformStrategy: snapshot.blueprintCard.category,
+        genreStrategy: snapshot.world.summary,
+        styleStrategy: snapshot.style.strategy,
         constraints: [],
       },
     })

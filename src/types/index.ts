@@ -535,6 +535,9 @@ export interface BookBlueprintInfo {
   mainlineDirection?: string
   growthDirection?: string
   endingDirection?: string
+  platformStrategy?: string
+  genreStrategy?: string
+  styleStrategy?: string
   constraints: string[]
 }
 

@@ -1,6 +1,8 @@
 'use client'
 
+import { useCallback, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui'
+import { AnalysisDimension } from '@/types'
 import { BookOpen, Sparkles } from 'lucide-react'
 import { AnalysisTaskPanel } from './AnalysisTaskPanel'
 import { BookAnalysisDashboard } from './BookAnalysisDashboard'
@@ -10,7 +12,37 @@ interface AnalysisWorkbenchProps {
   projectId: number
 }
 
+interface AnalysisNavigationRequest {
+  id: number
+  sectionId?: string
+  dimension?: AnalysisDimension
+  chapterNo?: number
+  anchorId?: string
+}
+
 export function AnalysisWorkbench({ projectId }: AnalysisWorkbenchProps) {
+  const [refreshSeed, setRefreshSeed] = useState(0)
+  const [navigationRequest, setNavigationRequest] = useState<AnalysisNavigationRequest | null>(null)
+
+  const scrollToSection = useCallback((sectionId: string) => {
+    const el = document.getElementById(sectionId)
+    el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [])
+
+  const handleTaskComplete = useCallback(() => {
+    setRefreshSeed(seed => seed + 1)
+  }, [])
+
+  const handleNavigateRequest = useCallback((request: Omit<AnalysisNavigationRequest, 'id'>) => {
+    if (request.sectionId) {
+      scrollToSection(request.sectionId)
+    }
+    setNavigationRequest({
+      id: Date.now(),
+      ...request,
+    })
+  }, [scrollToSection])
+
   return (
     <div className="space-y-5">
       <Card className="border-amber-200 bg-amber-50/70 dark:border-amber-900/40 dark:bg-amber-950/20">
@@ -26,7 +58,7 @@ export function AnalysisWorkbench({ projectId }: AnalysisWorkbenchProps) {
         </CardContent>
       </Card>
 
-      <AnalysisTaskPanel projectId={projectId} />
+      <AnalysisTaskPanel projectId={projectId} onTaskComplete={handleTaskComplete} />
 
       <Card className="overflow-hidden border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
         <CardHeader>
@@ -36,11 +68,20 @@ export function AnalysisWorkbench({ projectId }: AnalysisWorkbenchProps) {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <BookAnalysisDashboard projectId={projectId} />
+          <BookAnalysisDashboard
+            projectId={projectId}
+            refreshSeed={refreshSeed}
+            onNavigateSection={scrollToSection}
+            onNavigateRequest={handleNavigateRequest}
+          />
         </CardContent>
       </Card>
 
-      <BookAnalysisPanel projectId={projectId} />
+      <BookAnalysisPanel
+        projectId={projectId}
+        refreshSeed={refreshSeed}
+        navigationRequest={navigationRequest}
+      />
     </div>
   )
 }

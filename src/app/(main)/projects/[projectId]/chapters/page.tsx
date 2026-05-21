@@ -1,13 +1,10 @@
-'use client'
-
-import { use } from 'react'
 import { redirect } from 'next/navigation'
 
-interface PageProps {
+export default async function ChaptersPage({
+  params,
+}: {
   params: Promise<{ projectId: string }>
-}
-
-export default function ChaptersPage({ params }: PageProps) {
-  const { projectId } = use(params)
+}) {
+  const { projectId } = await params
   redirect(`/projects/${projectId}`)
 }
