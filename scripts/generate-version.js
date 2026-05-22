@@ -2,6 +2,9 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
+const versionJsonPath = path.join(__dirname, '..', 'src', 'lib', 'version.json');
+const versionJsonDir = path.dirname(versionJsonPath);
+
 function getGitCommitHash() {
   try {
     return execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
@@ -29,15 +32,24 @@ function getGitCommitDate() {
   }
 }
 
-const version = {
-  commitHash: getGitCommitHash(),
-  branch: getGitBranch(),
-  commitDate: getGitCommitDate(),
-  buildDate: new Date().toISOString(),
-};
+let version;
+const commitHash = getGitCommitHash();
 
-const versionJsonPath = path.join(__dirname, '..', 'src', 'lib', 'version.json');
-const versionJsonDir = path.dirname(versionJsonPath);
+if (commitHash === 'unknown' && fs.existsSync(versionJsonPath)) {
+  console.log('No git info found, preserving existing version...');
+  const existingVersion = JSON.parse(fs.readFileSync(versionJsonPath, 'utf8'));
+  version = {
+    ...existingVersion,
+    buildDate: new Date().toISOString(),
+  };
+} else {
+  version = {
+    commitHash: commitHash,
+    branch: getGitBranch(),
+    commitDate: getGitCommitDate(),
+    buildDate: new Date().toISOString(),
+  };
+}
 
 if (!fs.existsSync(versionJsonDir)) {
   fs.mkdirSync(versionJsonDir, { recursive: true });
