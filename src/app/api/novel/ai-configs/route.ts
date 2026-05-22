@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { AIVendor } from '@/types'
 import { logError } from '@/lib/logger'
+import type { Prisma } from '@prisma/client'
 
 // ============================================
 // Schema 验证
@@ -36,7 +37,7 @@ export async function GET() {
     })
 
     // 隐藏 API Key 的完整值
-    const safeConfigs = configs.map((config) => ({
+    const safeConfigs = configs.map((config: Prisma.AIModelConfigGetPayload<object>) => ({
       ...config,
       apiKey: config.apiKey ? `${config.apiKey.slice(0, 4)}${'*'.repeat(Math.max(0, config.apiKey.length - 8))}${config.apiKey.slice(-4)}` : null,
       embeddingApiKey: config.embeddingApiKey ? `${config.embeddingApiKey.slice(0, 4)}${'*'.repeat(Math.max(0, config.embeddingApiKey.length - 8))}${config.embeddingApiKey.slice(-4)}` : null,
