@@ -44,3 +44,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .deploy-password
+
+# build outputs
+src/lib/version.json
