@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 import { Button, Input, Select, Textarea, toast, CollapsibleSection } from '@/components/ui'
 import { ArrowLeft, Sparkles, Settings } from 'lucide-react'
 import { genreOptions, writingStyleOptions } from '@/components/project'
@@ -23,8 +23,8 @@ interface NewProjectForm {
   platform: Platform | ''
   genre: string
   corePitch: string
-  writingStyle: string
-  lengthType: LengthType | ''
+  writingStyle?: string
+  lengthType?: LengthType | ''
   targetAudience?: 'MALE' | 'FEMALE'
   title: string
   description: string
@@ -51,6 +51,25 @@ const LENGTH_TYPE_ENUM_MAP: Record<LengthType, string> = {
 const PLATFORM_LIST: Platform[] = ['qidian', 'fanqie', 'feilu', 'jinjiang', 'qimao']
 const LENGTH_TYPE_LIST: LengthType[] = ['short', 'medium', 'long', 'ultra_long']
 
+function inferWritingStyle(genre: string, corePitch: string) {
+  const text = `${genre} ${corePitch}`
+  if (/(悬疑|规则|刑侦|怪谈|惊悚)/.test(text)) return '悬疑烧脑'
+  if (/(甜|宠|婚恋|恋爱|心动)/.test(text)) return '情绪拉扯'
+  if (/(种田|家族|经营|历史|朝堂)/.test(text)) return '慢热养成'
+  if (/(玄幻|仙侠|高武|末世|系统|无敌|升级)/.test(text)) return '快节奏爽文'
+  if (/(科幻|未来|机甲|星际)/.test(text)) return '热血激昂'
+  return '市场向选题'
+}
+
+function inferLengthType(platform: Platform | '', genre: string, corePitch: string): LengthType {
+  const text = `${genre} ${corePitch}`
+  if (platform === 'jinjiang') return 'medium'
+  if (platform === 'fanqie') return /(轻松|日常|悬疑|都市)/.test(text) ? 'medium' : 'long'
+  if (platform === 'qimao') return /(科幻|悬疑|都市)/.test(text) ? 'medium' : 'long'
+  if (platform === 'feilu') return /(军事|玄幻|系统|无敌)/.test(text) ? 'long' : 'medium'
+  return /(悬疑|都市|轻小说|日常)/.test(text) ? 'medium' : 'long'
+}
+
 export default function NewProjectPage() {
   const router = useRouter()
   const [submitting, setSubmitting] = useState(false)
@@ -62,7 +81,7 @@ export default function NewProjectPage() {
     register,
     handleSubmit,
     setValue,
-    watch,
+    control,
     formState: { errors },
   } = useForm<NewProjectForm>({
     defaultValues: {
@@ -80,18 +99,18 @@ export default function NewProjectPage() {
     },
   })
 
-  const platform = watch('platform')
-  const lengthType = watch('lengthType')
-
-  const selectedAiModelId = watch('aiModelId')
+  const platform = useWatch({ control, name: 'platform' })
+  const lengthType = useWatch({ control, name: 'lengthType' })
+  const selectedAiModelId = useWatch({ control, name: 'aiModelId' })
 
   const handleInspirationSelect = useCallback(async (inspiration: HotInspiration) => {
     setGeneratingTitle(true)
     setValue('title', '正在生成书名...', { shouldDirty: true, shouldValidate: true })
-    setValue('corePitch', `${inspiration.title}：${inspiration.description}`, { shouldDirty: true, shouldValidate: true })
+    setValue('corePitch', inspiration.aiInsight || `${inspiration.title}：${inspiration.description}`, { shouldDirty: true, shouldValidate: true })
     setValue('description', inspiration.sampleSummary, { shouldDirty: true, shouldValidate: true })
     setValue('genre', inspiration.sampleGenre, { shouldDirty: true, shouldValidate: true })
     setValue('writingStyle', inspiration.sampleWritingStyle, { shouldDirty: true, shouldValidate: true })
+    setValue('lengthType', inferLengthType(platform, inspiration.sampleGenre, inspiration.aiInsight || inspiration.description), { shouldDirty: true, shouldValidate: true })
     setValue('targetAudience', inspiration.category === 'male' ? 'MALE' : inspiration.category === 'female' ? 'FEMALE' : undefined, { shouldDirty: true, shouldValidate: true })
     try {
       const res = await fetch('/api/novel/ai/generate-title', {
@@ -120,7 +139,7 @@ export default function NewProjectPage() {
 
     setValue('title', inspiration.sampleTitle, { shouldDirty: true, shouldValidate: true })
     toast.success(`已应用灵感「${inspiration.title}」`)
-  }, [selectedAiModelId, setValue])
+  }, [platform, selectedAiModelId, setValue])
 
   useEffect(() => {
     fetch('/api/novel/ai-configs')
@@ -139,12 +158,12 @@ export default function NewProjectPage() {
       toast.error('请选择平台')
       return
     }
-    if (!data.lengthType) {
-      toast.error('请选择长度类型')
-      return
-    }
     setSubmitting(true)
     try {
+      const normalizedCorePitch = data.corePitch?.trim() || data.description?.trim() || ''
+      const derivedWritingStyle = data.writingStyle || inferWritingStyle(data.genre || '', normalizedCorePitch)
+      const derivedLengthType = data.lengthType || inferLengthType(data.platform, data.genre || '', normalizedCorePitch)
+
       const res = await fetch('/api/novel/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -152,14 +171,14 @@ export default function NewProjectPage() {
           title: data.title || undefined,
           description: data.description || undefined,
           genre: data.genre || undefined,
-          writingStyle: data.writingStyle || undefined,
-          corePitch: data.corePitch || undefined,
+          writingStyle: derivedWritingStyle || undefined,
+          corePitch: normalizedCorePitch || undefined,
           targetAudience: data.targetAudience || undefined,
           targetWordCount: data.targetWordCount || undefined,
           chapterWordCount: data.chapterWordCount || undefined,
           aiModelId: data.aiModelId || undefined,
           platform: PLATFORM_ENUM_MAP[data.platform],
-          lengthType: LENGTH_TYPE_ENUM_MAP[data.lengthType],
+          lengthType: LENGTH_TYPE_ENUM_MAP[derivedLengthType],
         }),
       })
       const result = await res.json()
@@ -233,53 +252,22 @@ export default function NewProjectPage() {
 
               <div>
                 <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  灵感 <span className="text-red-500">*</span>
+                  一句话方向 <span className="text-red-500">*</span>
                 </label>
                 <Textarea
-                  placeholder="例：社畜穿越成赘婿，靠996卷死修仙界；也可以直接从上面的市场趋势灵感里选"
-                  rows={3}
+                  placeholder="例：社畜穿越成赘婿，靠996卷死修仙界；也可以直接从上面的灵感卡里选"
+                  rows={4}
                   error={errors.corePitch?.message}
                   {...register('corePitch', { required: '请输入灵感' })}
                 />
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  这里是给 AI 的创作方向，后续会自动生成标题、蓝图、阶段规划和小说设定中枢。
+                  只要给出一个方向，AI 会自动补全风格、长度、开局和阶段结构。
                 </p>
               </div>
-
-              <Select
-                label="风格"
-                options={writingStyleOptions}
-                placeholder="选择写作风格"
-                error={errors.writingStyle?.message}
-                {...register('writingStyle', { required: '请选择写作风格' })}
-              />
-
-              <div>
-                <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  长度类型 <span className="text-red-500">*</span>
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  {LENGTH_TYPE_LIST.map((lt) => (
-                    <button
-                      key={lt}
-                      type="button"
-                      onClick={() => setValue('lengthType', lt, { shouldValidate: true })}
-                      className={`rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${
-                        lengthType === lt
-                          ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
-                          : 'border-gray-200 bg-white text-gray-600 hover:border-blue-300 hover:text-blue-600 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300'
-                      }`}
-                    >
-                      {LENGTH_TYPE_LABELS[lt]}
-                    </button>
-                  ))}
-                </div>
-                {errors.lengthType && <p className="mt-1 text-sm text-red-500">{errors.lengthType.message}</p>}
-              </div>
             </div>
             </div>
 
-            <CollapsibleSection title="高级设置" description="标题、字数、AI 模型（可选）">
+            <CollapsibleSection title="AI 高级调校" description="风格、长度、标题、字数、AI 模型（可选）">
               <div className="space-y-4 pt-1">
                 <Input
                   label="小说标题"
@@ -298,6 +286,40 @@ export default function NewProjectPage() {
                   rows={3}
                   {...register('description')}
                 />
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Select
+                    label="风格"
+                    options={writingStyleOptions}
+                    placeholder="让 AI 自动判断或手动覆盖"
+                    error={errors.writingStyle?.message}
+                    {...register('writingStyle')}
+                  />
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      长度类型
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {LENGTH_TYPE_LIST.map((lt) => (
+                        <button
+                          key={lt}
+                          type="button"
+                          onClick={() => setValue('lengthType', lt, { shouldValidate: true })}
+                          className={`rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${
+                            lengthType === lt
+                              ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                              : 'border-gray-200 bg-white text-gray-600 hover:border-blue-300 hover:text-blue-600 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300'
+                          }`}
+                        >
+                          {LENGTH_TYPE_LABELS[lt]}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      默认由 AI 根据平台和题材自动判断，手动选只是覆盖值。
+                    </p>
+                  </div>
+                </div>
 
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Input
@@ -370,9 +392,9 @@ export default function NewProjectPage() {
           <aside className="lg:sticky lg:top-20 lg:self-start">
             <section className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
               <div className="mb-4">
-                <h2 className="text-base font-semibold text-gray-900 dark:text-white">实时互联网热榜灵感库</h2>
+                <h2 className="text-base font-semibold text-gray-900 dark:text-white">AI 爆款灵感卡</h2>
                 <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                  优先抓取起点、番茄、晋江的最新公开榜单；抓取失败时才会退回本地趋势数据。
+                  不显示原始榜单，只展示 AI 提炼后的可开写方向。
                 </p>
               </div>
               <InspirationPanel onSelect={handleInspirationSelect} compact limit={4} />

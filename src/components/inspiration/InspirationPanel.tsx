@@ -70,8 +70,8 @@ export function InspirationPanel({ onSelect, compact = false, limit = 6, classNa
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <Sparkles className={compact ? 'h-4 w-4 text-amber-500' : 'h-5 w-5 text-amber-500'} />
-          <h3 className={compact ? 'text-sm font-semibold text-gray-900 dark:text-white' : 'font-medium text-lg'}>实时互联网热榜灵感库</h3>
-          {!compact && <span className="text-xs text-gray-500">优先抓取起点、番茄、晋江最新公开榜单</span>}
+          <h3 className={compact ? 'text-sm font-semibold text-gray-900 dark:text-white' : 'font-medium text-lg'}>AI 爆款灵感卡</h3>
+          {!compact && <span className="text-xs text-gray-500">不是榜单摘要，而是 AI 提炼后的可开写方向</span>}
         </div>
         <Button
           type="button"
@@ -81,7 +81,7 @@ export function InspirationPanel({ onSelect, compact = false, limit = 6, classNa
           disabled={loading}
         >
           <RefreshCw className={`h-4 w-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
-          刷新趋势
+          刷新提炼
         </Button>
       </div>
 
@@ -168,9 +168,14 @@ interface InspirationCardProps {
 
 function InspirationCard({ inspiration, onSelect, compact = false }: InspirationCardProps) {
   const [expanded, setExpanded] = useState(false)
+  const detailChips = [
+    inspiration.platformFit,
+    inspiration.recommendedLength,
+    inspiration.sampleWritingStyle,
+  ].filter(Boolean) as string[]
 
   return (
-    <Card hover className="group overflow-hidden">
+    <Card hover className="group overflow-hidden border-gray-200/80 dark:border-gray-700/80">
       <CardContent className={`${compact ? 'p-3' : 'p-4'} flex h-full flex-col`}>
         <div className="flex items-start justify-between mb-2">
           <div className="flex items-center gap-2">
@@ -184,7 +189,7 @@ function InspirationCard({ inspiration, onSelect, compact = false }: Inspiration
           </div>
         </div>
 
-        <h4 className="mb-1 text-sm font-medium transition-colors group-hover:text-blue-600">
+        <h4 className="mb-1 text-sm font-semibold transition-colors group-hover:text-blue-600">
           {inspiration.title}
         </h4>
 
@@ -196,9 +201,35 @@ function InspirationCard({ inspiration, onSelect, compact = false }: Inspiration
           {inspiration.coreElements.slice(0, 3).map((element) => (
             <span
               key={element}
-              className="px-2 py-0.5 text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded"
+              className="px-2 py-0.5 text-xs bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 rounded"
             >
               {element}
+            </span>
+          ))}
+        </div>
+
+        <div className="mb-3 space-y-2 rounded-xl border border-dashed border-amber-200 bg-amber-50/70 p-3 dark:border-amber-900/40 dark:bg-amber-950/20">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">AI 提炼卖点</p>
+            <p className="mt-1 text-xs leading-5 text-gray-700 dark:text-gray-300 line-clamp-3">
+              {inspiration.aiInsight || inspiration.sampleSummary}
+            </p>
+          </div>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">黄金开局</p>
+            <p className="mt-1 text-xs leading-5 text-gray-600 dark:text-gray-400 line-clamp-3">
+              {inspiration.openingScene || inspiration.sampleSummary}
+            </p>
+          </div>
+        </div>
+
+        <div className={compact ? 'mb-2 flex flex-wrap gap-1' : 'flex flex-wrap gap-1 mb-3'}>
+          {detailChips.slice(0, 3).map((chip) => (
+            <span
+              key={chip}
+              className="px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300"
+            >
+              {chip}
             </span>
           ))}
         </div>
@@ -212,6 +243,10 @@ function InspirationCard({ inspiration, onSelect, compact = false }: Inspiration
             <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
               <span className="font-medium">目标读者：</span>
               {inspiration.targetAudience}
+            </p>
+            <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
+              <span className="font-medium">适合切法：</span>
+              {inspiration.tags.slice(0, 4).join('、')}
             </p>
           </div>
         )}
@@ -231,7 +266,7 @@ function InspirationCard({ inspiration, onSelect, compact = false }: Inspiration
             onClick={() => onSelect(inspiration)}
             className="h-8 w-full justify-center whitespace-nowrap text-xs"
           >
-            使用此灵感
+            直接开写
             <ChevronRight className="h-3 w-3 ml-1" />
           </Button>
         </div>

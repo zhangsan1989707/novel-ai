@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import type { HotInspiration, InspirationCategory } from './data'
+import { enhanceInspirations, type HotInspiration, type InspirationCategory } from './data'
 
 type MarketTrendRow = {
   platform: string
@@ -158,16 +158,16 @@ function buildInspiration(insight: MarketTrendInsight): HotInspiration {
   return {
     id: `trend-${insight.platform}-${insight.genre}-${insight.rankDate.toISOString().slice(0, 10)}`,
     category: insight.category,
-    title: `${platformText} · ${insight.genre} · ${trendLabel}`,
-    description: summaryPieces.join('，') || `${platformText} ${insight.genre} 当前处于${trendLabel}`,
+    title: `${platformText} ${insight.genre} · 爆点开写`,
+    description: summaryPieces.join('，') || `${platformText} ${insight.genre} 当前处于${trendLabel}，更适合从冲突与反差切入，而不是复述榜单。`,
     exampleWorks: insight.recommendationGenres.length > 0
       ? insight.recommendationGenres.slice(0, 3)
       : insight.hotTags.slice(0, 3),
     coreElements: coreElements.length > 0 ? coreElements : [platformText, insight.genre, trendLabel],
     targetAudience,
     hotScore,
-    sampleTitle: `${platformText}${insight.genre}：${insight.hotTags[0] || '热点选题'}`,
-    sampleSummary: `${platformText} ${insight.genre} 最近呈现${trendLabel}，核心关键词集中在 ${insight.hotTags.slice(0, 3).join('、') || '市场热词'}。适合围绕${platformText}读者偏好，进一步展开成章节级故事蓝图。${insight.competitorAnalysis ? ` 近期竞品要点：${insight.competitorAnalysis.slice(0, 80)}。` : ''}`,
+    sampleTitle: `${platformText}${insight.genre}：${insight.hotTags[0] || '爆点选题'}`,
+    sampleSummary: `${platformText} ${insight.genre} 现在更值得写的是「${insight.hotTags.slice(0, 3).join('、') || '市场热词'}」的组合，而不是单纯复述热榜。${insight.competitorAnalysis ? ` 近期竞品要点：${insight.competitorAnalysis.slice(0, 80)}。` : ''}`,
     sampleGenre: insight.genre,
     sampleWritingStyle: insight.trendDirection === 'rising' ? '快节奏爽文' : '市场向选题',
     tags: uniqueStrings([insight.platform, insight.genre, insight.trendDirection, ...insight.hotTags], 6),
@@ -213,5 +213,5 @@ export async function getMarketTrendInspirations(category?: InspirationCategory,
     insights = shuffled
   }
 
-  return insights.slice(0, limit)
+  return enhanceInspirations(insights.slice(0, limit))
 }

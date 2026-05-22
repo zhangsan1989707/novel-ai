@@ -1,6 +1,6 @@
 import https from 'node:https'
 import http from 'node:http'
-import type { HotInspiration, InspirationCategory } from './data'
+import { enhanceInspirations, type HotInspiration, type InspirationCategory } from './data'
 
 type LiveBook = {
   title: string
@@ -288,16 +288,16 @@ function buildInspirationFromBooks(
   return {
     id: `live-${source}-${genre}`,
     category: inferCategory(source, genre),
-    title: `${SOURCE_LABELS[source]}实时热榜 · ${genre}`,
-    description: `${dateLabel}抓取，当前靠前作品：${exampleWorks.join('、') || '暂无'}。主要来源：${uniqueStrings(books.map(book => book.sourceList), 3).join('、')}`,
+    title: `${SOURCE_LABELS[source]} ${genre} · 爆款开写方向`,
+    description: `${dateLabel} 的公开热榜样本中，AI 认为最值得开写的是「${genre} + ${uniqueStrings(topBooks.map(book => book.subCategory || book.category), 2).join(' / ') || '热词组合'}」。当前靠前作品：${exampleWorks.join('、') || '暂无'}。`,
     exampleWorks,
     coreElements: trendTags.length > 0 ? trendTags : [genre, SOURCE_LABELS[source], '实时热榜'],
     targetAudience: `${SOURCE_LABELS[source]}${genre}读者`,
     hotScore: Math.min(10, Math.max(7, 6 + Math.min(books.length, 4))),
-    sampleTitle: exampleWorks[0] || `${SOURCE_LABELS[source]}${genre}热点选题`,
+    sampleTitle: exampleWorks[0] || `${SOURCE_LABELS[source]}${genre}高热选题`,
     sampleSummary: sampleSummarySeed
-      ? truncate(sampleSummarySeed, 110)
-      : `${SOURCE_LABELS[source]} ${genre} 热榜实时抓取，适合从榜单靠前作品中提炼题材组合与节奏风格。`,
+      ? `把 ${truncate(sampleSummarySeed, 110)} 改写成更强的冲突开局和更快的节奏兑现。`
+      : `${SOURCE_LABELS[source]} ${genre} 热榜实时抓取，可直接提炼为开局冲突、反差身份和连载钩子。`,
     sampleGenre: genre,
     sampleWritingStyle: inferWritingStyle(genre, descriptions),
     tags,
@@ -367,12 +367,14 @@ export async function getLiveInternetInspirations(
     aggregateSourceInspirations('jjwxc', jjwxc.status === 'fulfilled' ? jjwxc.value : [], dateLabel),
   ])
 
+  const enhancedInspirations = enhanceInspirations(inspirations)
+
   liveCache = {
     expiresAt: now + CACHE_TTL_MS,
-    data: inspirations,
+    data: enhancedInspirations,
   }
 
-  let result = inspirations
+  let result = enhancedInspirations
   if (category) {
     result = result.filter(item => item.category === category)
   }

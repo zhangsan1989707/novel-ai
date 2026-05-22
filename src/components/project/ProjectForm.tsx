@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 import { Button, Input, Select, Textarea, toast } from '@/components/ui'
 import { Settings, AlertCircle, ChevronDown, ChevronUp, Sparkles, Wand2 } from 'lucide-react'
 import { AIVendor } from '@/types'
@@ -24,9 +24,11 @@ interface AIConfig {
 export interface ProjectFormData {
   title: string
   description?: string
+  corePitch?: string
   targetAudience?: 'MALE' | 'FEMALE'
   genre?: string
   writingStyle?: string
+  lengthType?: 'short' | 'medium' | 'long' | 'ultra_long'
   targetWordCount?: number
   chapterWordCount?: number
   coverImage?: string
@@ -78,6 +80,31 @@ export const targetAudienceOptions = [
   { label: '女频', value: 'FEMALE' },
 ]
 
+const LENGTH_TYPE_OPTIONS = [
+  { label: '短篇', value: 'short' },
+  { label: '中篇', value: 'medium' },
+  { label: '长篇', value: 'long' },
+  { label: '超长篇', value: 'ultra_long' },
+] as const
+
+function inferWritingStyle(genre: string, corePitch: string) {
+  const text = `${genre} ${corePitch}`
+  if (/(悬疑|规则|刑侦|怪谈|惊悚)/.test(text)) return '悬疑烧脑'
+  if (/(甜|宠|婚恋|恋爱|心动)/.test(text)) return '情绪拉扯'
+  if (/(种田|家族|经营|历史|朝堂)/.test(text)) return '慢热养成'
+  if (/(玄幻|仙侠|高武|末世|系统|无敌|升级)/.test(text)) return '快节奏爽文'
+  if (/(科幻|未来|机甲|星际)/.test(text)) return '热血激昂'
+  return '市场向选题'
+}
+
+function inferLengthType(genre: string, corePitch: string): ProjectFormData['lengthType'] {
+  const text = `${genre} ${corePitch}`
+  if (/(慢热|养成|史诗|群像|家族|经营)/.test(text)) return 'long'
+  if (/(悬疑|规则|都市|轻小说|日常|科幻)/.test(text)) return 'medium'
+  if (/(短篇|短文|小故事)/.test(text)) return 'short'
+  return 'long'
+}
+
 // ============================================
 // Component
 // ============================================
@@ -104,36 +131,46 @@ export function ProjectForm({ defaultValues, onSubmit, onCancel, loading, submit
   const [showInspiration, setShowInspiration] = useState(true)
 
   useEffect(() => {
-    fetchAIConfigs()
-  }, [])
+    let cancelled = false
 
-  const fetchAIConfigs = async () => {
-    try {
-      const res = await fetch('/api/novel/ai-configs')
-      const data = await res.json()
-      if (data.success) {
-        setAiConfigs(data.data)
+    const loadAIConfigs = async () => {
+      try {
+        const res = await fetch('/api/novel/ai-configs')
+        const data = await res.json()
+        if (!cancelled && data.success) {
+          setAiConfigs(data.data)
+        }
+      } catch (error) {
+        console.error('获取 AI 配置失败:', error)
+      } finally {
+        if (!cancelled) {
+          setLoadingConfigs(false)
+        }
       }
-    } catch (error) {
-      console.error('获取 AI 配置失败:', error)
-    } finally {
-      setLoadingConfigs(false)
     }
-  }
+
+    void loadAIConfigs()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const {
     register,
     handleSubmit,
-    watch,
+    control,
     setValue,
     formState: { errors },
   } = useForm<ProjectFormData>({
     defaultValues: {
       title: '',
       description: '',
+      corePitch: '',
       targetAudience: undefined,
       genre: '',
       writingStyle: '',
+      lengthType: undefined,
       targetWordCount: undefined,
       chapterWordCount: 3000,
       coverImage: '',
@@ -149,14 +186,15 @@ export function ProjectForm({ defaultValues, onSubmit, onCancel, loading, submit
     },
   })
 
-  // 使用 watch 获取表单值，避免直接操作 DOM
-  const formValues = watch()
+  const formValues = useWatch({ control })
 
   const handleInspirationSelect = async (inspiration: HotInspiration) => {
+    setValue('corePitch', inspiration.aiInsight || `${inspiration.title}：${inspiration.description}`)
     setValue('description', inspiration.sampleSummary)
     setValue('genre', inspiration.sampleGenre)
     setValue('writingStyle', inspiration.sampleWritingStyle)
     setValue('targetAudience', inspiration.category === 'male' ? 'MALE' : inspiration.category === 'female' ? 'FEMALE' : undefined)
+    setValue('lengthType', inferLengthType(inspiration.sampleGenre, inspiration.aiInsight || inspiration.description))
     setShowInspiration(false)
 
     setGeneratingTitle(true)
@@ -205,7 +243,7 @@ export function ProjectForm({ defaultValues, onSubmit, onCancel, loading, submit
         existingSynopsis: formValues.description || undefined,
         targetAudience: formValues.targetAudience || undefined,
         genre: formValues.genre || undefined,
-        writingStyle: formValues.writingStyle || undefined,
+        writingStyle: formValues.writingStyle || inferWritingStyle(formValues.genre || '', formValues.corePitch || ''),
         worldSetting: formValues.worldSetting || undefined,
         powerSystem: formValues.powerSystem || undefined,
         protagonistProfile: formValues.protagonistProfile || undefined,
@@ -248,7 +286,7 @@ export function ProjectForm({ defaultValues, onSubmit, onCancel, loading, submit
       const formData = {
         projectTitle: title,
         genre: formValues.genre || undefined,
-        writingStyle: formValues.writingStyle || undefined,
+        writingStyle: formValues.writingStyle || inferWritingStyle(formValues.genre || '', formValues.corePitch || ''),
         targetAudience: formValues.targetAudience || undefined,
         existingWorldSetting: formValues.worldSetting || undefined,
         existingPowerSystem: formValues.powerSystem || undefined,
@@ -286,13 +324,15 @@ export function ProjectForm({ defaultValues, onSubmit, onCancel, loading, submit
   }
 
   const processSubmit = (data: ProjectFormData) => {
-    const processed: ProjectFormData = {
-      ...data,
-      targetWordCount: data.targetWordCount ? Number(data.targetWordCount) : undefined,
-      chapterWordCount: data.chapterWordCount ? Number(data.chapterWordCount) : 3000,
-      totalVolumes: data.totalVolumes ? Number(data.totalVolumes) : 4,
-      aiModelId: data.aiModelId ? Number(data.aiModelId) : undefined,
-    }
+      const processed: ProjectFormData = {
+        ...data,
+        targetWordCount: data.targetWordCount ? Number(data.targetWordCount) : undefined,
+        chapterWordCount: data.chapterWordCount ? Number(data.chapterWordCount) : 3000,
+        totalVolumes: data.totalVolumes ? Number(data.totalVolumes) : 4,
+        aiModelId: data.aiModelId ? Number(data.aiModelId) : undefined,
+        writingStyle: data.writingStyle || inferWritingStyle(data.genre || '', data.corePitch || data.description || ''),
+        lengthType: data.lengthType || inferLengthType(data.genre || '', data.corePitch || data.description || ''),
+      }
 
     if (!showAdvancedFields) {
       processed.worldSetting = defaultValues?.worldSetting
@@ -312,6 +352,11 @@ export function ProjectForm({ defaultValues, onSubmit, onCancel, loading, submit
       {showInspiration && (
         <InspirationPanel onSelect={handleInspirationSelect} />
       )}
+      <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 text-sm text-gray-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-gray-300">
+        <p className="font-semibold text-amber-800 dark:text-amber-300">AI 先接管方向，再补齐设定。</p>
+        <p className="mt-1">首屏只保留最少输入：标题、题材、一句话方向。风格、长度、受众和世界观都可以交给 AI 推导或后置微调。</p>
+      </div>
+
       <div className="space-y-4">
         <Input
           label="标题"
@@ -331,7 +376,7 @@ export function ProjectForm({ defaultValues, onSubmit, onCancel, loading, submit
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-              简介
+              一句话方向
             </label>
             <button
               type="button"
@@ -353,9 +398,11 @@ export function ProjectForm({ defaultValues, onSubmit, onCancel, loading, submit
             </button>
           </div>
           <Textarea
-            placeholder="请输入小说简介，或点击上方「AI 润色」自动生成"
-            rows={3}
-            {...register('description')}
+            label="一句话方向"
+            placeholder="例：社畜穿越成赘婿，靠996卷死修仙界"
+            rows={4}
+            error={errors.corePitch?.message}
+            {...register('corePitch', { required: '请输入方向' })}
           />
         </div>
 
@@ -366,22 +413,6 @@ export function ProjectForm({ defaultValues, onSubmit, onCancel, loading, submit
             placeholder="选择小说类型"
             error={errors.genre?.message}
             {...register('genre')}
-          />
-          <Select
-            label="写作风格"
-            options={writingStyleOptions}
-            placeholder="选择写作风格"
-            error={errors.writingStyle?.message}
-            {...register('writingStyle')}
-          />
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <Select
-            label="目标受众"
-            options={targetAudienceOptions}
-            placeholder="选择男频/女频"
-            {...register('targetAudience')}
           />
         </div>
 
@@ -462,6 +493,7 @@ export function ProjectForm({ defaultValues, onSubmit, onCancel, loading, submit
             </div>
           )}
         </div>
+
       </div>
 
       {/* 更多设定 - 可折叠 */}
@@ -486,78 +518,106 @@ export function ProjectForm({ defaultValues, onSubmit, onCancel, loading, submit
             </button>
 
             {showMoreSettings && (
-          <div className="space-y-4 mt-4">
-            <div className="flex justify-end">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleGenerateAllSettings}
-                disabled={generatingSettings}
-              >
-                {generatingSettings ? (
-                  <>
-                    <div className="h-4 w-4 animate-spin rounded-full border border-blue-600 border-t-transparent mr-2" />
-                    生成中...
-                  </>
-                ) : (
-                  <>
-                    <Wand2 className="h-4 w-4 mr-2" />
-                    自动生成设定
-                  </>
-                )}
-              </Button>
-            </div>
+              <div className="space-y-4 mt-4">
+                <div className="flex justify-end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleGenerateAllSettings}
+                    disabled={generatingSettings}
+                  >
+                    {generatingSettings ? (
+                      <>
+                        <div className="h-4 w-4 animate-spin rounded-full border border-blue-600 border-t-transparent mr-2" />
+                        生成中...
+                      </>
+                    ) : (
+                      <>
+                        <Wand2 className="h-4 w-4 mr-2" />
+                        自动生成设定
+                      </>
+                    )}
+                  </Button>
+                </div>
 
-            <Textarea
-              label="世界观设定"
-              placeholder="描述小说所在的世界观设定..."
-              rows={3}
-              {...register('worldSetting')}
-            />
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Select
+                    label="写作风格"
+                    options={writingStyleOptions}
+                    placeholder="让 AI 自动判断或手动覆盖"
+                    error={errors.writingStyle?.message}
+                    {...register('writingStyle')}
+                  />
+                  <Select
+                    label="目标受众"
+                    options={targetAudienceOptions}
+                    placeholder="由 AI 自动判断"
+                    {...register('targetAudience')}
+                  />
+                </div>
 
-            <Textarea
-              label="力量体系"
-              placeholder="描述小说中的力量体系设定..."
-              rows={2}
-              {...register('powerSystem')}
-            />
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Select
+                    label="长度类型"
+                    options={LENGTH_TYPE_OPTIONS.map(option => ({ label: option.label, value: option.value }))}
+                    placeholder="让 AI 自动判断"
+                    {...register('lengthType')}
+                  />
+                  <div className="rounded-lg border border-dashed border-gray-200 dark:border-gray-700 bg-gray-50/70 dark:bg-gray-900/30 p-3 text-xs text-gray-500 dark:text-gray-400">
+                    风格、受众和长度都可以留空，创建时会由 AI 自动推导。
+                  </div>
+                </div>
 
-            <Textarea
-              label="主角人设"
-              placeholder="描述主角的性格、外貌、背景等..."
-              rows={3}
-              {...register('protagonistProfile')}
-            />
+                <Textarea
+                  label="世界观设定"
+                  placeholder="描述小说所在的世界观设定..."
+                  rows={3}
+                  {...register('worldSetting')}
+                />
 
-            <Textarea
-              label="主角目标"
-              placeholder="描述主角的主要目标和动机..."
-              rows={2}
-              {...register('protagonistGoal')}
-            />
+                <Textarea
+                  label="力量体系"
+                  placeholder="描述小说中的力量体系设定..."
+                  rows={2}
+                  {...register('powerSystem')}
+                />
 
-            <Textarea
-              label="反派设定"
-              placeholder="描述反派/ antagonists 的设定..."
-              rows={2}
-              {...register('antagonistSetting')}
-            />
+                <Textarea
+                  label="主角人设"
+                  placeholder="描述主角的性格、外貌、背景等..."
+                  rows={3}
+                  {...register('protagonistProfile')}
+                />
 
-            <Textarea
-              label="结局规划"
-              placeholder="描述小说的结局规划..."
-              rows={2}
-              {...register('endingPlan')}
-            />
+                <Textarea
+                  label="主角目标"
+                  placeholder="描述主角的主要目标和动机..."
+                  rows={2}
+                  {...register('protagonistGoal')}
+                />
 
-            <Textarea
-              label="写作提示词"
-              placeholder="额外的 AI 写作提示词..."
-              rows={2}
-              {...register('writingPrompt')}
-            />
-          </div>
+                <Textarea
+                  label="反派设定"
+                  placeholder="描述反派/ antagonists 的设定..."
+                  rows={2}
+                  {...register('antagonistSetting')}
+                />
+
+                <Textarea
+                  label="结局规划"
+                  placeholder="描述小说的结局规划..."
+                  rows={2}
+                  {...register('endingPlan')}
+                />
+
+                <Textarea
+                  label="写作提示词"
+                  placeholder="额外的 AI 写作提示词..."
+                  rows={2}
+                  {...register('writingPrompt')}
+                />
+              </div>
             )}
           </>
         )}
