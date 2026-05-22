@@ -370,9 +370,9 @@ export default function NewProjectPage() {
           <aside className="lg:sticky lg:top-20 lg:self-start">
             <section className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
               <div className="mb-4">
-                <h2 className="text-base font-semibold text-gray-900 dark:text-white">基于市场趋势的灵感库</h2>
+                <h2 className="text-base font-semibold text-gray-900 dark:text-white">实时互联网热榜灵感库</h2>
                 <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                  这里展示的是最近市场趋势聚合出的方向，不需要在这里完成全部设定。
+                  优先抓取起点、番茄、晋江的最新公开榜单；抓取失败时才会退回本地趋势数据。
                 </p>
               </div>
               <InspirationPanel onSelect={handleInspirationSelect} compact limit={4} />

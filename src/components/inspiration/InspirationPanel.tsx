@@ -70,8 +70,8 @@ export function InspirationPanel({ onSelect, compact = false, limit = 6, classNa
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <Sparkles className={compact ? 'h-4 w-4 text-amber-500' : 'h-5 w-5 text-amber-500'} />
-          <h3 className={compact ? 'text-sm font-semibold text-gray-900 dark:text-white' : 'font-medium text-lg'}>基于市场趋势的灵感库</h3>
-          {!compact && <span className="text-xs text-gray-500">从最近市场趋势里挑一个开写</span>}
+          <h3 className={compact ? 'text-sm font-semibold text-gray-900 dark:text-white' : 'font-medium text-lg'}>实时互联网热榜灵感库</h3>
+          {!compact && <span className="text-xs text-gray-500">优先抓取起点、番茄、晋江最新公开榜单</span>}
         </div>
         <Button
           type="button"
