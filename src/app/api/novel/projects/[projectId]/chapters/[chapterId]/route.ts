@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { logError } from '@/lib/logger'
-import { countChapterWords, getProjectChapterWordCount } from '@/lib/novel/chapter-word-count'
+import { countChapterWords, syncProjectChapterWordCount } from '@/lib/novel/chapter-word-count'
 
 // ============================================
 // Schema 验证
@@ -133,13 +133,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     })
 
     // 更新项目总字数
-    const currentWordCount = await getProjectChapterWordCount(prisma, oldChapter.projectId)
-    await prisma.novelProject.update({
-      where: { id: oldChapter.projectId },
-      data: {
-        currentWordCount,
-      },
-    })
+    await syncProjectChapterWordCount(prisma, oldChapter.projectId)
 
     return NextResponse.json({ success: true, data: chapter })
   } catch (error) {
@@ -191,13 +185,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     })
 
     // 更新项目总字数
-    const currentWordCount = await getProjectChapterWordCount(prisma, chapter.projectId)
-    await prisma.novelProject.update({
-      where: { id: chapter.projectId },
-      data: {
-        currentWordCount,
-      },
-    })
+    await syncProjectChapterWordCount(prisma, chapter.projectId)
 
     return NextResponse.json({ success: true, data: { id: chapterIdNum } })
   } catch (error) {

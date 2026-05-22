@@ -1,10 +1,11 @@
 'use client'
 
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { Button, Textarea, Select, Card, CardContent, CardHeader, CardTitle, Badge } from '@/components/ui'
-import { Sparkles, Square, Play, ArrowRight, BookOpen, MessageSquare, RefreshCw } from 'lucide-react'
+import { Button, Textarea } from '@/components/ui'
+import { Sparkles, Square, Play, ArrowRight, BookOpen, RefreshCw } from 'lucide-react'
 import { toast } from '@/components/ui/Toast'
 import { ContinuationMode, EndingDirection } from '@/types'
+import { countChineseWords } from '@/lib/utils'
 
 // ============================================
 // Types
@@ -112,7 +113,7 @@ export function ContinuationPanel({
       } else {
         toast.error(data.error?.message || '加载上下文失败')
       }
-    } catch (err) {
+    } catch {
       toast.error('加载上下文失败')
     } finally {
       setLoading(false)
@@ -177,8 +178,7 @@ export function ContinuationPanel({
 
         for (const line of lines) {
           if (line.startsWith('event: ')) {
-            const eventType = line.slice(7)
-            // 等待 data 行
+            // 等待紧随其后的 data 行
           } else if (line.startsWith('data: ')) {
             try {
               const data = JSON.parse(line.slice(6))
@@ -187,10 +187,11 @@ export function ContinuationPanel({
               }
               if (data.content) {
                 fullContent += data.content
+                const wordCount = countChineseWords(fullContent)
                 setGenerationState(prev => ({
                   ...prev,
                   content: fullContent,
-                  wordCount: fullContent.length,
+                  wordCount,
                 }))
               }
               if (data.error) {
@@ -218,7 +219,7 @@ export function ContinuationPanel({
         ...prev,
         status: 'done',
         content: displayContent,
-        wordCount: displayContent.length,
+        wordCount: countChineseWords(displayContent),
       }))
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
@@ -444,9 +445,9 @@ export function ContinuationPanel({
       {/* 生成按钮和控制 */}
       <div className="flex items-center gap-3">
         {generationState.status === 'idle' && (
-          <Button variant="primary" onClick={handleGenerate}>
+          <Button variant="primary" onClick={handleGenerate} disabled={loading}>
             <Play className="h-4 w-4 mr-2" />
-            开始生成
+            {loading ? '加载上下文中...' : '开始生成'}
           </Button>
         )}
         {generationState.status === 'generating' && (

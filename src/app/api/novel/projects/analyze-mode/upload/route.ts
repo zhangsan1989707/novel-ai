@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const wordCount = originalText.replace(/\s/g, '').length
+    const wordCount = countChapterWords(originalText)
     const contentPreview = originalText.slice(0, 8000)
 
     let savedSourceNovel = null

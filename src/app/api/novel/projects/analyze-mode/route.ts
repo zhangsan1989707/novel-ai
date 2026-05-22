@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { ProjectMode } from '@/types'
 import { logError } from '@/lib/logger'
 import { getCurrentUserId } from '@/lib/auth'
+import { countChapterWords } from '@/lib/novel/chapter-word-count'
 
 // ============================================
 // Schema 验证
@@ -62,7 +63,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 字数统计（originalText 可能为空，如果文件已通过 upload API 上传）
-    const wordCount = originalText ? originalText.replace(/\s/g, '').length : 0
+    const wordCount = countChapterWords(originalText)
 
     // 创建项目（拆解模式）
     const project = await prisma.novelProject.create({

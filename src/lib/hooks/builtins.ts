@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { ProjectStatus } from '@prisma/client'
 import type { Prisma } from '@prisma/client'
 import type { HookContext, HookResult } from './types'
-import { countChapterWords } from '@/lib/novel/chapter-word-count'
+import { countChapterWords, syncProjectChapterWordCount } from '@/lib/novel/chapter-word-count'
 
 export async function onProjectCreate(context: HookContext): Promise<HookResult> {
   const { projectId } = context
@@ -76,14 +76,7 @@ export async function onChapterGenerateEnd(context: HookContext): Promise<HookRe
   })
 
   if (content) {
-    const totalWordCount = await prisma.novelChapter.aggregate({
-      where: { projectId },
-      _sum: { wordCount: true },
-    })
-    await prisma.novelProject.update({
-      where: { id: projectId },
-      data: { currentWordCount: totalWordCount._sum.wordCount || 0 },
-    })
+    await syncProjectChapterWordCount(prisma, projectId)
   }
 
   return {

@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import type { AgentType, Prisma, NovelChapter } from '@prisma/client'
-import { countChapterWords, getProjectChapterWordCount } from '@/lib/novel/chapter-word-count'
+import { countChapterWords, syncProjectChapterWordCount } from '@/lib/novel/chapter-word-count'
 import { saveChapterSummary } from '@/lib/memory/chapter-summary'
 import { batchCreatePlotlines, batchResolvePlotlines } from '@/lib/memory/plotline-tracker'
 import { batchUpdateCharacterProfiles } from '@/lib/memory/character-memory'
@@ -136,11 +136,7 @@ export async function runChapterProjectionWriters(
   }
 
   try {
-    const currentWordCount = await getProjectChapterWordCount(prisma, context.projectId)
-    await prisma.novelProject.update({
-      where: { id: context.projectId },
-      data: { currentWordCount },
-    })
+    await syncProjectChapterWordCount(prisma, context.projectId)
     projectionStatus.project = 'done'
   } catch (error) {
     markFailure(projectionStatus, 'project', error)

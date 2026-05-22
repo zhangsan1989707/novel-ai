@@ -165,7 +165,7 @@ export async function createProviderFromConfigId(configId: number): Promise<AIPr
 /**
  * 从环境变量创建配置
  */
-function createConfigFromEnv(vendor: AIVendor): AIConfig {
+export function createConfigFromEnv(vendor: AIVendor): AIConfig {
   switch (vendor) {
     case AIVendor.OPENAI:
       return {

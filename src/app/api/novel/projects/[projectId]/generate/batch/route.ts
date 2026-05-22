@@ -8,6 +8,7 @@ import { getMinimumChapterWordCount, isChapterWordCountSufficient, buildChapterW
 import { AIVendor, ChapterStatus } from '@/types'
 import { logError } from '@/lib/logger'
 import { toProjectDTO, toChapterDTO } from '@/types/dto'
+import { countChapterWords, syncProjectChapterWordCount } from '@/lib/novel/chapter-word-count'
 
 // ============================================
 // Schema 验证
@@ -286,8 +287,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
               aiTitle = aiTitle.replace(/^第\d+章\s*/, '')
               extractedTitle = aiTitle
               extractedContent = contentMatch[1].trim()
-              wordCount = countChineseWords(extractedContent)
             }
+
+            wordCount = countChapterWords(extractedContent)
 
             // 保存生成内容
             const minimumWordCount = getMinimumChapterWordCount(targetWordCount, chapter.chapterNumber)
@@ -314,16 +316,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
               durationMs: Date.now() - chapterStartTime,
             })
 
-            // 更新项目总字数
-            const totalWordCount = await prisma.novelChapter.aggregate({
-              where: { projectId: projectIdNum, status: 'COMPLETED' },
-              _sum: { wordCount: true },
-            })
-
+            // 统一按已保存章节回算项目总字数
+            await syncProjectChapterWordCount(prisma, projectIdNum)
             await prisma.novelProject.update({
               where: { id: projectIdNum },
               data: {
-                currentWordCount: totalWordCount._sum.wordCount || 0,
                 status: 'WRITING',
               },
             })

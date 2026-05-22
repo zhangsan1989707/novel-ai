@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { buildIdeaGenerationPrompt } from '@/lib/ai/prompts'
-import { createProviderFromEnv, createProviderFromConfigId, getDefaultVendor } from '@/lib/ai'
+import { createProviderFromEnv, createProviderFromConfigId, createProviderFromDefaultConfig } from '@/lib/ai'
 import { AIVendor } from '@/types'
 import { logError } from '@/lib/logger'
 
@@ -42,8 +42,11 @@ export async function POST(request: NextRequest) {
       }
     }
     if (!provider) {
-      const selectedVendor = (vendor || getDefaultVendor()) as AIVendor
-      provider = createProviderFromEnv(selectedVendor)
+      if (vendor) {
+        provider = createProviderFromEnv(vendor as AIVendor)
+      } else {
+        provider = await createProviderFromDefaultConfig()
+      }
     }
 
     const prompt = buildIdeaGenerationPrompt({

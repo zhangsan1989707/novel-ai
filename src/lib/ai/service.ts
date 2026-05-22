@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
-import { getTraceableAIProvider, getDefaultVendor } from './factory'
+import { getTraceableAIProvider, getDefaultVendor, createConfigFromEnv } from './factory'
 import type { AIProvider, AIConfig } from './types'
 import { AIVendor } from '@/types'
 import { auth } from '@/lib/auth'
@@ -376,81 +376,7 @@ export class AIService {
    * 从环境变量获取默认配置
    */
   private static getDefaultConfig(vendor: AIVendor): AIConfig {
-    switch (vendor) {
-      case AIVendor.OPENAI:
-        return {
-          vendor: AIVendor.OPENAI,
-          modelId: process.env.OPENAI_MODEL_ID || 'gpt-4o',
-          apiKey: process.env.OPENAI_API_KEY || '',
-          embeddingVendor: AIVendor.OPENAI,
-          embeddingApiKey: process.env.OPENAI_EMBEDDING_API_KEY || process.env.EMBEDDING_API_KEY || process.env.OPENAI_API_KEY || '',
-          embeddingApiEndpoint: process.env.OPENAI_API_ENDPOINT || undefined,
-          embeddingModelId: process.env.OPENAI_EMBEDDING_MODEL_ID || process.env.EMBEDDING_MODEL_ID || 'text-embedding-3-small',
-          embeddingDimensions: Number(process.env.AI_EMBEDDING_DIMENSIONS || 256),
-        }
-      case AIVendor.ANTHROPIC:
-        return {
-          vendor: AIVendor.ANTHROPIC,
-          modelId: process.env.ANTHROPIC_MODEL_ID || 'claude-3-5-sonnet-20241022',
-          apiKey: process.env.ANTHROPIC_API_KEY || '',
-        }
-      case AIVendor.ALIBABA:
-        return {
-          vendor: AIVendor.ALIBABA,
-          modelId: process.env.DASHSCOPE_MODEL_ID || 'qwen-max',
-          apiKey: process.env.DASHSCOPE_API_KEY || '',
-          embeddingVendor: AIVendor.ALIBABA,
-          embeddingApiKey: process.env.ALIBABA_EMBEDDING_API_KEY || process.env.DASHSCOPE_EMBEDDING_API_KEY || process.env.EMBEDDING_API_KEY || process.env.DASHSCOPE_API_KEY || '',
-          embeddingApiEndpoint: process.env.ALIBABA_EMBEDDING_API_ENDPOINT || process.env.DASHSCOPE_EMBEDDING_API_ENDPOINT || undefined,
-          embeddingModelId: process.env.ALIBABA_EMBEDDING_MODEL_ID || process.env.EMBEDDING_MODEL_ID,
-          embeddingDimensions: Number(process.env.AI_EMBEDDING_DIMENSIONS || 256),
-        }
-      case AIVendor.MIMO:
-        return {
-          vendor: AIVendor.MIMO,
-          modelId: process.env.MIMO_MODEL_ID || 'mimo-v2.5-pro',
-          apiKey: process.env.MIMO_API_KEY || '',
-          apiEndpoint: process.env.MIMO_API_ENDPOINT || 'https://token-plan-cn.xiaomimimo.com/v1',
-          embeddingVendor: AIVendor.OPENAI,
-          embeddingApiKey: process.env.OPENAI_EMBEDDING_API_KEY || process.env.EMBEDDING_API_KEY || process.env.OPENAI_API_KEY || '',
-        }
-      case AIVendor.VOLCENGINE:
-        return {
-          vendor: AIVendor.VOLCENGINE,
-          modelId: process.env.VOLCENGINE_MODEL_ID || 'ark-code-latest',
-          apiKey: process.env.VOLCENGINE_API_KEY || '',
-          apiEndpoint: process.env.VOLCENGINE_API_ENDPOINT || 'https://ark.cn-beijing.volces.com/api/coding/v3',
-          embeddingVendor: AIVendor.VOLCENGINE,
-          embeddingApiKey: process.env.VOLCENGINE_EMBEDDING_API_KEY || process.env.EMBEDDING_API_KEY || process.env.VOLCENGINE_API_KEY || '',
-          embeddingApiEndpoint: process.env.VOLCENGINE_EMBEDDING_API_ENDPOINT || undefined,
-          embeddingModelId: process.env.VOLCENGINE_EMBEDDING_MODEL_ID || process.env.EMBEDDING_MODEL_ID,
-          embeddingDimensions: Number(process.env.AI_EMBEDDING_DIMENSIONS || 256),
-        }
-      case AIVendor.ZHIPU:
-        return {
-          vendor: AIVendor.ZHIPU,
-          modelId: process.env.ZHIPU_MODEL_ID || 'glm-4-0520',
-          apiKey: process.env.ZHIPU_API_KEY || '',
-          apiEndpoint: process.env.ZHIPU_API_ENDPOINT || 'https://open.bigmodel.cn/api/paas/v4',
-          embeddingVendor: AIVendor.ZHIPU,
-          embeddingApiKey: process.env.ZHIPU_EMBEDDING_API_KEY || process.env.EMBEDDING_API_KEY || process.env.ZHIPU_API_KEY || '',
-          embeddingApiEndpoint: process.env.ZHIPU_EMBEDDING_API_ENDPOINT || undefined,
-          embeddingModelId: process.env.ZHIPU_EMBEDDING_MODEL_ID || process.env.EMBEDDING_MODEL_ID,
-          embeddingDimensions: Number(process.env.AI_EMBEDDING_DIMENSIONS || 256),
-        }
-      case AIVendor.DEEPSEEK:
-      default:
-        return {
-          vendor: AIVendor.DEEPSEEK,
-          modelId: process.env.DEEPSEEK_MODEL_ID || 'deepseek-chat',
-          apiKey: process.env.DEEPSEEK_API_KEY || '',
-          embeddingVendor: AIVendor.DEEPSEEK,
-          embeddingApiKey: process.env.DEEPSEEK_EMBEDDING_API_KEY || process.env.EMBEDDING_API_KEY || process.env.DEEPSEEK_API_KEY || '',
-          embeddingApiEndpoint: process.env.DEEPSEEK_EMBEDDING_API_ENDPOINT || undefined,
-          embeddingModelId: process.env.DEEPSEEK_EMBEDDING_MODEL_ID || process.env.EMBEDDING_MODEL_ID,
-          embeddingDimensions: Number(process.env.AI_EMBEDDING_DIMENSIONS || 256),
-        }
-    }
+    return createConfigFromEnv(vendor)
   }
 }
 

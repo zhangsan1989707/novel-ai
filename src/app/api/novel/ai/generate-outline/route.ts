@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { createProviderFromEnv, createProviderFromConfigId, buildOutlineGenerationPrompt, getDefaultVendor } from '@/lib/ai'
+import { createProviderFromEnv, createProviderFromConfigId, buildOutlineGenerationPrompt, createProviderFromDefaultConfig } from '@/lib/ai'
 import { AIVendor } from '@/types'
 import { logError } from '@/lib/logger'
 
@@ -60,8 +60,11 @@ export async function POST(request: NextRequest) {
       }
     }
     if (!provider) {
-      const vendor = (requestedVendor || getDefaultVendor()) as AIVendor
-      provider = createProviderFromEnv(vendor)
+      if (requestedVendor) {
+        provider = createProviderFromEnv(requestedVendor as AIVendor)
+      } else {
+        provider = await createProviderFromDefaultConfig()
+      }
     }
 
     const result = await provider.generate(prompt, {

@@ -4,11 +4,12 @@ import { Prisma } from '@prisma/client'
 import { createProviderFromDefaultConfig, buildPlotAnalysisPrompt } from '@/lib/ai'
 import { getVolumeChapterRange } from '@/lib/ai/context-manager'
 import { prisma } from '@/lib/prisma'
-import { AIVendor, AnalysisDimension, AnalysisType } from '@/types'
+import { AnalysisDimension, AnalysisType } from '@/types'
 import { buildChapterMemoryPack, buildMemorySnapshotPack } from '@/lib/memory'
 import { getChapterSummariesInRange, saveChapterSummary } from '@/lib/memory/chapter-summary'
 import { logger, logError } from '@/lib/logger'
 import { ANALYSIS_DIMENSION_LABELS, ANALYSIS_FORMAT_TEMPLATES } from '@/lib/analysis/config'
+import { countChineseWords } from '@/lib/utils'
 
 // ============================================
 // 常量配置
@@ -336,7 +337,6 @@ export async function POST(request: NextRequest) {
       volumeNumber,
       dimensions,
       contextChapterCount,
-      vendor,
       temperature,
     } = parsed
 
@@ -533,7 +533,7 @@ export async function POST(request: NextRequest) {
         update: {
           analysisData: analysisData as Prisma.InputJsonValue,
           rawContent: resultContent,
-          wordCount: resultContent.length,
+          wordCount: countChineseWords(resultContent),
         },
         create: {
           projectId,
@@ -542,7 +542,7 @@ export async function POST(request: NextRequest) {
           dimension: dim,
           analysisData: analysisData as Prisma.InputJsonValue,
           rawContent: resultContent,
-          wordCount: resultContent.length,
+          wordCount: countChineseWords(resultContent),
         },
       })
 
@@ -570,7 +570,6 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     if (typeof error === 'object' && error !== null && 'issues' in error) {
-      const err = error as { issues: { message: string }[] }
       if (Array.isArray(error.issues) && error.issues.length > 0) {
         return NextResponse.json(
           { success: false, error: { code: 'VALIDATION_ERROR', message: error.issues[0].message } },

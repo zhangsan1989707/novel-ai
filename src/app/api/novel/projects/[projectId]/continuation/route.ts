@@ -5,10 +5,10 @@ import { createProviderFromDefaultConfig } from '@/lib/ai'
 import { buildNovelGenerationPrompt, buildEndingPrompt, buildRevisionPrompt } from '@/lib/ai/prompts'
 import { buildPromptContext } from '@/lib/ai/context-manager'
 import { buildChapterMemoryPack } from '@/lib/memory'
-import { countChineseWords } from '@/lib/utils'
 import { getMinimumChapterWordCount, isChapterWordCountSufficient } from '@/lib/ai/chapter-quality'
 import { logError } from '@/lib/logger'
 import { toProjectDTO, toChapterDTO } from '@/types/dto'
+import { countChapterWords, syncProjectChapterWordCount } from '@/lib/novel/chapter-word-count'
 
 // ============================================
 // Schema 验证
@@ -59,7 +59,6 @@ export async function POST(
       mode,
       targetChapterCount,
       endingDirection,
-      baseChapterId,
       userInput,
       useContext,
       contextChapterCount,
@@ -236,11 +235,6 @@ export async function POST(
       chapterTitle = `重写版第${chapterNumber}章`
 
       // 获取全书摘要
-      const bookSummary = await prisma.bookSummary.findFirst({
-        where: { projectId: projectIdNum },
-        orderBy: { createdAt: 'desc' },
-      })
-
       // 构建上下文
       const rewriteContextChapters = chapters.slice(-contextChapterCount).map(toChapterDTO)
 
@@ -316,7 +310,7 @@ export async function POST(
             extractedContent = contentMatch[1].trim()
           }
 
-          const wordCount = countChineseWords(extractedContent)
+          const wordCount = countChapterWords(extractedContent)
           const chapterReady = isChapterWordCountSufficient(wordCount, targetWordCount, chapterNumber)
 
           // 更新章节内容
@@ -330,17 +324,7 @@ export async function POST(
             },
           })
 
-          const totalWordCount = await prisma.novelChapter.aggregate({
-            where: { projectId: projectIdNum as number, status: 'COMPLETED' },
-            _sum: { wordCount: true },
-          })
-
-          await prisma.novelProject.update({
-            where: { id: projectIdNum as number },
-            data: {
-              currentWordCount: totalWordCount._sum.wordCount || 0,
-            },
-          })
+          await syncProjectChapterWordCount(prisma, projectIdNum as number)
 
           // 发送完成事件
           sendEvent('done', {

@@ -3,6 +3,7 @@ export {
   AIProviderFactory,
   getAIProvider,
   createProviderFromEnv,
+  createConfigFromEnv,
   createProviderFromDefaultConfig,
   createProviderFromConfigId,
   getSupportedAIProviders,

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { createProviderFromEnv, createProviderFromConfigId, getDefaultVendor } from '@/lib/ai'
+import { createProviderFromEnv, createProviderFromConfigId, createProviderFromDefaultConfig } from '@/lib/ai'
 import { AIVendor } from '@/types'
 import { prisma } from '@/lib/prisma'
 import { buildChapterListPrompt, buildSummaryCompletionPrompt } from '@/lib/ai/prompts'
@@ -95,13 +95,15 @@ export async function POST(request: NextRequest) {
       const configProvider = await createProviderFromConfigId(aiModelId)
       if (configProvider) {
         provider = configProvider
+      } else if (requestedVendor) {
+        provider = createProviderFromEnv(requestedVendor as AIVendor)
       } else {
-        const vendor = (requestedVendor || getDefaultVendor()) as AIVendor
-        provider = createProviderFromEnv(vendor)
+        provider = await createProviderFromDefaultConfig()
       }
+    } else if (requestedVendor) {
+      provider = createProviderFromEnv(requestedVendor as AIVendor)
     } else {
-      const vendor = (requestedVendor || getDefaultVendor()) as AIVendor
-      provider = createProviderFromEnv(vendor)
+      provider = await createProviderFromDefaultConfig()
     }
 
     const estimatedTokens = Math.min(totalChapters * 300 + 1000, 65536)

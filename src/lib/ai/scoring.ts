@@ -3,6 +3,8 @@
  * 多维度评估 AI 生成章节的质量
  */
 
+import { countChineseWords } from '@/lib/utils'
+
 // ============================================
 // 类型定义
 // ============================================
@@ -115,7 +117,7 @@ export function buildScoringPrompt(
 
   parts.push(`\n【章节信息】`)
   parts.push(`第${chapterNo}章 "${chapterTitle}"`)
-  parts.push(`字数：约${content.length}字`)
+  parts.push(`字数：约${countChineseWords(content)}字`)
 
   if (context?.worldSetting) {
     parts.push(`\n【世界观设定】`)
@@ -257,7 +259,7 @@ export function parseScoringResult(
         generatedAt: new Date().toISOString(),
       },
     }
-  } catch (error) {
+  } catch {
     // 解析失败，返回默认评分
     return createDefaultScore(chapterNo, wordCount, '评分解析失败')
   }

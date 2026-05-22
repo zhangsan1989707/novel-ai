@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { Button, Input, Select, Modal, Badge, Card, CardContent, toast } from '@/components/ui'
-import { Plus, Trash2, Edit2, Check, Key, Play, Loader2, CheckCircle, XCircle, Eye, EyeOff } from 'lucide-react'
+import { Plus, Trash2, Edit2, Check, Key, Play, Loader2, CheckCircle, XCircle, Eye, EyeOff, Zap, AlertTriangle } from 'lucide-react'
 import { AIVendor } from '@/types'
 
 interface AIConfig {
@@ -88,7 +88,19 @@ export default function SettingsPage() {
   const [defaultingConfigId, setDefaultingConfigId] = useState<number | null>(null)
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    name: string
+    vendor: AIVendor
+    modelId: string
+    apiKey: string
+    apiEndpoint: string
+    embeddingVendor: AIVendor | null | undefined
+    embeddingApiKey: string
+    embeddingApiEndpoint: string
+    embeddingModelId: string
+    embeddingDimensions: string
+    isDefault: boolean
+  }>({
     name: '',
     vendor: AIVendor.DEEPSEEK,
     modelId: '',
@@ -133,7 +145,7 @@ export default function SettingsPage() {
         modelId: config.modelId,
         apiKey: '',
         apiEndpoint: config.apiEndpoint || '',
-        embeddingVendor: config.embeddingVendor || AIVendor.OPENAI,
+        embeddingVendor: config.embeddingVendor,
         embeddingApiKey: '',
         embeddingApiEndpoint: config.embeddingApiEndpoint || '',
         embeddingModelId: config.embeddingModelId || '',
@@ -285,9 +297,13 @@ export default function SettingsPage() {
       const data = await res.json()
       if (data.success) {
         fetchConfigs()
+        toast.success('配置已删除')
+      } else {
+        toast.error(data.error?.message || '删除失败')
       }
     } catch (error) {
       console.error('删除失败:', error)
+      toast.error('删除失败')
     }
   }
 
@@ -356,6 +372,42 @@ export default function SettingsPage() {
       </div>
 
       <div className="max-w-5xl mx-auto space-y-6">
+        {!loading && configs.length > 0 && (
+          <Card className={configs.some(c => c.isDefault) ? 'border-blue-200 bg-blue-50/50' : 'border-amber-200 bg-amber-50/50'}>
+            <CardContent className="p-4">
+              {configs.some(c => c.isDefault) ? (
+                <div className="flex items-center gap-3">
+                  <Zap className="h-5 w-5 text-blue-500 shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-blue-700">
+                      当前默认配置：
+                      <span className="font-bold">
+                        {configs.find(c => c.isDefault)!.name}
+                      </span>
+                      <Badge variant="outline" className="ml-2">
+                        {vendorLabels[configs.find(c => c.isDefault)!.vendor]}
+                      </Badge>
+                    </p>
+                    <p className="text-xs text-blue-500 mt-0.5">
+                      模型 {configs.find(c => c.isDefault)!.modelId}，所有 AI 功能将默认使用此配置
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-amber-700">未设置默认配置</p>
+                    <p className="text-xs text-amber-500 mt-0.5">
+                      系统将使用环境变量中的 AI 配置作为备选。建议点击「设为默认」指定一个配置。
+                    </p>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         <div className="flex justify-end">
           <Button type="button" onClick={() => openModal()}>
             <Plus className="h-4 w-4 mr-2" />

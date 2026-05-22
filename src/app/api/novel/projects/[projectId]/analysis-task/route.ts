@@ -6,6 +6,7 @@ import { AnalysisDimension, AnalysisType } from '@/types'
 import { logError } from '@/lib/logger'
 import { Prisma } from '@prisma/client'
 import { getChapterSummariesInRange, saveChapterSummary } from '@/lib/memory/chapter-summary'
+import { countChineseWords } from '@/lib/utils'
 import {
   ANALYSIS_DIMENSION_LABELS,
   ANALYSIS_FORMAT_TEMPLATES,
@@ -169,7 +170,7 @@ async function executeAnalysisAsync(
     // 导入分析逻辑
     const { createProviderFromDefaultConfig, buildPlotAnalysisPrompt } = await import('@/lib/ai')
     const { getVolumeChapterRange } = await import('@/lib/ai/context-manager')
-    const { buildChapterMemoryPack, buildMemorySnapshotPack } = await import('@/lib/memory')
+    const { buildChapterMemoryPack } = await import('@/lib/memory')
 
     const provider = await createProviderFromDefaultConfig()
 
@@ -237,7 +238,7 @@ async function executeAnalysisAsync(
     })
 
     let summaries: { chapterNumber: number; summary: string; keyEvents: string[] }[] = []
-    let useLayered = chapters.length > LAYERED_ANALYSIS_THRESHOLD
+    const useLayered = chapters.length > LAYERED_ANALYSIS_THRESHOLD
 
     if (useLayered) {
       const minChapter = Math.min(...chapters.map(c => c.chapterNumber))
@@ -335,7 +336,7 @@ async function executeAnalysisAsync(
         update: {
           analysisData: analysisData as Prisma.InputJsonValue,
           rawContent: resultContent,
-          wordCount: resultContent.length,
+          wordCount: countChineseWords(resultContent),
         },
         create: {
           projectId,
@@ -344,7 +345,7 @@ async function executeAnalysisAsync(
           dimension: dim,
           analysisData: analysisData as Prisma.InputJsonValue,
           rawContent: resultContent,
-          wordCount: resultContent.length,
+          wordCount: countChineseWords(resultContent),
         },
       })
     }

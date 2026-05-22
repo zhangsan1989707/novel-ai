@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { logError } from '@/lib/logger'
-import { countChapterWords, getProjectChapterWordCount } from '@/lib/novel/chapter-word-count'
+import { countChapterWords, syncProjectChapterWordCount } from '@/lib/novel/chapter-word-count'
 
 // ============================================
 // Schema 验证
@@ -129,11 +129,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       },
     })
 
-    const currentWordCount = await getProjectChapterWordCount(prisma, projectIdNum)
+    await syncProjectChapterWordCount(prisma, projectIdNum)
     await prisma.novelProject.update({
       where: { id: projectIdNum },
       data: {
-        currentWordCount,
         status: 'WRITING',
       },
     })

@@ -9,14 +9,6 @@ import { buildBlueprintConsoleSnapshot } from '@/lib/engine/blueprint-console'
 import { getDefaultAIConfigRecord } from '@/lib/ai/factory'
 import { ensureProjectMaintenanceQueued, getProjectMaintenanceSummary } from '@/lib/engine/auto-maintenance'
 
-type PreflightIssueSeverity = 'error' | 'warning' | 'info'
-
-interface PreflightIssue {
-  severity: PreflightIssueSeverity
-  code: string
-  message: string
-}
-
 function buildProjectPreflight(project: {
   aiModelConfig: unknown
   bookBlueprint: unknown
@@ -67,7 +59,6 @@ const updateProjectSchema = z.object({
   genre: z.string().optional(),
   writingStyle: z.string().optional(),
   targetWordCount: z.number().int().positive().optional(),
-  currentWordCount: z.number().int().min(0).optional(),
   chapterWordCount: z.number().int().positive().optional(),
   outline: z.string().optional(),
   outlineStages: z.object({
