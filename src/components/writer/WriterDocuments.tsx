@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react'
 import { Button, Badge, Progress } from '@/components/ui'
 import { Upload, FileText, Trash2, RefreshCw, CheckCircle, XCircle, Clock } from 'lucide-react'
 import { DocumentStatus } from '@/types'
+import { formatDisplayDate } from '@/lib/helpers'
 
 interface WriterDocument {
   id: number
@@ -112,7 +113,7 @@ export function WriterDocuments({ writerId, documents, onUpload, onDelete }: Wri
                       <span>{formatFileSize(doc.fileSize)}</span>
                       <span>{doc.wordCount.toLocaleString()} 字</span>
                       {doc.processedAt && (
-                        <span>处理于 {new Date(doc.processedAt).toLocaleDateString()}</span>
+                        <span>处理于 {formatDisplayDate(doc.processedAt)}</span>
                       )}
                     </div>
                     {doc.errorMessage && (

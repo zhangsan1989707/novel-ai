@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { toast } from '@/components/ui/Toast'
+import { formatDisplayDateTime } from '@/lib/helpers'
 import {
   Zap,
   Play,
@@ -358,7 +359,7 @@ export function WorkflowHooksPanel({ className }: WorkflowHooksPanelProps) {
                         <p className="text-xs text-muted-foreground mt-0.5">{record.message}</p>
                       )}
                       <span className="text-xs text-muted-foreground">
-                        {new Date(record.executedAt).toLocaleString('zh-CN')}
+                        {formatDisplayDateTime(record.executedAt)}
                       </span>
                     </div>
                   </div>

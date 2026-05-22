@@ -2,7 +2,8 @@
 
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, Badge, Progress, Button } from '@/components/ui'
-import { MoreHorizontal, Pencil, Trash2, BookOpen, Clock, Sparkles } from 'lucide-react'
+import { Pencil, Trash2, BookOpen, Clock, Sparkles } from 'lucide-react'
+import { formatDisplayDate } from '@/lib/helpers'
 import type { ProjectStatus } from '@/types'
 
 interface ProjectCardProps {
@@ -119,7 +120,7 @@ export function ProjectCard({ project, onEdit, onDelete }: ProjectCardProps) {
           </div>
           <div className="flex items-center gap-1">
             <Clock className="h-3 w-3" />
-            <span>{new Date(project.updatedAt).toLocaleDateString()}</span>
+            <span>{formatDisplayDate(project.updatedAt)}</span>
           </div>
         </div>
       </CardContent>

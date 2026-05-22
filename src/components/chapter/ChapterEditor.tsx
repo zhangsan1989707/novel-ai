@@ -8,6 +8,7 @@ import { ArrowLeft, Save, Trash2, FileText, Wand2, Edit3, X, BookOpen, RefreshCw
 import { ChapterStatus } from '@/types'
 import { ChapterQualityPanel } from '@/components/ai/ChapterQualityPanel'
 import { AntiDetectPanel } from '@/components/ai/AntiDetectPanel'
+import { formatDisplayDateTime } from '@/lib/helpers'
 import { countChineseWords } from '@/lib/utils'
 
 interface ChapterEditorProps {
@@ -381,7 +382,7 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
                       字数: {wordCount.toLocaleString()}
                     </span>
                     <span className="text-sm text-gray-400">
-                      最后更新: {chapter.updatedAt ? new Date(chapter.updatedAt).toLocaleString() : '-'}
+                      最后更新: {chapter.updatedAt ? formatDisplayDateTime(chapter.updatedAt) : '-'}
                     </span>
                   </div>
                 </>
@@ -407,7 +408,7 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
               </div>
               {chapter.lastGeneratedTime && (
                 <p className="mt-3 text-xs text-gray-500">
-                  最后生成: {new Date(chapter.lastGeneratedTime).toLocaleString()}
+                  最后生成: {formatDisplayDateTime(chapter.lastGeneratedTime)}
                 </p>
               )}
             </div>

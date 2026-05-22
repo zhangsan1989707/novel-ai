@@ -6,6 +6,7 @@ import { RefreshCw, Sparkles, Target, Wand2, Orbit, BrainCircuit, GitBranchPlus,
 import type { BlueprintConsoleSnapshot } from '@/lib/engine/blueprint-console'
 import type { StorySteering } from '@/types'
 import { StorySteeringPanel } from '@/components/ai'
+import { formatDisplayDateTime } from '@/lib/helpers'
 
 interface BlueprintConsoleProps {
   projectId: number
@@ -57,7 +58,7 @@ export function BlueprintConsole({ projectId, initialData, steeringValues, aiSta
 
   const generatedAt = useMemo(() => {
     if (!snapshot.generatedAt) return ''
-    return new Date(snapshot.generatedAt).toLocaleString()
+    return formatDisplayDateTime(snapshot.generatedAt)
   }, [snapshot.generatedAt])
 
   const handleRefresh = async (inputGuidance?: string) => {

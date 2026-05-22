@@ -3,6 +3,7 @@ import { buildTitleGenerationPrompt } from '@/lib/prompts'
 import { createProviderFromEnv, createProviderFromConfigId, createProviderFromDefaultConfig } from '@/lib/ai'
 import { AIVendor } from '@/types'
 import { logError } from '@/lib/logger'
+import { buildFallbackNovelTitle, isLikelyNovelTitle, normalizeNovelTitle } from '@/lib/novel-title'
 
 export async function POST(request: NextRequest) {
   try {
@@ -52,6 +53,7 @@ export async function POST(request: NextRequest) {
       maxTokens: 500,
     })
 
+    const sourceText = [inspirationTitle, inspirationDescription].filter(Boolean).join(' ')
     let title: string | null = null
     let alternatives: string[] = []
 
@@ -59,18 +61,26 @@ export async function POST(request: NextRequest) {
       const jsonMatch = result.content.match(/\{[\s\S]*\}/)
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0])
-        title = parsed.title || null
-        alternatives = Array.isArray(parsed.alternatives) ? parsed.alternatives : []
+        title = typeof parsed.title === 'string' ? normalizeNovelTitle(parsed.title) : null
+        alternatives = Array.isArray(parsed.alternatives)
+          ? parsed.alternatives
+            .filter((item: unknown): item is string => typeof item === 'string')
+            .map((item: string) => normalizeNovelTitle(item))
+            .filter((item: string) => isLikelyNovelTitle(item, sourceText))
+          : []
       }
     } catch {
-      const firstLine = result.content.trim().split('\n')[0].replace(/["""「」《》]/g, '').trim()
-      if (firstLine && firstLine.length <= 20) {
+      const firstLine = normalizeNovelTitle(result.content)
+      if (isLikelyNovelTitle(firstLine, sourceText)) {
         title = firstLine
       }
     }
 
-    if (!title) {
-      title = inspirationTitle
+    if (!title || !isLikelyNovelTitle(title, sourceText)) {
+      title = buildFallbackNovelTitle({
+        corePitch: `${inspirationTitle} ${inspirationDescription || ''}`,
+        genre,
+      })
     }
 
     return NextResponse.json({

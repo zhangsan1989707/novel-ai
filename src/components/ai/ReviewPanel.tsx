@@ -8,6 +8,7 @@ import {
   Lightbulb, BarChart3, FileText, AlertCircle, ListOrdered,
 } from 'lucide-react'
 import { toast } from '@/components/ui/Toast'
+import { formatDisplayDateTime } from '@/lib/helpers'
 
 interface ReviewScore {
   dimension: string
@@ -365,7 +366,7 @@ export function ReviewPanel({ projectId, chapters = [] }: ReviewPanelProps) {
                         {getOverallLabel(report.overallScore)}
                       </Badge>
                       <span className="text-xs text-gray-500">
-                        {new Date(report.createdAt).toLocaleString('zh-CN')}
+                        {formatDisplayDateTime(report.createdAt)}
                       </span>
                     </div>
                   </div>

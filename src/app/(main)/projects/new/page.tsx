@@ -54,6 +54,7 @@ const LENGTH_TYPE_LIST: LengthType[] = ['short', 'medium', 'long', 'ultra_long']
 export default function NewProjectPage() {
   const router = useRouter()
   const [submitting, setSubmitting] = useState(false)
+  const [generatingTitle, setGeneratingTitle] = useState(false)
   const [aiConfigs, setAiConfigs] = useState<AIConfig[]>([])
   const [loadingConfigs, setLoadingConfigs] = useState(true)
 
@@ -82,15 +83,44 @@ export default function NewProjectPage() {
   const platform = watch('platform')
   const lengthType = watch('lengthType')
 
-  const handleInspirationSelect = useCallback((inspiration: HotInspiration) => {
-    setValue('title', '', { shouldDirty: true, shouldValidate: true })
+  const selectedAiModelId = watch('aiModelId')
+
+  const handleInspirationSelect = useCallback(async (inspiration: HotInspiration) => {
+    setGeneratingTitle(true)
+    setValue('title', '正在生成书名...', { shouldDirty: true, shouldValidate: true })
     setValue('corePitch', `${inspiration.title}：${inspiration.description}`, { shouldDirty: true, shouldValidate: true })
     setValue('description', inspiration.sampleSummary, { shouldDirty: true, shouldValidate: true })
     setValue('genre', inspiration.sampleGenre, { shouldDirty: true, shouldValidate: true })
     setValue('writingStyle', inspiration.sampleWritingStyle, { shouldDirty: true, shouldValidate: true })
     setValue('targetAudience', inspiration.category === 'male' ? 'MALE' : inspiration.category === 'female' ? 'FEMALE' : undefined, { shouldDirty: true, shouldValidate: true })
+    try {
+      const res = await fetch('/api/novel/ai/generate-title', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inspirationTitle: inspiration.title,
+          inspirationDescription: inspiration.description,
+          genre: inspiration.sampleGenre || undefined,
+          writingStyle: inspiration.sampleWritingStyle || undefined,
+          targetAudience: inspiration.category === 'male' ? 'MALE' : inspiration.category === 'female' ? 'FEMALE' : undefined,
+          aiModelId: selectedAiModelId || undefined,
+        }),
+      })
+      const result = await res.json()
+
+      if (result.success && result.data?.title) {
+        setValue('title', result.data.title, { shouldDirty: true, shouldValidate: true })
+        toast.success(`已应用灵感「${inspiration.title}」，已自动生成书名`)
+        return
+      }
+    } catch {
+    } finally {
+      setGeneratingTitle(false)
+    }
+
+    setValue('title', inspiration.sampleTitle, { shouldDirty: true, shouldValidate: true })
     toast.success(`已应用灵感「${inspiration.title}」`)
-  }, [setValue])
+  }, [selectedAiModelId, setValue])
 
   useEffect(() => {
     fetch('/api/novel/ai-configs')
@@ -101,6 +131,10 @@ export default function NewProjectPage() {
   }, [])
 
   const onSubmit = async (data: NewProjectForm) => {
+    if (generatingTitle) {
+      toast.error('书名仍在生成，请稍候再创建')
+      return
+    }
     if (!data.platform) {
       toast.error('请选择平台')
       return
@@ -249,8 +283,9 @@ export default function NewProjectPage() {
               <div className="space-y-4 pt-1">
                 <Input
                   label="小说标题"
-                  placeholder="留空则自动生成，不会用灵感代替"
+                  placeholder={generatingTitle ? '正在生成书名...' : '留空则自动生成，不会用灵感代替'}
                   maxLength={200}
+                  disabled={generatingTitle}
                   {...register('title')}
                 />
                 <p className="text-xs text-gray-500 dark:text-gray-400">
@@ -323,9 +358,9 @@ export default function NewProjectPage() {
                   <Button type="button" variant="outline" onClick={() => router.back()}>
                     取消
                   </Button>
-                  <Button type="submit" loading={submitting}>
+                  <Button type="submit" loading={submitting} disabled={submitting || generatingTitle}>
                     <Sparkles className="h-4 w-4" />
-                    开始创作
+                    {generatingTitle ? '生成书名中...' : '开始创作'}
                   </Button>
                 </div>
               </div>

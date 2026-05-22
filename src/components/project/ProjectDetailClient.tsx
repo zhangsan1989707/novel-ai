@@ -7,6 +7,7 @@ import { BlueprintConsole, ProjectBaseInfoForm, ProjectBaseInfoFormData } from '
 import { Toolbox, CharacterPanel } from '@/components/ai'
 import { CoverGenerator, ResearchPanel, ReviewPanel, DeslopPanel, ExportPanel, AnalysisWorkbench } from '@/components/ai'
 import { BookOpen, Clock, Target, Users, Layers, Search, ClipboardList, Rocket, Shield, Sparkles, ChevronRight, ChevronDown, Wrench, Eye, Play, Pause, AlertCircle, CheckCircle2, Loader2, Download } from 'lucide-react'
+import { formatDisplayDate, formatDisplayDateTime } from '@/lib/helpers'
 import type { ProjectStatus } from '@/types'
 import type { PipelineRuntimeState } from '@/lib/engine/pipeline-runtime'
 import type { BlueprintConsoleSnapshot } from '@/lib/engine/blueprint-console'
@@ -124,6 +125,8 @@ interface Project {
     ragRunning: boolean
     bootstrapFailed: boolean
     ragFailed: boolean
+    bootstrapError?: string | null
+    ragError?: string | null
     queuedTaskCount: number
     bootstrapProgress?: {
       phase: string
@@ -290,6 +293,7 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [pipelineStarting, setPipelineStarting] = useState(false)
+  const [maintenanceRetrying, setMaintenanceRetrying] = useState(false)
   const [activeTab, setActiveTab] = useState<DashboardTab>('dashboard')
 
   const [pipeline, setPipeline] = useState<PipelineStatus | null>(null)
@@ -303,6 +307,12 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
   )
   const bootstrapProgress = project?.maintenanceSummary?.bootstrapProgress || null
   const ragProgress = project?.maintenanceSummary?.ragProgress || null
+  const maintenanceFailed = Boolean(
+    !maintenanceActive && (
+      project?.maintenanceSummary?.bootstrapFailed ||
+      project?.maintenanceSummary?.ragFailed
+    )
+  )
   const projectInitializing = Boolean(
     project && (
       !project.preflight?.ready ||
@@ -513,6 +523,26 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
       toast.error('启动 AI 生成失败')
     } finally {
       setPipelineStarting(false)
+    }
+  }
+
+  const handleRetryMaintenance = async () => {
+    setMaintenanceRetrying(true)
+    try {
+      const res = await fetch(`/api/novel/projects/${projectId}/maintenance/retry`, {
+        method: 'POST',
+      })
+      const data = await res.json()
+      if (data.success) {
+        toast.success(data.data?.message || '已重新触发初始化任务')
+        await fetchProject()
+      } else {
+        toast.error(data.error?.message || '重试初始化失败')
+      }
+    } catch {
+      toast.error('重试初始化失败')
+    } finally {
+      setMaintenanceRetrying(false)
     }
   }
 
@@ -1055,7 +1085,7 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
                           <span>重放：{commit.replayCount}</span>
                         </div>
                         <div className="mt-1 text-gray-500 dark:text-gray-400">
-                          {commit.appliedAt ? `已应用：${new Date(commit.appliedAt).toLocaleString()}` : '待应用'}
+                          {commit.appliedAt ? `已应用：${formatDisplayDateTime(commit.appliedAt)}` : '待应用'}
                         </div>
                       </div>
                     ))}
@@ -1115,18 +1145,32 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
                         </div>
                       </div>
                     )}
-                    {project.preflight.hasModel && (maintenanceActive || !project.preflight.hasBlueprint || !project.preflight.hasArcPlans || !project.preflight.hasStoryState || !project.preflight.hasWorldState) && (
+                    {project.preflight.hasModel && (maintenanceActive || maintenanceFailed || !project.preflight.hasBlueprint || !project.preflight.hasArcPlans || !project.preflight.hasStoryState || !project.preflight.hasWorldState) && (
                       <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-blue-800 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-200">
                         <div className="font-medium">
                         {project.maintenanceSummary?.bootstrapQueued || project.maintenanceSummary?.bootstrapRunning
                             ? 'AI 正在自动补齐创作配置'
+                            : maintenanceFailed
+                              ? '创作系统初始化失败'
                             : project.maintenanceSummary?.ragQueued || project.maintenanceSummary?.ragRunning
                               ? 'AI 正在自动重建 RAG 索引'
                               : '系统会自动补齐创作配置'}
                         </div>
                         <div className="mt-1 text-xs leading-5 text-blue-700 dark:text-blue-300">
-                          系统会自动补齐 Book Blueprint、阶段规划、世界状态、故事状态以及 RAG 索引。完成前请勿开始 AI 生成。页面会自动刷新，无需手动刷新。
+                          {maintenanceFailed
+                            ? (project.maintenanceSummary?.bootstrapError || project.maintenanceSummary?.ragError || '后台初始化任务失败，请检查当前 AI 模型配置后重试。')
+                            : '系统会自动补齐 Book Blueprint、阶段规划、世界状态、故事状态以及 RAG 索引。完成前请勿开始 AI 生成。页面会自动刷新，无需手动刷新。'}
                         </div>
+                        {maintenanceFailed && (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <Button size="sm" variant="primary" onClick={handleRetryMaintenance} loading={maintenanceRetrying}>
+                              重试初始化
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => router.push('/settings')}>
+                              检查 AI 配置
+                            </Button>
+                          </div>
+                        )}
                         {(bootstrapProgress || ragProgress) && (
                           <div className="mt-3 space-y-2">
                             {bootstrapProgress && (
@@ -1421,7 +1465,7 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
               )}
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-500">更新时间</span>
-                <span className="text-sm">{new Date(project.updatedAt).toLocaleDateString()}</span>
+                <span className="text-sm">{formatDisplayDate(project.updatedAt)}</span>
               </div>
             </CardContent>
           </Card>

@@ -5,6 +5,7 @@ import { logError } from '@/lib/logger'
 import { getCurrentUserId } from '@/lib/auth'
 import { createProviderFromConfigId, createProviderFromDefaultConfig, getDefaultAIConfigRecord } from '@/lib/ai/factory'
 import { queueProjectBootstrap } from '@/lib/engine/auto-maintenance'
+import { buildFallbackNovelTitle, isLikelyNovelTitle, normalizeNovelTitle } from '@/lib/novel-title'
 
 // ============================================
 // Schema 验证
@@ -43,35 +44,6 @@ const createProjectSchema = z.object({
   corePitch: z.string().optional(),
 })
 
-function normalizeGeneratedTitle(text: string): string {
-  return text
-    .trim()
-    .replace(/^["'`【】《》\[\]\s]+/, '')
-    .replace(/["'`【】《》\[\]\s]+$/, '')
-    .replace(/\s+/g, ' ')
-    .slice(0, 50)
-}
-
-function buildFallbackTitle(input: {
-  corePitch?: string
-  description?: string
-  genre?: string
-}): string {
-  const pitch = input.corePitch || input.description || ''
-  const match = pitch.match(/([^，。！？,.;；]{2,18})/)
-  const core = match?.[1]?.trim()
-
-  if (core) {
-    return normalizeGeneratedTitle(`${core}记`)
-  }
-
-  if (input.genre) {
-    return `${input.genre}小说`
-  }
-
-  return '未命名小说项目'
-}
-
 async function generateNovelTitle(input: {
   corePitch?: string
   description?: string
@@ -82,6 +54,7 @@ async function generateNovelTitle(input: {
   aiModelId?: number
 }): Promise<string | null> {
   const pitch = input.corePitch || input.description || '暂无'
+  const sourceText = input.corePitch || input.description || ''
   const textPrompt = `请根据一句话卖点生成一个中文小说标题，只输出标题，不要解释。
 
 卖点：${pitch}`
@@ -117,8 +90,8 @@ async function generateNovelTitle(input: {
         const result = await provider.generate(attempt.prompt, attempt.params)
         if (!result.content?.trim()) continue
 
-        const title = normalizeGeneratedTitle(result.content)
-        if (title) return title
+        const title = normalizeNovelTitle(result.content)
+        if (isLikelyNovelTitle(title, sourceText)) return title
       } catch (error) {
         logError(error instanceof Error ? error : new Error(String(error)), {
           type: 'generate_project_title_attempt',
@@ -273,7 +246,7 @@ export async function POST(request: NextRequest) {
         lengthType: validatedData.lengthType,
         aiModelId: validatedData.aiModelId,
       })
-      || buildFallbackTitle({
+      || buildFallbackNovelTitle({
         corePitch: validatedData.corePitch,
         description: validatedData.description,
         genre: validatedData.genre,

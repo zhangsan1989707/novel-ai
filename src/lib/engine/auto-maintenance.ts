@@ -39,6 +39,8 @@ export interface MaintenanceSummary {
   ragRunning: boolean
   bootstrapFailed: boolean
   ragFailed: boolean
+  bootstrapError?: string | null
+  ragError?: string | null
   queuedTaskCount: number
   bootstrapProgress?: MaintenanceTaskProgress | null
   ragProgress?: MaintenanceTaskProgress | null
@@ -293,6 +295,8 @@ export async function getProjectMaintenanceSummary(projectId: number): Promise<M
   const bootstrapTasks = tasks.filter(task => task.taskType === 'BOOTSTRAP_PROJECT')
   const ragTasks = tasks.filter(task => task.taskType === 'REBUILD_RAG_INDEX')
   const queuedTaskCount = tasks.filter(isTaskActive).length
+  const latestBootstrapTask = bootstrapTasks[0] || null
+  const latestRagTask = ragTasks[0] || null
   const bootstrapRunningTask = bootstrapTasks.find(task => task.status === 'RUNNING') || bootstrapTasks.find(task => task.status === 'PENDING')
   const ragRunningTask = ragTasks.find(task => task.status === 'RUNNING') || ragTasks.find(task => task.status === 'PENDING')
 
@@ -301,8 +305,10 @@ export async function getProjectMaintenanceSummary(projectId: number): Promise<M
     bootstrapRunning: bootstrapTasks.some(task => task.status === 'RUNNING'),
     ragQueued: ragTasks.some(task => task.status === 'PENDING'),
     ragRunning: ragTasks.some(task => task.status === 'RUNNING'),
-    bootstrapFailed: bootstrapTasks.some(task => task.status === 'FAILED'),
-    ragFailed: ragTasks.some(task => task.status === 'FAILED'),
+    bootstrapFailed: latestBootstrapTask?.status === 'FAILED',
+    ragFailed: latestRagTask?.status === 'FAILED',
+    bootstrapError: latestBootstrapTask?.status === 'FAILED' ? latestBootstrapTask.errorMessage : null,
+    ragError: latestRagTask?.status === 'FAILED' ? latestRagTask.errorMessage : null,
     queuedTaskCount,
     bootstrapProgress: readTaskProgress(bootstrapRunningTask),
     ragProgress: readTaskProgress(ragRunningTask),
@@ -436,7 +442,21 @@ export async function ensureProjectMaintenanceQueued(
     bookSummaryCount: number
   }
 ): Promise<void> {
+  const [latestBootstrapTask, latestRagTask] = await Promise.all([
+    prisma.projectMaintenanceTask.findFirst({
+      where: { projectId, taskType: 'BOOTSTRAP_PROJECT' },
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.projectMaintenanceTask.findFirst({
+      where: { projectId, taskType: 'REBUILD_RAG_INDEX' },
+      orderBy: { createdAt: 'desc' },
+    }),
+  ])
+
   if (input.hasModel && (!input.hasBlueprint || !input.hasArcPlans || !input.hasStoryState || !input.hasWorldState)) {
+    if (latestBootstrapTask?.status === 'FAILED') {
+      return
+    }
     await queueProjectBootstrap(projectId, { source: 'project_detail', reason: 'missing_project_state' })
     return
   }
@@ -445,6 +465,9 @@ export async function ensureProjectMaintenanceQueued(
     input.ragDocumentCount === 0 &&
     (input.completedChapters > 0 || input.chapterSummaryCount > 0 || input.volumeSummaryCount > 0 || input.bookSummaryCount > 0)
   ) {
+    if (latestRagTask?.status === 'FAILED') {
+      return
+    }
     await queueRagRebuild(projectId, { source: 'project_detail', reason: 'rag_missing' })
   }
 }
