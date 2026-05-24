@@ -5,6 +5,7 @@ import { Button, Progress } from '@/components/ui'
 import { Sparkles, Square, RefreshCw, Wand2 } from 'lucide-react'
 import { countChineseWords } from '@/lib/utils'
 import { ChapterQualityPanel } from './ChapterQualityPanel'
+import { useChapterGeneration } from '@/hooks/use-chapter-generation'
 
 // ============================================
 // Types
@@ -22,17 +23,6 @@ interface StreamViewerProps {
   autoOptimize?: boolean
 }
 
-type StreamStatus = 'idle' | 'connecting' | 'streaming' | 'complete' | 'error'
-
-interface StreamState {
-  status: StreamStatus
-  content: string
-  wordCount: number
-  progress: number
-  targetWordCount: number
-  error?: string
-}
-
 // ============================================
 // Component
 // ============================================
@@ -48,13 +38,6 @@ export function StreamViewer({
   onError,
   autoOptimize = false,
 }: StreamViewerProps) {
-  const [state, setState] = useState<StreamState>({
-    status: 'idle',
-    content: initialContent,
-    wordCount: initialContent ? countChineseWords(initialContent) : 0,
-    progress: 0,
-    targetWordCount: 3000,
-  })
   const [settings, setSettings] = useState({
     useContext: true,
     contextChapterCount: 2,
@@ -65,8 +48,27 @@ export function StreamViewer({
   const [showSettings, setShowSettings] = useState(true)
   const [showQualityPanel, setShowQualityPanel] = useState(false)
   const [optimizedContent, setOptimizedContent] = useState<string | null>(null)
-  const abortControllerRef = useRef<AbortController | null>(null)
   const contentRef = useRef<HTMLTextAreaElement>(null)
+  const { state, start, stop } = useChapterGeneration({
+    projectId,
+    chapterId,
+    initialContent,
+    initialWordCount: initialContent ? countChineseWords(initialContent) : 0,
+    onStart: () => {
+      setOptimizedContent(null)
+      setShowQualityPanel(false)
+      onStart?.()
+    },
+    onComplete: (result) => {
+      if (settings.autoOptimizeAfterGenerate && result.content.length > 100) {
+        setShowQualityPanel(true)
+        setOptimizedContent(result.content)
+      }
+
+      onComplete?.(result.content, result.wordCount)
+    },
+    onError,
+  })
 
   useEffect(() => {
     if (contentRef.current && state.status === 'streaming') {
@@ -74,181 +76,22 @@ export function StreamViewer({
     }
   }, [state.content, state.status])
 
-  const parseSSEMessage = (buffer: string): { events: Array<{ event: string; data: string }>; remaining: string } => {
-    const events: Array<{ event: string; data: string }> = []
-    let remaining = buffer
-    const doubleNewline = '\n\n'
-    while (remaining.includes(doubleNewline)) {
-      const idx = remaining.indexOf(doubleNewline)
-      const block = remaining.substring(0, idx)
-      remaining = remaining.substring(idx + doubleNewline.length)
-      let event = 'message'
-      let data = ''
-      for (const line of block.split('\n')) {
-        if (line.startsWith('event: ')) {
-          event = line.substring(7).trim()
-        } else if (line.startsWith('data: ')) {
-          data = line.substring(6)
-        }
-      }
-      if (data) {
-        events.push({ event, data })
-      }
-    }
-    return { events, remaining }
-  }
-
   const connectSSE = useCallback(() => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort()
-    }
-
-    setState((prev) => ({
-      ...prev,
-      status: 'connecting',
-      content: initialContent,
-      wordCount: initialContent ? countChineseWords(initialContent) : 0,
-    }))
-
-    onStart?.()
-
-    const controller = new AbortController()
-    abortControllerRef.current = controller
-
-    const body = {
-      chapterId,
+    void start({
       useContext: settings.useContext,
       contextChapterCount: settings.contextChapterCount,
       targetWordCount: settings.targetWordCount,
       temperature: settings.temperature,
-    }
-
-    fetch(`/api/novel/projects/${projectId}/generate/stream`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: controller.signal,
     })
-      .then(async (response) => {
-        if (!response.ok) {
-          let errorMsg = '生成失败'
-          try {
-            const errData = await response.json()
-            errorMsg = errData.error?.message || errorMsg
-          } catch {}
-          setState((prev) => ({ ...prev, status: 'error', error: errorMsg }))
-          onError?.(errorMsg)
-          return
-        }
-
-        setState((prev) => ({ ...prev, status: 'streaming' }))
-
-        const reader = response.body?.getReader()
-        if (!reader) {
-          setState((prev) => ({ ...prev, status: 'error', error: '无法读取流' }))
-          onError?.('无法读取流')
-          return
-        }
-
-        const decoder = new TextDecoder()
-        let buffer = ''
-
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-
-          buffer += decoder.decode(value, { stream: true })
-          const { events, remaining } = parseSSEMessage(buffer)
-          buffer = remaining
-
-          for (const evt of events) {
-            if (evt.event === 'start') {
-              setState((prev) => ({
-                ...prev,
-                status: 'streaming',
-                content: initialContent,
-                wordCount: initialContent ? countChineseWords(initialContent) : 0,
-              }))
-            } else if (evt.event === 'token') {
-              try {
-                const data = JSON.parse(evt.data)
-                setState((prev) => {
-                  const newContent = prev.content + data.content
-                  return {
-                    ...prev,
-                    content: newContent,
-                    wordCount: countChineseWords(newContent),
-                    progress: Math.min(100, (countChineseWords(newContent) / settings.targetWordCount) * 100),
-                  }
-                })
-              } catch {}
-            } else if (evt.event === 'wordCount') {
-              try {
-                const data = JSON.parse(evt.data)
-                setState((prev) => ({
-                  ...prev,
-                  wordCount: data.count,
-                  progress: Math.min(100, (data.count / settings.targetWordCount) * 100),
-                }))
-              } catch {}
-            } else if (evt.event === 'done') {
-              try {
-                const data = JSON.parse(evt.data)
-                const cleanedContent = data.content || ''
-                setState((prev) => {
-                  return {
-                    ...prev,
-                    content: cleanedContent || prev.content,
-                    wordCount: data.wordCount || countChineseWords(cleanedContent),
-                    progress: 100,
-                    status: 'complete',
-                  }
-                })
-
-                if (settings.autoOptimizeAfterGenerate && cleanedContent.length > 100) {
-                  setShowQualityPanel(true)
-                  setOptimizedContent(cleanedContent)
-                }
-
-                onComplete?.(cleanedContent, data.wordCount || countChineseWords(cleanedContent))
-              } catch {}
-            } else if (evt.event === 'error') {
-              let errorMessage = '生成失败'
-              try {
-                const data = JSON.parse(evt.data)
-                errorMessage = data.message || errorMessage
-              } catch {}
-              setState((prev) => ({ ...prev, status: 'error', error: errorMessage }))
-              onError?.(errorMessage)
-            }
-          }
-        }
-      })
-      .catch((err) => {
-        if (err.name === 'AbortError') return
-        setState((prev) => ({ ...prev, status: 'error', error: '连接中断' }))
-        onError?.('连接中断')
-      })
-  }, [projectId, chapterId, settings, initialContent, onStart, onComplete, onError])
+  }, [settings, start])
 
   const stopGeneration = useCallback(() => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort()
-      abortControllerRef.current = null
-    }
-    setState((prev) => ({
-      ...prev,
-      status: 'idle',
-    }))
-  }, [])
+    stop()
+  }, [stop])
 
-  useEffect(() => {
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort()
-      }
-    }
-  }, [])
+  const displayedContent =
+    optimizedContent ??
+    (state.status === 'idle' && !state.content ? initialContent : state.content)
 
   return (
     <div className="space-y-4">
@@ -403,7 +246,7 @@ export function StreamViewer({
         <textarea
           ref={contentRef}
           className="w-full min-h-[400px] p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 font-mono text-sm leading-relaxed resize-none transition-colors"
-          value={state.content || initialContent}
+          value={displayedContent}
           readOnly
           placeholder="生成的内容将显示在这里..."
         />
@@ -434,7 +277,6 @@ export function StreamViewer({
             content={optimizedContent}
             onOptimizeComplete={(revisedContent) => {
               setOptimizedContent(revisedContent)
-              setState((prev) => ({ ...prev, content: revisedContent }))
             }}
           />
         </div>

@@ -7,6 +7,7 @@ import { ChapterQualityPanel } from '@/components/ai/ChapterQualityPanel'
 import { ArrowLeft, RefreshCw, Save, Sparkles, Square, Wand2 } from 'lucide-react'
 import { ChapterStatus } from '@/types'
 import { countChineseWords } from '@/lib/utils'
+import { useChapterGeneration } from '@/hooks/use-chapter-generation'
 
 interface Chapter {
   id: number
@@ -28,10 +29,7 @@ interface ChapterGenerateClientProps {
 export function ChapterGenerateClient({ projectId, chapterId, initialChapter }: ChapterGenerateClientProps) {
   const router = useRouter()
   const [chapter, setChapter] = useState<Chapter>(initialChapter)
-  const [streamStatus, setStreamStatus] = useState<'idle' | 'connecting' | 'streaming' | 'complete' | 'error'>('idle')
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [progress, setProgress] = useState(0)
   const [showSettings, setShowSettings] = useState(true)
   const [showQualityPanel, setShowQualityPanel] = useState(false)
   const [isDirty, setIsDirty] = useState(false)
@@ -42,204 +40,75 @@ export function ChapterGenerateClient({ projectId, chapterId, initialChapter }: 
     targetWordCount: Math.max(initialChapter.wordCount || 0, 3000),
     temperature: 0.7,
   })
-  const abortControllerRef = useRef<AbortController | null>(null)
   const contentRef = useRef<HTMLTextAreaElement | null>(null)
+  const { state: generationState, start, stop } = useChapterGeneration({
+    projectId,
+    chapterId,
+    onStart: () => {
+      setLastWarning(null)
+      setShowQualityPanel(false)
+      setIsDirty(false)
+      setChapter((prev) => ({
+        ...prev,
+        content: '',
+        wordCount: 0,
+        status: ChapterStatus.GENERATING,
+      }))
+    },
+    onToken: (_token, nextContent, nextWordCount) => {
+      setChapter((prev) => ({
+        ...prev,
+        content: nextContent,
+        wordCount: nextWordCount,
+        status: ChapterStatus.GENERATING,
+      }))
+    },
+    onComplete: (result) => {
+      const nextStatus =
+        result.status === 'reviewing' ? ChapterStatus.REVIEWING : ChapterStatus.COMPLETED
+
+      setChapter((prev) => ({
+        ...prev,
+        title: result.title || prev.title,
+        content: result.content,
+        wordCount: result.wordCount,
+        status: nextStatus,
+      }))
+      setLastWarning(result.warning || null)
+      toast.success(result.warning ? '生成完成，章节进入待审稿状态' : '生成完成，章节已自动回写')
+      router.refresh()
+    },
+    onError: (message) => {
+      setChapter((prev) => ({
+        ...prev,
+        status: ChapterStatus.DRAFT,
+      }))
+      toast.error(message)
+    },
+  })
 
   useEffect(() => {
-    if (contentRef.current && streamStatus === 'streaming') {
+    if (contentRef.current && generationState.status === 'streaming') {
       contentRef.current.scrollTop = contentRef.current.scrollHeight
     }
-  }, [chapter.content, streamStatus])
-
-  useEffect(() => {
-    return () => {
-      abortControllerRef.current?.abort()
-    }
-  }, [])
-
-  const parseSSEMessage = (buffer: string): { events: Array<{ event: string; data: string }>; remaining: string } => {
-    const events: Array<{ event: string; data: string }> = []
-    let remaining = buffer
-    const delimiter = '\n\n'
-
-    while (remaining.includes(delimiter)) {
-      const index = remaining.indexOf(delimiter)
-      const block = remaining.slice(0, index)
-      remaining = remaining.slice(index + delimiter.length)
-      let event = 'message'
-      let data = ''
-
-      for (const line of block.split('\n')) {
-        if (line.startsWith('event: ')) {
-          event = line.slice(7).trim()
-        } else if (line.startsWith('data: ')) {
-          data = line.slice(6)
-        }
-      }
-
-      if (data) {
-        events.push({ event, data })
-      }
-    }
-
-    return { events, remaining }
-  }
+  }, [chapter.content, generationState.status])
 
   const stopGeneration = useCallback(() => {
-    abortControllerRef.current?.abort()
-    abortControllerRef.current = null
-    setStreamStatus('idle')
-  }, [])
-
-  const startGeneration = useCallback(async () => {
-    abortControllerRef.current?.abort()
-    const controller = new AbortController()
-    abortControllerRef.current = controller
-
-    setError(null)
-    setLastWarning(null)
-    setProgress(0)
-    setShowQualityPanel(false)
-    setStreamStatus('connecting')
-    setIsDirty(false)
+    stop()
     setChapter((prev) => ({
       ...prev,
-      content: '',
-      wordCount: 0,
-      status: ChapterStatus.GENERATING,
+      status: ChapterStatus.DRAFT,
     }))
+  }, [stop])
 
-    try {
-      const response = await fetch(`/api/novel/projects/${projectId}/generate/stream`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chapterId,
-          useContext: settings.useContext,
-          contextChapterCount: settings.contextChapterCount,
-          targetWordCount: settings.targetWordCount,
-          temperature: settings.temperature,
-        }),
-        signal: controller.signal,
-      })
-
-      if (!response.ok) {
-        let message = '生成失败'
-        try {
-          const data = await response.json()
-          message = data.error?.message || message
-        } catch {}
-        setError(message)
-        setStreamStatus('error')
-        toast.error(message)
-        return
-      }
-
-      const reader = response.body?.getReader()
-      if (!reader) {
-        setError('无法读取流式响应')
-        setStreamStatus('error')
-        toast.error('无法读取流式响应')
-        return
-      }
-
-      setStreamStatus('streaming')
-      const decoder = new TextDecoder()
-      let buffer = ''
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        buffer += decoder.decode(value, { stream: true })
-        const { events, remaining } = parseSSEMessage(buffer)
-        buffer = remaining
-
-        for (const evt of events) {
-          if (evt.event === 'start') {
-            setStreamStatus('streaming')
-            continue
-          }
-
-          if (evt.event === 'token') {
-            try {
-              const data = JSON.parse(evt.data) as { content?: string }
-              if (!data.content) continue
-              setChapter((prev) => {
-                const nextContent = `${prev.content || ''}${data.content}`
-                const nextWordCount = countChineseWords(nextContent)
-                setProgress(Math.min(100, (nextWordCount / settings.targetWordCount) * 100))
-                return {
-                  ...prev,
-                  content: nextContent,
-                  wordCount: nextWordCount,
-                  status: ChapterStatus.GENERATING,
-                }
-              })
-            } catch {}
-            continue
-          }
-
-          if (evt.event === 'wordCount') {
-            try {
-              const data = JSON.parse(evt.data) as { count?: number }
-              if (typeof data.count === 'number') {
-                setProgress(Math.min(100, (data.count / settings.targetWordCount) * 100))
-                setChapter((prev) => ({ ...prev, wordCount: data.count ?? prev.wordCount }))
-              }
-            } catch {}
-            continue
-          }
-
-          if (evt.event === 'done') {
-            const data = JSON.parse(evt.data) as {
-              content?: string
-              title?: string
-              wordCount?: number
-              status?: 'completed' | 'reviewing'
-              warning?: string
-            }
-            const nextContent = data.content || ''
-            const nextWordCount = data.wordCount || countChineseWords(nextContent)
-            const nextStatus = data.status === 'reviewing' ? ChapterStatus.REVIEWING : ChapterStatus.COMPLETED
-
-            setChapter((prev) => ({
-              ...prev,
-              title: data.title || prev.title,
-              content: nextContent,
-              wordCount: nextWordCount,
-              status: nextStatus,
-            }))
-            setProgress(100)
-            setStreamStatus('complete')
-            setLastWarning(data.warning || null)
-            toast.success(data.warning ? '生成完成，章节进入待审稿状态' : '生成完成，章节已自动回写')
-            router.refresh()
-            continue
-          }
-
-          if (evt.event === 'error') {
-            const data = JSON.parse(evt.data) as { message?: string }
-            const message = data.message || '生成失败'
-            setError(message)
-            setStreamStatus('error')
-            toast.error(message)
-          }
-        }
-      }
-    } catch (streamError) {
-      if (streamError instanceof DOMException && streamError.name === 'AbortError') {
-        return
-      }
-
-      const message = streamError instanceof Error ? streamError.message : '连接中断'
-      setError(message)
-      setStreamStatus('error')
-      toast.error(message)
-    } finally {
-      abortControllerRef.current = null
-    }
-  }, [chapterId, projectId, router, settings])
+  const startGeneration = useCallback(async () => {
+    await start({
+      useContext: settings.useContext,
+      contextChapterCount: settings.contextChapterCount,
+      targetWordCount: settings.targetWordCount,
+      temperature: settings.temperature,
+    })
+  }, [settings, start])
 
   const handleSave = async () => {
     const content = chapter.content || ''
@@ -343,31 +212,31 @@ export function ChapterGenerateClient({ projectId, chapterId, initialChapter }: 
 
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
-                {streamStatus === 'idle' && (
+                {generationState.status === 'idle' && (
                   <Button onClick={startGeneration}>
                     <Sparkles className="mr-2 h-4 w-4" />
                     开始生成
                   </Button>
                 )}
-                {streamStatus === 'connecting' && (
+                {generationState.status === 'connecting' && (
                   <Button disabled>
                     <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
                     连接中...
                   </Button>
                 )}
-                {streamStatus === 'streaming' && (
+                {generationState.status === 'streaming' && (
                   <Button variant="danger" onClick={stopGeneration}>
                     <Square className="mr-2 h-4 w-4" />
                     停止生成
                   </Button>
                 )}
-                {streamStatus === 'complete' && (
+                {generationState.status === 'complete' && (
                   <Button variant="secondary" onClick={startGeneration}>
                     <RefreshCw className="mr-2 h-4 w-4" />
                     重新生成
                   </Button>
                 )}
-                {streamStatus === 'error' && (
+                {generationState.status === 'error' && (
                   <Button variant="secondary" onClick={startGeneration}>
                     <RefreshCw className="mr-2 h-4 w-4" />
                     重试生成
@@ -399,9 +268,9 @@ export function ChapterGenerateClient({ projectId, chapterId, initialChapter }: 
               </div>
             </div>
 
-            {streamStatus === 'streaming' ? <Progress value={progress} size="sm" /> : null}
+            {generationState.status === 'streaming' ? <Progress value={generationState.progress} size="sm" /> : null}
 
-            {showSettings && streamStatus === 'idle' ? (
+            {showSettings && generationState.status === 'idle' ? (
               <div className="grid gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/60 md:grid-cols-2">
                 <label className="space-y-2 text-sm">
                   <span className="font-medium text-slate-700 dark:text-slate-200">目标字数</span>
@@ -473,20 +342,20 @@ export function ChapterGenerateClient({ projectId, chapterId, initialChapter }: 
               value={chapter.content || ''}
             />
 
-            {error ? (
+            {generationState.error ? (
               <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300">
-                {error}
+                {generationState.error}
               </div>
             ) : null}
 
             <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-slate-500">
               <span>
                 状态：
-                {streamStatus === 'idle' && '待生成'}
-                {streamStatus === 'connecting' && '连接中'}
-                {streamStatus === 'streaming' && '生成中'}
-                {streamStatus === 'complete' && '已完成并自动回写'}
-                {streamStatus === 'error' && '生成失败'}
+                {generationState.status === 'idle' && '待生成'}
+                {generationState.status === 'connecting' && '连接中'}
+                {generationState.status === 'streaming' && '生成中'}
+                {generationState.status === 'complete' && '已完成并自动回写'}
+                {generationState.status === 'error' && '生成失败'}
               </span>
               <span>{isDirty ? '当前有未保存的优化内容' : '当前页面与章节存档已同步'}</span>
             </div>
