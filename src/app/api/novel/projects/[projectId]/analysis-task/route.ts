@@ -7,6 +7,7 @@ import { logError } from '@/lib/logger'
 import { Prisma } from '@prisma/client'
 import { getChapterSummariesInRange, saveChapterSummary } from '@/lib/memory/chapter-summary'
 import { countChineseWords } from '@/lib/utils'
+import { buildFallbackAnalysisData, isRefusalContent } from '@/lib/analysis/book-analysis-fallback'
 import {
   ANALYSIS_DIMENSION_LABELS,
   ANALYSIS_FORMAT_TEMPLATES,
@@ -322,7 +323,27 @@ async function executeAnalysisAsync(
         }
       )
 
-      const analysisData = extractJsonFromMarkdownBlock(resultContent, dimLabel)
+      const extractedData = extractJsonFromMarkdownBlock(resultContent, dimLabel)
+      const analysisData = Object.keys(extractedData).length > 0 && !isRefusalContent(resultContent)
+        ? extractedData
+        : buildFallbackAnalysisData({
+            title: project.title,
+            genre: project.genre || null,
+            outline: project.outline || null,
+            outlineStages: project.outlineStages || undefined,
+            worldSetting: project.worldSetting || null,
+            powerSystem: project.powerSystem || null,
+            protagonistProfile: project.protagonistProfile || null,
+            protagonistGoal: project.protagonistGoal || null,
+            antagonistSetting: project.antagonistSetting || null,
+            endingPlan: project.endingPlan || null,
+            writingPrompt: project.writingPrompt || null,
+            chapters: project.chapters.map(ch => ({
+              chapterNumber: ch.chapterNumber,
+              title: ch.title,
+              summary: ch.summary || null,
+            })),
+          }, dim)
 
       await prisma.bookAnalysis.upsert({
         where: {

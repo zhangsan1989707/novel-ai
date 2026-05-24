@@ -3,7 +3,6 @@
  */
 import { AIService } from '@/lib/ai/service'
 import type { AIProvider } from '@/lib/ai/types'
-import { buildValidatorPrompt as buildValidatorPromptV1 } from '../prompts/chapter/validating'
 import { buildValidatorPrompt as buildValidatorPromptV2, type ValidationReport as ValidationReportV2 } from '../prompts/chapter/validating-v2'
 import type { CharacterProfile, PlotlineData } from '../engine/types'
 
@@ -24,11 +23,11 @@ interface ValidatorInput {
 
 // 默认使用增强版校验
 const buildValidatorPrompt = buildValidatorPromptV2
-type ValidationReport = ValidationReportV2
+export type ValidatorValidationReport = ValidationReportV2
 
 export async function validatorAgent(
   input: ValidatorInput
-): Promise<ValidationReport> {
+): Promise<ValidatorValidationReport> {
   const { projectId, chapterNo, newChapterContent, characterProfiles, recentSummaries, worldSetting, openPlotlines, chapterTitle, chapterGoal } = input
 
   // 获取可追踪的 AI Provider
@@ -70,7 +69,7 @@ export async function validatorAgent(
   const jsonMatch = result.content.match(/\{[\s\S]*\}/)
   if (jsonMatch) {
     try {
-      const report = JSON.parse(jsonMatch[0]) as ValidationReport
+      const report = JSON.parse(jsonMatch[0]) as ValidatorValidationReport
       return report
     } catch {
       return {

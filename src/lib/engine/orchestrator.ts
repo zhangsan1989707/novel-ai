@@ -3,24 +3,26 @@
  * 核心组件，协调多 Agent 协作
  */
 import { prisma } from '@/lib/prisma'
-import { ChapterStatus } from '@prisma/client'
+import { ChapterStatus, type Prisma } from '@prisma/client'
 import { countChineseWords } from '@/lib/utils'
 import { getMinimumChapterWordCount, buildChapterWordCountWarning } from '@/lib/ai/chapter-quality'
 import { AIService } from '@/lib/ai/service'
 import { plannerAgent } from '../agents/planner'
 import { writerAgent } from '../agents/writer'
 import { polisherAgent } from '../agents/polisher'
-import { validatorAgent } from '../agents/validator'
+import { validatorAgent, type ValidatorValidationReport } from '../agents/validator'
 import { summarizerAgent } from '../agents/summarizer'
+import { reviewerAgent } from '../agents/reviewer'
 import { buildChapterMemoryPack } from '../memory'
 import * as storyState from './story-state'
 import { hookRegistry } from '../hooks/registry'
 import { directChapter } from '../agents/narrative-director'
 import { chapterDeslopper } from '../agents/deslopper'
 import { recordAndApplyChapterCommit } from './chapter-commit'
+import { buildRevisionPrompt } from '@/lib/ai'
 import type {
   ChapterOutline,
-  ValidationReport,
+  ValidationReport as EngineValidationReport,
   ChapterSummaryData,
   SSEEvent,
   AgentType,
@@ -38,9 +40,38 @@ interface GenerationResult {
 
 type SSEEmitter = (event: SSEEvent) => void
 
+function buildReviewSuggestion(review: {
+  consensus: string
+  criticalIssues: string[]
+  improvementPriority: string[]
+  overallScore: number
+}): string {
+  const parts: string[] = []
+
+  if (review.consensus.trim()) {
+    parts.push(`审稿共识：${review.consensus.trim()}`)
+  }
+
+  if (review.criticalIssues.length > 0) {
+    parts.push(`关键问题：${review.criticalIssues.slice(0, 3).join('；')}`)
+  }
+
+  if (review.improvementPriority.length > 0) {
+    parts.push(`优先改进：${review.improvementPriority.slice(0, 5).join('；')}`)
+  }
+
+  if (review.overallScore < 60) {
+    parts.push('请优先重构章节冲突、节奏和钩子，再保留人物与世界观连续性。')
+  } else {
+    parts.push('请保留原有亮点，只修正薄弱表达、节奏拖沓和轻微结构问题。')
+  }
+
+  return parts.join('\n')
+}
+
 /**
  * 章节生成流水线
- * 依次执行：策划 → 写作 → 润色 → 校验 → 摘要
+ * 依次执行：策划 → 写作 → 润色 → 对抗审稿 → 校验 → 去 AI 味 → 摘要
  */
 export async function runChapterGenerationPipeline(
   projectId: number,
@@ -183,7 +214,7 @@ export async function runChapterGenerationPipeline(
         await prisma.novelChapter.update({
           where: { id: chapter.id },
           data: {
-            chapterOutline: outline as any,
+            chapterOutline: outline as unknown as Prisma.InputJsonValue,
             lastAgentType: 'VALIDATOR',
           },
         })
@@ -202,7 +233,7 @@ export async function runChapterGenerationPipeline(
       await prisma.novelChapter.update({
         where: { id: chapter.id },
         data: {
-          chapterOutline: outline as any,
+          chapterOutline: outline as unknown as Prisma.InputJsonValue,
           lastAgentType: 'WRITER',
         },
       })
@@ -273,8 +304,95 @@ export async function runChapterGenerationPipeline(
       })
     }
 
-    // ========== Phase 4: 校验 Agent ==========
-    let validationReport: any
+    // ========== Phase 4: 对抗审稿 Agent ==========
+    let reviewedContent = polishedContent
+
+    if (speedMode === 'quality') {
+      await runPhase('reviewer', async () => {
+        emit({ type: 'agent_switch', data: { agent: 'reviewer' } })
+
+        try {
+          const reviewResult = await reviewerAgent(
+            {
+              projectId,
+              content: polishedContent,
+              genre: project.genre,
+              targetAudience: project.targetAudience,
+              chapterNo,
+              worldSetting: project.worldSetting,
+              provider: sharedProvider,
+            },
+          )
+
+          await prisma.reviewReport.create({
+            data: {
+              projectId,
+              chapterNo,
+              content: polishedContent,
+              reviews: reviewResult.reviews as unknown as object[],
+              overallScore: reviewResult.overallScore,
+              consensus: reviewResult.consensus,
+              criticalIssues: reviewResult.criticalIssues,
+              improvementPriority: reviewResult.improvementPriority,
+            },
+          })
+
+          const shouldApplyRevision = reviewResult.overallScore < 85 || reviewResult.criticalIssues.length > 0
+          if (shouldApplyRevision) {
+            const reviewRevisionType = reviewResult.overallScore < 60 || reviewResult.criticalIssues.length > 0
+              ? 'rewrite'
+              : 'polish'
+
+            await runPhase('review_revision', async () => {
+              emit({ type: 'agent_switch', data: { agent: 'review_revision' } })
+
+              const reviewContext = {
+                projectTitle: project.title,
+                genre: project.genre || undefined,
+                writingStyle: project.writingStyle || undefined,
+                worldSetting: project.worldSetting || undefined,
+                powerSystem: project.powerSystem || undefined,
+                protagonistProfile: project.protagonistProfile || undefined,
+                protagonistGoal: project.protagonistGoal || undefined,
+                antagonistSetting: project.antagonistSetting || undefined,
+                endingPlan: project.endingPlan || undefined,
+                writingPrompt: project.writingPrompt || undefined,
+                currentChapterNumber: chapterNo,
+                currentChapterTitle: outline.chapterTitle,
+                currentChapterSummary: [outline.chapterGoal, outline.mainConflict].filter(Boolean).join('；'),
+                memoryContext: writerMemoryContext,
+              }
+
+              const reviewPrompt = buildRevisionPrompt(
+                reviewContext,
+                polishedContent,
+                reviewRevisionType,
+                buildReviewSuggestion(reviewResult)
+              )
+
+              const revisionResult = await sharedProvider.generate(reviewPrompt, {
+                temperature: reviewRevisionType === 'rewrite' ? 0.72 : 0.55,
+                maxTokens: Math.min(4096, Math.max(2000, Math.ceil(polishedContent.length * 0.75))),
+              })
+
+              reviewedContent = revisionResult.content.trim() || polishedContent
+            })
+          }
+        } catch (reviewError) {
+          emit({
+            type: 'hook_warning',
+            data: {
+              warnings: [
+                `对抗审稿失败，已回退到原润色稿：${reviewError instanceof Error ? reviewError.message : '未知错误'}`,
+              ],
+            },
+          })
+        }
+      })
+    }
+
+    // ========== Phase 5: 校验 Agent ==========
+    let validationReport: ValidatorValidationReport | null = null
 
     if (speedMode === 'quality') {
       await runPhase('validator', async () => {
@@ -283,7 +401,7 @@ export async function runChapterGenerationPipeline(
         validationReport = await validatorAgent({
           projectId,
           chapterNo,
-          newChapterContent: polishedContent,
+          newChapterContent: reviewedContent,
           memoryContext: validatorMemoryContext,
           characterProfiles: memoryPack.characterProfiles,
           recentSummaries: memoryPack.recentChapterSummaries,
@@ -295,28 +413,29 @@ export async function runChapterGenerationPipeline(
         emit({
           type: 'validation',
           data: {
-            result: validationReport.result,
-            score: validationReport.score,
+          result: validationReport.result,
+          score: validationReport.score,
           },
         })
       })
 
       // 校验失败处理
-      if (validationReport.result === 'retry') {
+      const currentValidationReport = validationReport as ValidatorValidationReport | null
+      if (currentValidationReport?.result === 'retry') {
         const currentRetry = await prisma.novelChapter.findUnique({
           where: { id: chapter.id },
         })
         const retryCount = (currentRetry?.retryCount || 0) + 1
 
         if (retryCount >= MAX_RETRY_COUNT) {
-          const failedWordCount = countChineseWords(polishedContent)
+          const failedWordCount = countChineseWords(reviewedContent)
           await prisma.novelChapter.update({
             where: { id: chapter.id },
             data: {
-              content: polishedContent,
+              content: reviewedContent,
               status: ChapterStatus.REVIEWING,
               retryCount,
-              validationReport: validationReport as any,
+              validationReport: currentValidationReport as unknown as Prisma.InputJsonValue,
               wordCount: failedWordCount,
               lastAgentType: 'VALIDATOR',
             },
@@ -332,7 +451,7 @@ export async function runChapterGenerationPipeline(
           return {
             success: true,
             chapterId: chapter.id,
-            content: polishedContent,
+            content: reviewedContent,
             error: '校验失败，已标记人工审核',
           }
         }
@@ -359,10 +478,11 @@ export async function runChapterGenerationPipeline(
           styleScore: 85,
         },
       }
+      reviewedContent = polishedContent
     }
 
-    // ========== Phase 5: 去 AI 味 Agent ==========
-    let finalContent = polishedContent
+    // ========== Phase 6: 去 AI 味 Agent ==========
+    let finalContent = reviewedContent
 
     if (speedMode === 'quality') {
       await runPhase('deslopper', async () => {
@@ -372,7 +492,7 @@ export async function runChapterGenerationPipeline(
           const deslopResult = await chapterDeslopper({
             projectId,
             chapterId: chapter.id,
-            content: polishedContent,
+            content: reviewedContent,
             chapterNumber: chapterNo,
             chapterTitle: outline.chapterTitle,
             genre: project.genre,
@@ -394,7 +514,7 @@ export async function runChapterGenerationPipeline(
       })
     }
 
-    // ========== Phase 6: 摘要 Agent ==========
+    // ========== Phase 7: 摘要 Agent ==========
     let summaryData!: ChapterSummaryData
 
     if (speedMode !== 'fast') {
@@ -443,14 +563,14 @@ export async function runChapterGenerationPipeline(
         chapterTitle: outline.chapterTitle,
         content: finalContent,
         summaryData,
-        validationReport,
+        validationReport: validationReport as unknown as EngineValidationReport | null,
         outline,
         qualityStatus: chapterReady ? 'completed' : 'reviewing',
         warning: chapterReady ? undefined : buildChapterWordCountWarning(finalWordCount, project.chapterWordCount || 3000, chapterNo),
         targetWordCount: project.chapterWordCount || 3000,
         currentWordCount: finalWordCount,
         emotionalValue,
-        agentType: speedMode === 'quality' ? 'POLISHER' : 'WRITER',
+        agentType: speedMode === 'quality' ? 'REVIEWER' : 'WRITER',
         emittedAt: new Date().toISOString(),
       }, 'pipeline')
 
@@ -507,7 +627,7 @@ export async function getChapterGenerationStatus(
 ): Promise<{
   status: string
   retryCount: number
-  validationReport?: ValidationReport | null
+  validationReport?: EngineValidationReport | null
   lastAgentType?: AgentType | null
 }> {
   const chapter = await prisma.novelChapter.findUnique({
@@ -521,7 +641,7 @@ export async function getChapterGenerationStatus(
   return {
     status: chapter.status,
     retryCount: chapter.retryCount,
-    validationReport: chapter.validationReport as ValidationReport | null,
+    validationReport: chapter.validationReport as EngineValidationReport | null,
     lastAgentType: chapter.lastAgentType as AgentType | null,
   }
 }

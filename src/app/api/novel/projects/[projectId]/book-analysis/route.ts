@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { logError } from '@/lib/logger'
 import { AnalysisDimension } from '@/types'
+import { buildFallbackAnalysisData, isRefusalContent } from '@/lib/analysis/book-analysis-fallback'
 
 // ============================================
 // Schema 验证
@@ -56,6 +57,31 @@ export async function GET(
       where.dimension = query.dimension
     }
 
+    const project = await prisma.novelProject.findUnique({
+      where: { id: projectIdNum },
+      select: {
+        title: true,
+        genre: true,
+        outline: true,
+        outlineStages: true,
+        worldSetting: true,
+        powerSystem: true,
+        protagonistProfile: true,
+        protagonistGoal: true,
+        antagonistSetting: true,
+        endingPlan: true,
+        writingPrompt: true,
+        chapters: {
+          select: {
+            chapterNumber: true,
+            title: true,
+            summary: true,
+          },
+          orderBy: { chapterNumber: 'asc' },
+        },
+      },
+    })
+
     // 查询分析结果
     const analyses = await prisma.bookAnalysis.findMany({
       where,
@@ -66,9 +92,22 @@ export async function GET(
       ],
     })
 
+    const normalizedAnalyses = project
+      ? analyses.map((analysis) => {
+          const rawData = (analysis.analysisData as Record<string, unknown> | null) || {}
+          const needsFallback = Object.keys(rawData).length === 0 || isRefusalContent(analysis.rawContent)
+          return needsFallback
+            ? {
+                ...analysis,
+                analysisData: buildFallbackAnalysisData(project, analysis.dimension as AnalysisDimension),
+              }
+            : analysis
+        })
+      : analyses
+
     return NextResponse.json({
       success: true,
-      data: analyses,
+      data: normalizedAnalyses,
     })
   } catch (error) {
     if (error instanceof z.ZodError) {

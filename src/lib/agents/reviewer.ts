@@ -1,4 +1,5 @@
 import { AIService } from '@/lib/ai/service'
+import type { AIProvider } from '@/lib/ai/types'
 import {
   buildMaleReaderReviewPrompt,
   buildFemaleReaderReviewPrompt,
@@ -14,6 +15,7 @@ interface ReviewInput {
   targetAudience?: string | null
   chapterNo?: number
   worldSetting?: string | null
+  provider?: AIProvider
 }
 
 interface MultiReviewResult {
@@ -27,14 +29,15 @@ interface MultiReviewResult {
 async function runSingleReview(
   projectId: number,
   prompt: string,
-  defaultReviewer: string
+  defaultReviewer: string,
+  provider?: AIProvider
 ): Promise<ReviewResult> {
-  const provider = await AIService.createProvider({
+  const aiProvider = provider || await AIService.createProvider({
     projectId,
     usageType: 'REVIEWER',
   })
 
-  const result = await provider.generate(prompt, {
+  const result = await aiProvider.generate(prompt, {
     temperature: 0.3,
     maxTokens: 3000,
   })
@@ -167,6 +170,7 @@ function computeImprovementPriority(reviews: ReviewResult[]): string[] {
 
 export async function reviewerAgent(input: ReviewInput): Promise<MultiReviewResult> {
   const { projectId, content, genre, targetAudience, chapterNo, worldSetting } = input
+  const provider = input.provider
 
   const promptInput = {
     content,
@@ -180,22 +184,26 @@ export async function reviewerAgent(input: ReviewInput): Promise<MultiReviewResu
     runSingleReview(
       projectId,
       buildMaleReaderReviewPrompt(promptInput),
-      '男频审稿人'
+      '男频审稿人',
+      provider
     ),
     runSingleReview(
       projectId,
       buildFemaleReaderReviewPrompt(promptInput),
-      '女频审稿人'
+      '女频审稿人',
+      provider
     ),
     runSingleReview(
       projectId,
       buildToxicityReviewPrompt(promptInput),
-      '毒点检测器'
+      '毒点检测器',
+      provider
     ),
     runSingleReview(
       projectId,
       buildStructureReviewPrompt(promptInput),
-      '结构分析师'
+      '结构分析师',
+      provider
     ),
   ])
 

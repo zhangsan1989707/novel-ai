@@ -313,16 +313,7 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
       project?.maintenanceSummary?.ragFailed
     )
   )
-  const projectInitializing = Boolean(
-    project && (
-      !project.preflight?.ready ||
-      maintenanceActive ||
-      !project.preflight?.hasBlueprint ||
-      !project.preflight?.hasArcPlans ||
-      !project.preflight?.hasStoryState ||
-      !project.preflight?.hasWorldState
-    )
-  )
+  const projectInitializing = maintenanceActive
 
   const fetchProject = useCallback(async () => {
     try {
@@ -495,7 +486,7 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
   }
 
   const handleStartPipeline = async () => {
-    if (projectInitializing) {
+    if (maintenanceActive) {
       toast.error('创作系统仍在初始化，请完成后再开始 AI 生成')
       return
     }
@@ -789,7 +780,7 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
                 size="sm"
                 onClick={handleStartPipeline}
                 loading={pipelineStarting}
-                disabled={pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING' || pipeline?.status === 'PAUSED' || !hasBoundModel || projectInitializing}
+                disabled={pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING' || pipeline?.status === 'PAUSED' || !hasBoundModel || maintenanceActive}
                 className="gap-1.5"
               >
                 <Rocket className="h-4 w-4" />
@@ -944,7 +935,7 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
                         size="sm"
                         onClick={handleStartPipeline}
                         loading={pipelineStarting}
-                        disabled={pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING' || pipeline?.status === 'PAUSED' || !hasBoundModel || projectInitializing}
+                        disabled={pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING' || pipeline?.status === 'PAUSED' || !hasBoundModel || maintenanceActive}
                         className="mt-4 gap-1.5"
                       >
                         <Rocket className="h-4 w-4" />

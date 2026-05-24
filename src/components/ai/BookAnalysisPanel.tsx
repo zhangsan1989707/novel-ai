@@ -18,6 +18,7 @@ import { AnalysisDimension, BookAnalysis } from '@/types'
 import { ChapterRhythmHeatmap } from '@/components/ai/ChapterRhythmHeatmap'
 import { ANALYSIS_DIMENSION_LABELS } from '@/lib/analysis/config'
 import { buildChapterGraph, type ChapterGraph } from '@/lib/analysis/chapter-graph'
+import { isRefusalContent } from '@/lib/analysis/book-analysis-fallback'
 
 interface BookAnalysisPanelProps {
   projectId: number
@@ -183,6 +184,9 @@ export function BookAnalysisPanel({ projectId, refreshSeed = 0, navigationReques
       const value = item.analysisData as Record<string, unknown>
       return Object.keys(value || {}).length === 0
     })
+    .map(item => item.dimension as AnalysisDimension)
+  const refusalModules = analyses
+    .filter(item => isRefusalContent(item.rawContent))
     .map(item => item.dimension as AnalysisDimension)
 
   const topCharacters = Array.isArray(characterRelation.characters)
@@ -365,6 +369,15 @@ export function BookAnalysisPanel({ projectId, refreshSeed = 0, navigationReques
         <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300">
           <AlertCircle className="h-4 w-4" />
           {error}
+        </div>
+      )}
+
+      {refusalModules.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-200">
+          <div className="font-medium">AI 原始分析被拒绝，已自动回填基础结果</div>
+          <div className="mt-1">
+            受影响模块：{refusalModules.map(item => ANALYSIS_DIMENSION_LABELS[item]).join('、')}。建议更换分析模型或降低输入内容的敏感度后重新执行拆书。
+          </div>
         </div>
       )}
 

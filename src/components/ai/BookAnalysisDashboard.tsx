@@ -17,7 +17,9 @@ import {
   Users,
 } from 'lucide-react'
 import { AnalysisDimension, BookAnalysis } from '@/types'
+import { ANALYSIS_DIMENSION_LABELS } from '@/lib/analysis/config'
 import { DraggableTimeline, type TimelineEvent } from './DraggableTimeline'
+import { isRefusalContent } from '@/lib/analysis/book-analysis-fallback'
 
 interface BookAnalysisDashboardProps {
   projectId: number
@@ -134,6 +136,9 @@ export function BookAnalysisDashboard({
   const worldSetting = getAnalysisData(AnalysisDimension.WORLD_SETTING)
   const characterRelation = getAnalysisData(AnalysisDimension.CHARACTER_RELATION)
   const characterGrowth = getAnalysisData(AnalysisDimension.CHARACTER_ARC)
+  const refusalModules = analyses
+    .filter(item => isRefusalContent(item.rawContent))
+    .map(item => item.dimension as AnalysisDimension)
 
   const timelineEvents = useMemo<TimelineEvent[]>(() => {
     const events: TimelineEvent[] = []
@@ -246,6 +251,15 @@ export function BookAnalysisDashboard({
         <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300">
           <AlertCircle className="h-4 w-4" />
           {error}
+        </div>
+      )}
+
+      {refusalModules.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-200">
+          <div className="font-medium">部分维度的 AI 原始返回被拒绝，已使用基础回填数据展示</div>
+          <div className="mt-1">
+            受影响模块：{refusalModules.map(item => ANALYSIS_DIMENSION_LABELS[item]).join('、')}。
+          </div>
         </div>
       )}
 

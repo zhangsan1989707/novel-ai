@@ -41,22 +41,13 @@ export async function POST(
     const maintenanceSummary = await getProjectMaintenanceSummary(projectId)
     const bootstrapRunning = maintenanceSummary.bootstrapQueued || maintenanceSummary.bootstrapRunning
     const ragRunning = maintenanceSummary.ragQueued || maintenanceSummary.ragRunning
-    const initializationIncomplete =
-      !project.aiModelId ||
-      !project.bookBlueprint ||
-      project.arcPlans.length === 0 ||
-      !project.storyState ||
-      !project.worldState
-
-    if (bootstrapRunning || ragRunning || initializationIncomplete) {
+    if (bootstrapRunning || ragRunning) {
       return NextResponse.json(
         {
           success: false,
           error: {
             code: 'INITIALIZING',
-            message: bootstrapRunning || ragRunning
-              ? 'AI 正在初始化创作系统或重建 RAG 索引，请完成后再开始生成'
-              : '创作系统尚未初始化完成，请稍后再开始生成',
+            message: 'AI 正在初始化创作系统或重建 RAG 索引，请完成后再开始生成',
           },
         },
         { status: 409 }

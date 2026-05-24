@@ -650,11 +650,17 @@ async function markCompletedArcIfNeeded(projectId: number) {
   }
 }
 
-export async function runProductionPipeline(jobId: number): Promise<void> {
+export async function runProductionPipeline(
+  jobId: number,
+  options?: {
+    speedMode?: 'fast' | 'balanced' | 'quality'
+  }
+): Promise<void> {
   const job = await prisma.generationJob.findUnique({ where: { id: jobId } })
   if (!job) return
 
   const projectId = job.projectId
+  const speedMode = options?.speedMode || 'quality'
   const project = await prisma.novelProject.findUnique({
     where: { id: projectId },
     select: { chapterWordCount: true },
@@ -837,7 +843,9 @@ export async function runProductionPipeline(jobId: number): Promise<void> {
 
       await updateJobStep(jobId, 'write' as PipelineStep, 4, outlines.length, completed + 1)
       setCurrentChapter(outline.chapterNumber, outline.title)
-      const result = await runChapterGenerationPipeline(projectId, outline.chapterNumber, handlePipelineEvent)
+      const result = await runChapterGenerationPipeline(projectId, outline.chapterNumber, handlePipelineEvent, {
+        speedMode,
+      })
       await persistChain
       if (!result.success) {
         throw new Error(result.error || `第 ${outline.chapterNumber} 章生成失败`)
