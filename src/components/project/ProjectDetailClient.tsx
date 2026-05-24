@@ -84,6 +84,21 @@ interface Project {
     healthLevel: 'critical' | 'warning' | 'healthy'
     primaryAction: string
     recommendations: string[]
+    blockers: string[]
+    statusHeadline: string
+    nextSteps: Array<{
+      title: string
+      detail: string
+      urgency: 'now' | 'soon' | 'watch'
+      blocking: boolean
+      relatedIssueCodes: string[]
+    }>
+    riskHighlights: Array<{
+      code: string
+      title: string
+      detail: string
+      severity: 'error' | 'warning' | 'info'
+    }>
     hasModel: boolean
     hasBlueprint: boolean
     hasArcPlans: boolean
@@ -237,6 +252,16 @@ function formatDuration(durationMs?: number) {
   const seconds = durationMs / 1000
   if (seconds < 60) return `${seconds.toFixed(1)}s`
   return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`
+}
+
+type NextStepState = {
+  badgeVariant: 'primary' | 'warning' | 'success' | 'secondary'
+  badgeLabel: string
+  title: string
+  description: string
+  ctaLabel: string
+  ctaAction: 'start' | 'edit' | 'settings' | 'retry' | 'wait' | 'resume' | 'tab-settings'
+  disabled?: boolean
 }
 
 type DashboardTab = 'dashboard' | 'settings' | 'analysis' | 'characters'
@@ -639,6 +664,124 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
     bookSummaryReady: project.preflight.bookSummaryCount > 0,
     primaryAction: project.preflight.primaryAction,
   } : undefined
+  const nextStepState: NextStepState | null = project.preflight ? (() => {
+    if (!project.preflight.hasModel) {
+      return {
+        badgeVariant: 'warning',
+        badgeLabel: '阻断项',
+        title: '先绑定可用模型',
+        description: '当前项目还没有真正绑定可用的 AI 模型。先完成绑定，后续蓝图、目录和正文生产才会稳定接管。',
+        ctaLabel: '前往模型设置',
+        ctaAction: 'settings',
+      }
+    }
+
+    if (maintenanceFailed) {
+      return {
+        badgeVariant: 'warning',
+        badgeLabel: '需修复',
+        title: '初始化任务失败，需要重试',
+        description: project.maintenanceSummary?.bootstrapError || project.maintenanceSummary?.ragError || '后台初始化未完成，先修复初始化，再继续 AI 生产。',
+        ctaLabel: '重试初始化',
+        ctaAction: 'retry',
+      }
+    }
+
+    if (maintenanceActive) {
+      return {
+        badgeVariant: 'secondary',
+        badgeLabel: '等待中',
+        title: 'AI 正在接管底层创作配置',
+        description: '系统正在自动补齐 Blueprint、阶段规划、故事状态和 RAG 索引。这里完成后，再开始整书生成。',
+        ctaLabel: '等待完成',
+        ctaAction: 'wait',
+        disabled: true,
+      }
+    }
+
+    if (pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING') {
+      return {
+        badgeVariant: 'primary',
+        badgeLabel: '进行中',
+        title: 'AI 正在推进当前批次写作',
+        description: liveChapter
+          ? `当前已进入第 ${liveChapter.chapterNumber} 章，正在执行 ${getPipelineStepLabel(liveChapter.currentPhase || liveChapter.currentAgent || 'WRITE')}。`
+          : '当前正在执行整书生成流水线，可以在下方章节区和进度区追踪状态。',
+        ctaLabel: '查看 AI 调校',
+        ctaAction: 'tab-settings',
+      }
+    }
+
+    if (pipeline?.status === 'PAUSED' || pipeline?.status === 'FAILED') {
+      return {
+        badgeVariant: 'warning',
+        badgeLabel: pipeline.status === 'PAUSED' ? '已暂停' : '已失败',
+        title: pipeline.status === 'PAUSED' ? '生产已暂停，等待恢复' : '生产中断，建议恢复运行',
+        description: pipeline.error || '可以先恢复运行；如果再次失败，再检查模型配置、预检项和最近章节状态。',
+        ctaLabel: '恢复运行',
+        ctaAction: 'resume',
+      }
+    }
+
+    if (project.chapters.length === 0) {
+      return {
+        badgeVariant: 'primary',
+        badgeLabel: '可开始',
+        title: '可以开始第一轮 AI 生产',
+        description: '前置条件已经基本齐备。下一步直接让 AI 生成蓝图、目录与首批章节，而不是继续手工配置。',
+        ctaLabel: '开始 AI 生成',
+        ctaAction: 'start',
+      }
+    }
+
+    if (project.preflight.reviewingChapters > 0) {
+      return {
+        badgeVariant: 'warning',
+        badgeLabel: '待处理',
+        title: '已有章节进入待审稿状态',
+        description: `当前有 ${project.preflight.reviewingChapters} 章处于待审稿状态。建议先回看这些章节，再继续大规模推进。`,
+        ctaLabel: '查看 AI 调校',
+        ctaAction: 'tab-settings',
+      }
+    }
+
+    return {
+      badgeVariant: 'success',
+      badgeLabel: '可继续',
+      title: '主链路畅通，可以继续生产',
+      description: project.preflight.statusHeadline || project.preflight.primaryAction || '当前没有明显阻断，继续推进新章节和摘要回写即可。',
+      ctaLabel: '继续 AI 生成',
+      ctaAction: 'start',
+    }
+  })() : null
+
+  const handleNextStep = () => {
+    if (!nextStepState || nextStepState.disabled) return
+
+    switch (nextStepState.ctaAction) {
+      case 'start':
+        void handleStartPipeline()
+        break
+      case 'edit':
+        setShowEditModal(true)
+        break
+      case 'settings':
+        router.push('/settings')
+        break
+      case 'retry':
+        void handleRetryMaintenance()
+        break
+      case 'resume':
+        void handleResumePipeline()
+        break
+      case 'tab-settings':
+        setActiveTab('settings')
+        break
+      case 'wait':
+      default:
+        break
+    }
+  }
 
   return (
     <>
@@ -793,7 +936,7 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
                 className="gap-1.5"
               >
                 <Wrench className="h-4 w-4" />
-                工具箱
+                辅助工具
               </Button>
               <Button
                 variant="outline"
@@ -905,6 +1048,45 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
         <div className="space-y-6">
           {activeTab === 'dashboard' && (
             <>
+              {nextStepState && (
+                <Card className="border-blue-200 bg-blue-50/70 dark:border-blue-900/40 dark:bg-blue-950/20">
+                  <CardContent className="p-5">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Badge variant={nextStepState.badgeVariant}>{nextStepState.badgeLabel}</Badge>
+                          <span className="text-xs text-blue-700 dark:text-blue-300">导演总控建议的下一步</span>
+                        </div>
+                        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{nextStepState.title}</h2>
+                        <p className="max-w-3xl text-sm leading-6 text-gray-700 dark:text-gray-300">
+                          {nextStepState.description}
+                        </p>
+                      </div>
+                      <div className="flex flex-col gap-2 sm:min-w-48">
+                        <Button
+                          variant="primary"
+                          onClick={handleNextStep}
+                          disabled={nextStepState.disabled || pipelineStarting || maintenanceRetrying}
+                          loading={nextStepState.ctaAction === 'start' ? pipelineStarting : nextStepState.ctaAction === 'retry' ? maintenanceRetrying : false}
+                          className="gap-1.5"
+                        >
+                          <Rocket className="h-4 w-4" />
+                          {nextStepState.ctaLabel}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => setActiveTab('settings')}
+                          className="gap-1.5"
+                        >
+                          <Target className="h-4 w-4" />
+                          查看 AI 调校
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               {/* Chapter Preview List */}
               <Card>
                 <CardHeader>
@@ -1115,9 +1297,31 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
                         <span className="text-xs opacity-80">/100</span>
                       </div>
                       <div className="mt-2 text-xs leading-5 opacity-90">
-                        {project.preflight.primaryAction}
+                        {project.preflight.statusHeadline}
                       </div>
                     </div>
+
+                    {nextStepState && (
+                      <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-3 dark:border-blue-900/40 dark:bg-blue-950/20">
+                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                          <div>
+                            <div className="text-sm font-medium text-blue-800 dark:text-blue-200">现在就做这一步</div>
+                            <div className="mt-1 text-xs leading-5 text-blue-700 dark:text-blue-300">
+                              {nextStepState.title}。{nextStepState.description}
+                            </div>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="primary"
+                            onClick={handleNextStep}
+                            disabled={nextStepState.disabled || pipelineStarting || maintenanceRetrying}
+                            loading={nextStepState.ctaAction === 'start' ? pipelineStarting : nextStepState.ctaAction === 'retry' ? maintenanceRetrying : false}
+                          >
+                            {nextStepState.ctaLabel}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
 
                     {!project.preflight.hasModel && (
                       <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">
@@ -1321,14 +1525,64 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
                       </div>
                     )}
 
+                    {project.preflight.blockers.length > 0 && (
+                      <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300">
+                        <div className="mb-1 font-medium">当前阻断项</div>
+                        <ul className="space-y-1">
+                          {project.preflight.blockers.slice(0, 3).map((item, index) => (
+                            <li key={index}>- {item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
                     {project.preflight.recommendations.length > 0 && (
                       <div className="rounded-md border border-gray-200 px-3 py-2 text-xs text-gray-600 dark:border-gray-800 dark:text-gray-400">
-                        <div className="mb-1 font-medium text-gray-900 dark:text-gray-100">推荐动作</div>
+                        <div className="mb-1 font-medium text-gray-900 dark:text-gray-100">AI 建议的后续动作</div>
                         <ul className="space-y-1">
                           {project.preflight.recommendations.slice(0, 3).map((item, index) => (
                             <li key={index}>- {item}</li>
                           ))}
                         </ul>
+                      </div>
+                    )}
+
+                    {project.preflight.nextSteps.length > 0 && (
+                      <div className="grid gap-2 md:grid-cols-3">
+                        {project.preflight.nextSteps.slice(0, 3).map((step, index) => (
+                          <div
+                            key={`${step.title}-${index}`}
+                            className="rounded-md border border-gray-200 px-3 py-3 text-xs dark:border-gray-800"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="font-medium text-gray-900 dark:text-gray-100">{step.title}</div>
+                              <Badge variant={step.urgency === 'now' ? 'warning' : step.urgency === 'soon' ? 'primary' : 'secondary'}>
+                                {step.urgency === 'now' ? '现在' : step.urgency === 'soon' ? '接下来' : '观察'}
+                              </Badge>
+                            </div>
+                            <div className="mt-2 leading-5 text-gray-600 dark:text-gray-400">{step.detail}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {project.preflight.riskHighlights.length > 0 && (
+                      <div className="grid gap-2 md:grid-cols-2">
+                        {project.preflight.riskHighlights.slice(0, 4).map((risk) => (
+                          <div
+                            key={risk.code}
+                            className={`rounded-md border px-3 py-3 text-xs ${
+                              risk.severity === 'error'
+                                ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300'
+                                : risk.severity === 'warning'
+                                  ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300'
+                                  : 'border-gray-200 bg-gray-50 text-gray-600 dark:border-gray-800 dark:bg-gray-900/20 dark:text-gray-300'
+                            }`}
+                          >
+                            <div className="font-medium">{risk.title}</div>
+                            <div className="mt-1 leading-5 opacity-90">{risk.detail}</div>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </CardContent>
