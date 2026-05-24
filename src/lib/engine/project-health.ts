@@ -12,6 +12,21 @@ export interface HealthIssue {
   message: string
 }
 
+export interface HealthActionItem {
+  title: string
+  detail: string
+  urgency: 'now' | 'soon' | 'watch'
+  blocking: boolean
+  relatedIssueCodes: string[]
+}
+
+export interface HealthRiskItem {
+  code: string
+  title: string
+  detail: string
+  severity: HealthSeverity
+}
+
 export interface ProjectHealthInput {
   aiModelConfig: unknown
   bookBlueprint: unknown
@@ -61,6 +76,10 @@ export interface ProjectHealthReport {
   healthLevel: HealthLevel
   primaryAction: string
   recommendations: string[]
+  blockers: string[]
+  statusHeadline: string
+  nextSteps: HealthActionItem[]
+  riskHighlights: HealthRiskItem[]
   hasModel: boolean
   hasBlueprint: boolean
   hasArcPlans: boolean
@@ -107,19 +126,61 @@ function normalizeScore(score: number): number {
   return Math.max(0, Math.min(100, Math.round(score)))
 }
 
-type HealthSummary = Omit<ProjectHealthReport, 'primaryAction' | 'recommendations' | 'healthScore' | 'healthLevel' | 'ready' | 'issues'>
+type HealthSummary = Omit<
+  ProjectHealthReport,
+  'primaryAction' | 'recommendations' | 'healthScore' | 'healthLevel' | 'ready' | 'issues' | 'blockers' | 'statusHeadline' | 'nextSteps' | 'riskHighlights'
+>
+
+function formatSetupGapList(report: Pick<HealthSummary, 'hasBlueprint' | 'hasArcPlans' | 'hasStoryState'>): string {
+  const gaps: string[] = []
+  if (!report.hasBlueprint) gaps.push('蓝图')
+  if (!report.hasArcPlans) gaps.push('阶段规划')
+  if (!report.hasStoryState) gaps.push('故事状态')
+  return gaps.join('、')
+}
+
+function formatCooldownSeconds(milliseconds: number): string {
+  const seconds = Math.max(1, Math.ceil(milliseconds / 1000))
+  return `${seconds} 秒`
+}
+
+function buildStatusHeadline(report: HealthSummary): string {
+  if (!report.hasModel) return '现在不能开写：项目还没绑定可用 AI 模型。'
+  if (!report.hasBlueprint || !report.hasArcPlans || !report.hasStoryState) {
+    const gapList = formatSetupGapList(report)
+    return `现在不建议开写：${gapList} 还没准备好。`
+  }
+  if (report.emptyCompletedChapters > 0) return `现在不建议继续推新章：有 ${report.emptyCompletedChapters} 章已标记完成但未达最低字数。`
+  if (report.recentCommitFailures > 0) return `现在不建议继续推新章：最近 ${report.recentCommitFailures} 条章节提交回写失败。`
+  if (report.overduePlotlineCount > 0) return `当前可继续写，但有 ${report.overduePlotlineCount} 条伏笔已超期，主线风险正在累积。`
+  if (report.ragEmbeddingFallbackActive) return '当前可以继续写，但语义检索处于降级模式，引用和回顾质量会受影响。'
+  if (report.ragRebuildInFlight) return '当前可以继续写，但 RAG 索引正在后台重建，检索结果会短时波动。'
+  if (report.ragRebuildCooldownRemainingMs > 0 && report.ragDocumentCount === 0) {
+    return `当前可以继续写，但 RAG 索引还在冷却，约 ${formatCooldownSeconds(report.ragRebuildCooldownRemainingMs)} 后恢复自动重建。`
+  }
+  if (report.chapterSummaryCoverage < 80 && report.completedChapters >= 5) return '当前可以继续写，但摘要覆盖不足，后续连贯性会越来越依赖即时上下文。'
+  if (report.strandScore < 45) return '当前可以继续写，但追读稳定度偏低，后续章节更容易出现主线松散。'
+  return '项目健康正常，可继续推进新章节。'
+}
 
 function buildPrimaryAction(report: HealthSummary): string {
-  if (!report.hasModel) return '先绑定 AI 模型'
-  if (!report.hasBlueprint || !report.hasArcPlans || !report.hasStoryState) return '系统正在自动补齐创作配置'
-  if (report.ragRebuildInFlight) return 'RAG 索引正在后台重建'
-  if (report.emptyCompletedChapters > 0) return '回看短章并重算投影'
-  if (report.recentCommitFailures > 0) return '重放失败的章节提交'
-  if (report.overduePlotlineCount > 0) return '回收过期伏笔'
-  if (report.chapterSummaryCoverage < 80 && report.completedChapters >= 5) return '补齐章节摘要'
-  if (report.ragDocumentCount === 0 && (report.completedChapters > 0 || report.bookSummaryCount > 0)) return report.ragRebuildCooldownRemainingMs > 0 ? 'RAG 索引冷却中，稍后自动重建' : '系统正在自动重建 RAG 索引'
-  if (report.wordCountComplianceRate < 80 && report.completedChapters > 0) return '提高章节字数门槛'
-  if (report.strandScore < 45 && report.hasBlueprint && report.hasArcPlans) return '补强伏笔与摘要链路'
+  if (!report.hasModel) return '先绑定 AI 模型，否则主生成链路不会放行'
+  if (!report.hasBlueprint || !report.hasArcPlans || !report.hasStoryState) {
+    const gapList = formatSetupGapList(report)
+    return `先补齐${gapList}，再进入正式开写`
+  }
+  if (report.emptyCompletedChapters > 0) return `先修复 ${report.emptyCompletedChapters} 章低字数完成章，再继续生产`
+  if (report.recentCommitFailures > 0) return `先重放 ${report.recentCommitFailures} 条失败章节提交`
+  if (report.overduePlotlineCount > 0) return `优先回收 ${report.overduePlotlineCount} 条过期伏笔`
+  if (report.ragRebuildInFlight) return '等待 RAG 后台重建完成后再做重度检索依赖操作'
+  if (report.chapterSummaryCoverage < 80 && report.completedChapters >= 5) return `补齐章节摘要，当前覆盖率仅 ${report.chapterSummaryCoverage}%`
+  if (report.ragDocumentCount === 0 && (report.completedChapters > 0 || report.bookSummaryCount > 0)) {
+    return report.ragRebuildCooldownRemainingMs > 0
+      ? `等待 RAG 冷却结束（约 ${formatCooldownSeconds(report.ragRebuildCooldownRemainingMs)}）`
+      : '触发并等待 RAG 索引重建完成'
+  }
+  if (report.wordCountComplianceRate < 80 && report.completedChapters > 0) return `提高最低章节字数门槛，当前合规率仅 ${report.wordCountComplianceRate}%`
+  if (report.strandScore < 45 && report.hasBlueprint && report.hasArcPlans) return `补强伏笔与摘要链路，当前追读稳定度仅 ${report.strandScore}/100`
   return '继续生产'
 }
 
@@ -127,37 +188,42 @@ function buildRecommendations(report: HealthSummary): string[] {
   const recommendations: string[] = []
 
   if (!report.hasModel) {
-    recommendations.push('先绑定 AI 模型，否则主生成流程无法稳定运行')
+    recommendations.push('先绑定 AI 模型；未绑定前，项目页可以看但正式生成链路不应放行')
   }
   if (!report.hasBlueprint || !report.hasArcPlans || !report.hasStoryState) {
-    recommendations.push('系统正在自动补齐创作配置，蓝图、阶段规划和故事状态完成后即可开始生成')
+    const gapList = formatSetupGapList(report)
+    recommendations.push(`先补齐${gapList}；这些基础上下文缺失时，AI 会退化成短上下文拼接，长线稳定性不够`)
   }
   if (report.emptyCompletedChapters > 0) {
-    recommendations.push('修复已完成但字数过低的章节，避免质量门失真')
+    recommendations.push(`修复 ${report.emptyCompletedChapters} 章已完成但字数过低的章节，避免质量门把短章误判为已收敛`)
   }
   if (report.recentCommitFailures > 0) {
-    recommendations.push('重放失败的章节提交，保持回写链路一致')
+    recommendations.push(`重放最近 ${report.recentCommitFailures} 条失败提交，先把故事状态和摘要投影链路修正回来`)
   }
   if (report.overduePlotlineCount > 0) {
-    recommendations.push('回收已超时的伏笔，避免主线发散')
+    recommendations.push(`回收 ${report.overduePlotlineCount} 条已超时伏笔，避免主线继续发散`)
   }
   if (report.completedChapters >= 5 && report.chapterSummaryCoverage < 80) {
-    recommendations.push('章节摘要覆盖不足，建议补摘要或重跑摘要投影')
+    recommendations.push(`章节摘要覆盖率仅 ${report.chapterSummaryCoverage}% ，建议先补摘要或重跑摘要投影`)
   }
   if (report.wordCountComplianceRate < 80 && report.completedChapters > 0) {
-    recommendations.push('完成章字数合规率偏低，建议提高最低字数门槛')
+    recommendations.push(`完成章字数合规率仅 ${report.wordCountComplianceRate}% ，建议提高最低字数门槛并回查短章`)
   }
   if (report.strandScore < 45 && report.hasBlueprint && report.hasArcPlans) {
-    recommendations.push('追读稳定度偏低，建议补强伏笔、角色状态和故事摘要')
+    recommendations.push(`追读稳定度仅 ${report.strandScore}/100，建议补强伏笔、角色状态和故事摘要链路`)
   }
   if (report.ragDocumentCount === 0 && (report.completedChapters > 0 || report.chapterSummaryCount > 0 || report.volumeSummaryCount > 0 || report.bookSummaryCount > 0)) {
-    recommendations.push('RAG 索引正在自动重建，完成后会恢复语义检索')
+    recommendations.push(
+      report.ragRebuildCooldownRemainingMs > 0
+        ? `RAG 索引为空且仍在冷却，约 ${formatCooldownSeconds(report.ragRebuildCooldownRemainingMs)} 后恢复自动重建`
+        : 'RAG 索引为空，建议等待自动重建完成后再依赖语义检索'
+    )
   }
   if (report.ragRebuildInFlight) {
-    recommendations.push('RAG 索引正在后台重建，完成后会自动恢复语义检索')
+    recommendations.push('RAG 索引正在后台重建；这段时间检索结果可能缺章或引用不全')
   }
   if (report.ragEmbeddingFallbackActive) {
-    recommendations.push('RAG embedding 当前使用本地回退模式，建议补齐独立 embedding 配置')
+    recommendations.push('RAG embedding 当前使用本地回退模式，建议补齐独立 embedding 配置以恢复语义精度')
   }
 
   if (recommendations.length === 0) {
@@ -165,6 +231,179 @@ function buildRecommendations(report: HealthSummary): string[] {
   }
 
   return recommendations.slice(0, 5)
+}
+
+function buildBlockers(issues: HealthIssue[]): string[] {
+  return issues
+    .filter(issue => issue.severity === 'error')
+    .slice(0, 4)
+    .map(issue => issue.message)
+}
+
+function buildNextSteps(report: HealthSummary, issues: HealthIssue[]): HealthActionItem[] {
+  const steps: HealthActionItem[] = []
+  const pushStep = (step: HealthActionItem) => {
+    if (steps.some(existing => existing.title === step.title)) return
+    steps.push(step)
+  }
+
+  if (!report.hasModel) {
+    pushStep({
+      title: '绑定 AI 模型',
+      detail: '先给项目绑定可用模型；没有模型时，正式生成链路不应该继续执行。',
+      urgency: 'now',
+      blocking: true,
+      relatedIssueCodes: ['MODEL_NOT_BOUND'],
+    })
+  }
+
+  if (!report.hasBlueprint || !report.hasArcPlans || !report.hasStoryState) {
+    const gapList = formatSetupGapList(report)
+    pushStep({
+      title: `补齐${gapList}`,
+      detail: '先把创作骨架补齐，再开写正文；否则后续章节会更依赖局部上下文，长线稳定性不足。',
+      urgency: 'now',
+      blocking: true,
+      relatedIssueCodes: ['BLUEPRINT_MISSING', 'ARC_PLAN_MISSING', 'STORY_STATE_MISSING'],
+    })
+  }
+
+  if (report.emptyCompletedChapters > 0) {
+    pushStep({
+      title: '修复低字数完成章',
+      detail: `回看并修复 ${report.emptyCompletedChapters} 章已标记完成但未达最低字数的章节，再继续推进新章。`,
+      urgency: 'now',
+      blocking: true,
+      relatedIssueCodes: ['EMPTY_COMPLETED_CHAPTERS'],
+    })
+  }
+
+  if (report.recentCommitFailures > 0) {
+    pushStep({
+      title: '重放失败提交',
+      detail: `先重放最近 ${report.recentCommitFailures} 条失败提交，确保故事状态、摘要和投影链路重新一致。`,
+      urgency: 'now',
+      blocking: true,
+      relatedIssueCodes: ['COMMIT_PROJECTION_FAILURES'],
+    })
+  }
+
+  if (report.overduePlotlineCount > 0) {
+    pushStep({
+      title: '回收过期伏笔',
+      detail: `优先处理 ${report.overduePlotlineCount} 条超期未回收伏笔，降低主线继续发散的风险。`,
+      urgency: 'soon',
+      blocking: false,
+      relatedIssueCodes: ['OVERDUE_PLOTLINES'],
+    })
+  }
+
+  if (report.completedChapters >= 5 && report.chapterSummaryCoverage < 80) {
+    pushStep({
+      title: '补齐章节摘要',
+      detail: `当前摘要覆盖率 ${report.chapterSummaryCoverage}% ，建议补摘要或重跑摘要投影，避免长线记忆继续变薄。`,
+      urgency: 'soon',
+      blocking: false,
+      relatedIssueCodes: ['CHAPTER_SUMMARY_COVERAGE_LOW'],
+    })
+  }
+
+  if (report.ragDocumentCount === 0 && (report.completedChapters > 0 || report.chapterSummaryCount > 0 || report.volumeSummaryCount > 0 || report.bookSummaryCount > 0)) {
+    pushStep({
+      title: report.ragRebuildCooldownRemainingMs > 0 ? '等待 RAG 冷却结束' : '等待 RAG 重建完成',
+      detail: report.ragRebuildCooldownRemainingMs > 0
+        ? `当前索引为空且仍在冷却，约 ${formatCooldownSeconds(report.ragRebuildCooldownRemainingMs)} 后会再次自动重建。`
+        : '当前索引为空，建议等自动重建完成后再依赖语义检索和引用回顾。',
+      urgency: report.ragRebuildCooldownRemainingMs > 0 ? 'watch' : 'soon',
+      blocking: false,
+      relatedIssueCodes: ['RAG_INDEX_MISSING', 'RAG_REBUILD_COOLDOWN'],
+    })
+  }
+
+  if (report.ragEmbeddingFallbackActive) {
+    pushStep({
+      title: '恢复正式 embedding 配置',
+      detail: '当前使用本地回退向量，检索质量会下降；补齐独立 embedding 配置后再做强依赖检索的生成。',
+      urgency: 'soon',
+      blocking: false,
+      relatedIssueCodes: ['RAG_EMBEDDING_FALLBACK'],
+    })
+  }
+
+  if (report.wordCountComplianceRate < 80 && report.completedChapters > 0) {
+    pushStep({
+      title: '提高章节字数合规率',
+      detail: `当前合规率仅 ${report.wordCountComplianceRate}% ，建议上调最低字数门槛并回查短章。`,
+      urgency: 'soon',
+      blocking: false,
+      relatedIssueCodes: ['WORD_COUNT_COMPLIANCE_LOW'],
+    })
+  }
+
+  if (report.strandScore < 45 && report.hasBlueprint && report.hasArcPlans) {
+    pushStep({
+      title: '补强追读链路',
+      detail: `当前追读稳定度 ${report.strandScore}/100，建议优先补伏笔、角色状态和故事摘要链路。`,
+      urgency: 'soon',
+      blocking: false,
+      relatedIssueCodes: ['STRAND_SCORE_LOW'],
+    })
+  }
+
+  if (steps.length === 0) {
+    pushStep({
+      title: '继续生产',
+      detail: '当前没有阻塞项，可以直接进入下一章生成或审稿。',
+      urgency: 'watch',
+      blocking: false,
+      relatedIssueCodes: [],
+    })
+  }
+
+  for (const issue of issues) {
+    if (steps.length >= 5) break
+    if (steps.some(step => step.relatedIssueCodes.includes(issue.code))) continue
+    pushStep({
+      title: issue.severity === 'error' ? '先处理阻塞项' : '关注健康提醒',
+      detail: issue.message,
+      urgency: issue.severity === 'error' ? 'now' : issue.severity === 'warning' ? 'soon' : 'watch',
+      blocking: issue.severity === 'error',
+      relatedIssueCodes: [issue.code],
+    })
+  }
+
+  return steps.slice(0, 5)
+}
+
+function buildRiskHighlights(report: HealthSummary, issues: HealthIssue[]): HealthRiskItem[] {
+  const risks: HealthRiskItem[] = issues
+    .filter(issue => issue.severity !== 'info')
+    .map(issue => ({
+      code: issue.code,
+      title:
+        issue.code === 'MODEL_NOT_BOUND' ? '生成链路不可用' :
+          issue.code === 'EMPTY_COMPLETED_CHAPTERS' ? '质量门失真' :
+            issue.code === 'COMMIT_PROJECTION_FAILURES' ? '状态回写断裂' :
+              issue.code === 'OVERDUE_PLOTLINES' ? '主线发散风险' :
+                issue.code === 'RAG_EMBEDDING_FALLBACK' ? '检索质量下降' :
+                  issue.code === 'CHAPTER_SUMMARY_COVERAGE_LOW' ? '长线记忆变薄' :
+                    issue.code === 'WORD_COUNT_COMPLIANCE_LOW' ? '章节收敛不足' :
+                      issue.code === 'STRAND_SCORE_LOW' ? '追读稳定度偏低' :
+                        '项目健康风险',
+      detail: issue.message,
+      severity: issue.severity,
+    }))
+
+  if (risks.length === 0 && report.ragRebuildInFlight) {
+    risks.push({
+      code: 'RAG_REBUILD_RUNNING',
+      title: '检索结果短时波动',
+      detail: 'RAG 索引正在后台重建，短时间内引用和召回结果可能不稳定。',
+      severity: 'info',
+    })
+  }
+
+  return risks.slice(0, 4)
 }
 
 export function buildProjectHealthReport(input: ProjectHealthInput): ProjectHealthReport {
@@ -334,7 +573,6 @@ export function buildProjectHealthReport(input: ProjectHealthInput): ProjectHeal
   const healthLevel = getHealthLevel(healthScore, hasCriticalIssue)
 
   const summary = {
-    ready,
     hasModel,
     hasBlueprint,
     hasArcPlans,
@@ -369,15 +607,24 @@ export function buildProjectHealthReport(input: ProjectHealthInput): ProjectHeal
     finalBossCount,
   }
 
+  const blockers = buildBlockers(issues)
+  const statusHeadline = buildStatusHeadline(summary)
   const primaryAction = buildPrimaryAction(summary)
   const recommendations = buildRecommendations(summary)
+  const nextSteps = buildNextSteps(summary, issues)
+  const riskHighlights = buildRiskHighlights(summary, issues)
 
   return {
     ...summary,
+    ready,
     healthScore,
     healthLevel,
+    blockers,
+    statusHeadline,
     primaryAction,
     recommendations,
+    nextSteps,
+    riskHighlights,
     issues,
   }
 }
