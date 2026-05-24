@@ -2,6 +2,7 @@
  * RAG (Retrieval-Augmented Generation) 向量数据库系统
  * 为超长篇小说提供语义检索增强的上下文管理
  */
+import { createHash } from 'node:crypto'
 import { CharacterRole, PlotlineStatus, Prisma } from '@prisma/client'
 import { AIService } from '@/lib/ai/service'
 import { logger } from '@/lib/logger'
@@ -59,12 +60,6 @@ interface RagDocumentRow {
   metadata: Prisma.JsonValue
   embedding: Prisma.JsonValue | string | null
   score?: number | string | null
-}
-
-const DEFAULT_CONFIG: VectorConfig = {
-  provider: 'local',
-  dimension: 1536,
-  metric: 'cosine',
 }
 
 const VECTOR_DIMENSION = 256
@@ -278,23 +273,6 @@ function keywordOverlapScore(query: string, content: string): number {
   return hits / Math.max(1, queryTokens.length)
 }
 
-function matchesFilter(metadata: ChunkMetadata, filter?: Partial<ChunkMetadata>): boolean {
-  if (!filter) return true
-  if (filter.projectId !== undefined && metadata.projectId !== filter.projectId) return false
-  if (filter.chapterNo !== undefined && metadata.chapterNo !== filter.chapterNo) return false
-  if (filter.type !== undefined && metadata.type !== filter.type) return false
-  if (filter.importance !== undefined && metadata.importance < filter.importance) return false
-  if (filter.characters?.length) {
-    const current = metadata.characters || []
-    if (!filter.characters.some(char => current.includes(char))) return false
-  }
-  if (filter.tags?.length) {
-    const current = metadata.tags || []
-    if (!filter.tags.some(tag => current.includes(tag))) return false
-  }
-  return true
-}
-
 function deriveChunkType(content: string): ChunkMetadata['type'] {
   const text = content.slice(0, 500)
   const dialogueSignals = (text.match(/[「」『』“”"']/g) || []).length
@@ -361,8 +339,7 @@ function serializeEmbeddingVector(embedding: number[]): string {
 }
 
 function getEmbeddingCacheKey(projectId: number, text: string): string {
-  const crypto = require('crypto')
-  const hash = crypto.createHash('sha256').update(text).digest('hex')
+  const hash = createHash('sha256').update(text).digest('hex')
   return `${projectId}:${hash}`
 }
 

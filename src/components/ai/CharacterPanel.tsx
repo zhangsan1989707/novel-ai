@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, Badge, Button, toast } from '@/components/ui'
 import { Users, Trash2, Loader2 } from 'lucide-react'
 
@@ -41,23 +41,37 @@ export function CharacterPanel({ projectId }: CharacterPanelProps) {
   const [characters, setCharacters] = useState<CharacterProfile[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    fetchCharacters()
+  const fetchCharacters = useCallback(async (): Promise<CharacterProfile[]> => {
+    const res = await fetch(`/api/novel/engine/${projectId}/characters`)
+    const data = await res.json()
+    return data.success ? (data.data || []) : []
   }, [projectId])
 
-  const fetchCharacters = async () => {
-    try {
-      const res = await fetch(`/api/novel/engine/${projectId}/characters`)
-      const data = await res.json()
-      if (data.success) {
-        setCharacters(data.data || [])
+  useEffect(() => {
+    let cancelled = false
+
+    const loadCharacters = async () => {
+      setLoading(true)
+      try {
+        const nextCharacters = await fetchCharacters()
+        if (!cancelled) {
+          setCharacters(nextCharacters)
+        }
+      } catch {
+        console.error('获取角色列表失败')
+      } finally {
+        if (!cancelled) {
+          setLoading(false)
+        }
       }
-    } catch {
-      console.error('获取角色列表失败')
-    } finally {
-      setLoading(false)
     }
-  }
+
+    void loadCharacters()
+
+    return () => {
+      cancelled = true
+    }
+  }, [fetchCharacters])
 
   const handleDelete = async (characterId: number) => {
     try {
@@ -66,13 +80,17 @@ export function CharacterPanel({ projectId }: CharacterPanelProps) {
       })
       const data = await res.json()
       if (data.success) {
+        setLoading(true)
         toast.success('角色已删除')
-        fetchCharacters()
+        const nextCharacters = await fetchCharacters()
+        setCharacters(nextCharacters)
       } else {
         toast.error(data.error?.message || '删除失败')
       }
     } catch {
       toast.error('删除失败')
+    } finally {
+      setLoading(false)
     }
   }
 

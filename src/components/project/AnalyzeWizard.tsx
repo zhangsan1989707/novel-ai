@@ -64,14 +64,7 @@ export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
     setIsDragging(false)
   }, [])
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragging(false)
-    const file = e.dataTransfer.files[0]
-    if (file) handleFileSelect(file)
-  }, [])
-
-  const handleFileSelect = useCallback((file: File) => {
+  const handleFileSelect = (file: File) => {
     const validTypes = ['text/plain', 'application/epub+zip']
     const validExtensions = ['.txt', '.epub']
     const extension = file.name.toLowerCase().slice(file.name.lastIndexOf('.'))
@@ -88,7 +81,14 @@ export function AnalyzeWizard({ onCancel }: { onCancel?: () => void }) {
 
     setSelectedFile(file)
     setError('')
-  }, [])
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+    const file = e.dataTransfer.files[0]
+    if (file) handleFileSelect(file)
+  }
 
   const handleStartUpload = async () => {
     if (!selectedFile) return
