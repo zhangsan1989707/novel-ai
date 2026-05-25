@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input, Textarea, toast } from '@/components/ui'
 
 type BlueprintRecord = {
@@ -43,6 +43,32 @@ export function WorkflowBlueprintCard({ projectId, blueprint, confirmed, onUpdat
   })
   const [saving, setSaving] = useState(false)
   const [confirming, setConfirming] = useState(false)
+
+  useEffect(() => {
+    setForm({
+      corePitch: blueprint?.corePitch || '',
+      worldDirection: blueprint?.worldDirection || '',
+      mainlineDirection: blueprint?.mainlineDirection || '',
+      growthDirection: blueprint?.growthDirection || '',
+      endingDirection: blueprint?.endingDirection || '',
+      platformStrategy: blueprint?.platformStrategy || '',
+      genreStrategy: blueprint?.genreStrategy || '',
+      styleStrategy: blueprint?.styleStrategy || '',
+      popularFictionProfile: blueprint?.popularFictionProfile || null,
+      constraints: blueprint?.constraints || [],
+    })
+  }, [
+    blueprint?.corePitch,
+    blueprint?.worldDirection,
+    blueprint?.mainlineDirection,
+    blueprint?.growthDirection,
+    blueprint?.endingDirection,
+    blueprint?.platformStrategy,
+    blueprint?.genreStrategy,
+    blueprint?.styleStrategy,
+    blueprint?.popularFictionProfile,
+    blueprint?.constraints,
+  ])
 
   const updateField = (key: keyof BlueprintRecord, value: string) => {
     setForm(current => ({ ...current, [key]: value }))
