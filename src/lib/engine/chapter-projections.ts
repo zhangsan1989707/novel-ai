@@ -28,6 +28,65 @@ function markFailure(status: ProjectionStatusMap, key: string, error: unknown): 
   status[key] = `failed:${error instanceof Error ? error.message : String(error)}`
 }
 
+export function normalizeCommittedChapterContent(content: string): string {
+  const trimmed = content.trim()
+  if (!trimmed.startsWith('{')) return content
+
+  const parseCandidates = [trimmed, `${trimmed}"}`]
+
+  for (const candidate of parseCandidates) {
+    try {
+      const parsed = JSON.parse(candidate) as {
+        revisedContent?: unknown
+        content?: unknown
+      }
+
+      if (typeof parsed.revisedContent === 'string' && parsed.revisedContent.trim()) {
+        return parsed.revisedContent.trim()
+      }
+
+      if (typeof parsed.content === 'string' && parsed.content.trim()) {
+        return parsed.content.trim()
+      }
+    } catch {
+      // Keep trying fallback candidates below.
+    }
+  }
+
+  try {
+    const revisedPrefix = trimmed.match(/^\{\s*"revisedContent"\s*:\s*"/)
+    if (revisedPrefix) {
+      return JSON.parse(`"${trimmed.slice(revisedPrefix[0].length)}"`).trim()
+    }
+
+    const contentPrefix = trimmed.match(/^\{\s*"content"\s*:\s*"/)
+    if (contentPrefix) {
+      return JSON.parse(`"${trimmed.slice(contentPrefix[0].length)}"`).trim()
+    }
+  } catch {
+    return content
+  }
+
+  return content
+}
+
+export function normalizePersistedAgentType(agentType?: string): AgentType | undefined {
+  switch (agentType) {
+    case 'PLANNER':
+    case 'WRITER':
+    case 'POLISHER':
+    case 'VALIDATOR':
+    case 'SUMMARIZER':
+    case 'RESEARCHER':
+      return agentType
+    case 'REVIEWER':
+    case 'DESLOPPER':
+      return 'POLISHER'
+    default:
+      return undefined
+  }
+}
+
 export async function runChapterProjectionWriters(
   context: ChapterProjectionContext
 ): Promise<ChapterProjectionResult> {
@@ -43,7 +102,8 @@ export async function runChapterProjectionWriters(
     rag: 'pending',
   }
 
-  const finalWordCount = countChapterWords(context.payload.content)
+  const normalizedContent = normalizeCommittedChapterContent(context.payload.content)
+  const finalWordCount = countChapterWords(normalizedContent)
   const chapterReady = context.payload.qualityStatus === 'completed'
 
   try {
@@ -51,13 +111,13 @@ export async function runChapterProjectionWriters(
       where: { id: context.chapter.id },
       data: {
         title: context.payload.chapterTitle,
-        content: context.payload.content,
+        content: normalizedContent,
         summary: context.payload.summaryData?.summary || context.chapter.summary || '',
         status: chapterReady ? 'COMPLETED' : 'REVIEWING',
         validationReport: context.payload.validationReport as Prisma.InputJsonValue | undefined,
         chapterOutline: context.payload.outline as Prisma.InputJsonValue | undefined,
         wordCount: finalWordCount,
-        lastAgentType: context.payload.agentType as AgentType | undefined,
+        lastAgentType: normalizePersistedAgentType(context.payload.agentType),
       },
     })
     projectionStatus.chapter = 'done'
@@ -74,7 +134,7 @@ export async function runChapterProjectionWriters(
     await prisma.chapterVersion.create({
       data: {
         chapterId: context.chapter.id,
-        content: context.payload.content,
+        content: normalizedContent,
         wordCount: finalWordCount,
         prompt: context.chapter.generationPrompt,
         versionNumber: (latestVersion._max.versionNumber || 0) + 1,
@@ -161,7 +221,7 @@ export async function runChapterProjectionWriters(
   }
 
   try {
-    const content = context.payload.content || ''
+    const content = normalizedContent || ''
     if (content.trim().length > 0) {
       await indexChapterContent(context.projectId, context.chapterNo, content)
     }

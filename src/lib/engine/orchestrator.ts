@@ -570,7 +570,7 @@ export async function runChapterGenerationPipeline(
         targetWordCount: project.chapterWordCount || 3000,
         currentWordCount: finalWordCount,
         emotionalValue,
-        agentType: speedMode === 'quality' ? 'REVIEWER' : 'WRITER',
+        agentType: speedMode === 'quality' ? 'POLISHER' : 'WRITER',
         emittedAt: new Date().toISOString(),
       }, 'pipeline')
 

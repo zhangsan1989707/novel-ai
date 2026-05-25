@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { replayChapterCommit } from '@/lib/engine/chapter-commit'
+import { reconcileReplayedChapterRuntime } from '@/lib/engine/generation-job'
 
 interface RouteParams {
   params: Promise<{ projectId: string; commitId: string }>
@@ -29,6 +30,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   }
 
   const replayed = await replayChapterCommit(commitId)
+  if (replayed.chapterNo && commit.projectId) {
+    const project = await prisma.novelProject.findUnique({
+      where: { id: commit.projectId },
+      select: { pipelineJobId: true },
+    })
+    if (project?.pipelineJobId) {
+      await reconcileReplayedChapterRuntime(project.pipelineJobId, replayed.chapterNo)
+    }
+  }
 
   return NextResponse.json({
     success: true,

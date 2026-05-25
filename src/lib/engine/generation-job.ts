@@ -1,7 +1,12 @@
 import { prisma } from '@/lib/prisma'
 import type { Prisma } from '@prisma/client'
 import { PipelineStep } from '@/types'
-import { createPipelineRuntimeState, sanitizePipelineRuntime, type PipelineRuntimeState } from './pipeline-runtime'
+import {
+  archiveChapterRuntime,
+  createPipelineRuntimeState,
+  sanitizePipelineRuntime,
+  type PipelineRuntimeState,
+} from './pipeline-runtime'
 
 interface JobProgress {
   jobId: number
@@ -212,5 +217,63 @@ export async function pauseJob(jobId: number): Promise<void> {
   await prisma.generationJob.update({
     where: { id: jobId },
     data: { status: 'PAUSED' },
+  })
+}
+
+export async function reconcileReplayedChapterRuntime(jobId: number, chapterNo: number): Promise<void> {
+  const job = await prisma.generationJob.findUnique({
+    where: { id: jobId },
+    select: {
+      payload: true,
+      currentStep: true,
+      stepIndex: true,
+      totalChapters: true,
+      currentChapter: true,
+    },
+  })
+
+  if (!job) return
+
+  const payload = job.payload && typeof job.payload === 'object'
+    ? job.payload as Record<string, unknown>
+    : {}
+  const runtime = sanitizePipelineRuntime(payload.runtime)
+  const currentChapter = runtime.currentChapter
+
+  if (!currentChapter || currentChapter.chapterNumber !== chapterNo) return
+
+  const now = new Date().toISOString()
+  const recoveredChapter = {
+    ...currentChapter,
+    status: 'COMPLETED' as const,
+    currentPhase: 'completed',
+    error: undefined,
+    completedAt: currentChapter.completedAt || now,
+    updatedAt: now,
+    lastMessage: '章节提交已重放恢复，等待继续生成',
+  }
+
+  const nextRuntime = archiveChapterRuntime(
+    {
+      ...runtime,
+      currentChapter: recoveredChapter,
+    },
+    recoveredChapter
+  )
+
+  await prisma.generationJob.update({
+    where: { id: jobId },
+    data: {
+      status: 'PAUSED',
+      currentStep: 'WRITE',
+      stepIndex: Math.max(job.stepIndex, 4),
+      totalChapters: job.totalChapters,
+      currentChapter: chapterNo,
+      errorMessage: null,
+      payload: {
+        ...payload,
+        runtime: nextRuntime,
+      } as unknown as Prisma.InputJsonValue,
+    },
   })
 }
