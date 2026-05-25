@@ -412,6 +412,61 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
                 </p>
               )}
             </div>
+
+            {chapter.validationReport?.popularFiction && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-4 shadow-sm dark:border-amber-900/40 dark:bg-amber-950/20">
+                <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-white">
+                  <Shield className="h-4 w-4 text-amber-600" />
+                  爆款诊断面板
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="rounded-md bg-white/80 p-3 dark:bg-slate-950/40">
+                    <div className="text-gray-500">总分</div>
+                    <div className="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{chapter.validationReport.popularFiction.total}</div>
+                  </div>
+                  <div className="rounded-md bg-white/80 p-3 dark:bg-slate-950/40">
+                    <div className="text-gray-500">情绪价值</div>
+                    <div className="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{chapter.validationReport.popularFiction.emotion}</div>
+                  </div>
+                  <div className="rounded-md bg-white/80 p-3 dark:bg-slate-950/40">
+                    <div className="text-gray-500">冲突密度</div>
+                    <div className="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{chapter.validationReport.popularFiction.conflict}</div>
+                  </div>
+                  <div className="rounded-md bg-white/80 p-3 dark:bg-slate-950/40">
+                    <div className="text-gray-500">结尾钩子</div>
+                    <div className="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{chapter.validationReport.popularFiction.hook}</div>
+                  </div>
+                  <div className="rounded-md bg-white/80 p-3 dark:bg-slate-950/40">
+                    <div className="text-gray-500">金手指变现</div>
+                    <div className="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{chapter.validationReport.popularFiction.cheatPayoff}</div>
+                  </div>
+                  <div className="rounded-md bg-white/80 p-3 dark:bg-slate-950/40">
+                    <div className="text-gray-500">人设标签</div>
+                    <div className="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{chapter.validationReport.popularFiction.character}</div>
+                  </div>
+                </div>
+                {Array.isArray(chapter.validationReport.popularFiction.issues) && chapter.validationReport.popularFiction.issues.length > 0 && (
+                  <div className="mt-3">
+                    <div className="text-xs font-medium text-gray-900 dark:text-white">当前问题</div>
+                    <ul className="mt-2 space-y-1 text-xs text-gray-600 dark:text-gray-300">
+                      {chapter.validationReport.popularFiction.issues.slice(0, 3).map((item: string) => (
+                        <li key={item}>- {item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {Array.isArray(chapter.validationReport.popularFiction.suggestions) && chapter.validationReport.popularFiction.suggestions.length > 0 && (
+                  <div className="mt-3">
+                    <div className="text-xs font-medium text-gray-900 dark:text-white">修改建议</div>
+                    <ul className="mt-2 space-y-1 text-xs text-gray-600 dark:text-gray-300">
+                      {chapter.validationReport.popularFiction.suggestions.slice(0, 3).map((item: string) => (
+                        <li key={item}>- {item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
           </aside>
         </div>
       </main>

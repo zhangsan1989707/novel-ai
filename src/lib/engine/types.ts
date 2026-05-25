@@ -20,6 +20,13 @@ export interface ChapterOutline {
   chapterTitle: string          // 章节标题
   chapterGoal: string           // 本章目标（一句话）
   mainConflict: string          // 主要冲突
+  emotionTarget?: string
+  conflictTarget?: string
+  payoffTarget?: string
+  cliffhanger?: string
+  cheatUsage?: string
+  characterTagProof?: string
+  forbiddenMistakes?: string[]
   keyScenes: KeyScene[]         // 2-4 个关键场景
   ending: string                // 章节结局
   foreshadows: string[]         // 本章新埋伏笔描述
@@ -94,6 +101,18 @@ export interface ValidationReport {
   characterUpdates: Record<string, Record<string, unknown>>
   newPlotlines: string[]
   resolvedPlotlines: string[]
+  popularFiction?: {
+    readability: number
+    emotion: number
+    cheatPayoff: number
+    conflict: number
+    hook: number
+    character: number
+    pacing: number
+    total: number
+    issues: string[]
+    suggestions: string[]
+  }
   qualityMetrics?: {
     logicScore: number
     characterScore: number

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { resumeJob } from '@/lib/engine/generation-job'
+import { prepareJobRecovery, resumeJob } from '@/lib/engine/generation-job'
 import { runProductionPipeline } from '@/lib/engine/production-pipeline'
 
 export async function POST(
@@ -26,7 +26,8 @@ export async function POST(
       )
     }
 
-    const resumed = await resumeJob(project.pipelineJobId)
+    const resumed = await prepareJobRecovery(project.pipelineJobId, { mode: 'continue' })
+      || await resumeJob(project.pipelineJobId)
     if (!resumed) {
       return NextResponse.json(
         { success: false, error: { code: 'RESUME_FAILED', message: '恢复任务失败，任务可能不在失败或暂停状态' } },

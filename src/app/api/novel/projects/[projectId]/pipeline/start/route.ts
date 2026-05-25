@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { createJob } from '@/lib/engine/generation-job'
 import { runProductionPipeline } from '@/lib/engine/production-pipeline'
 import { getProjectMaintenanceSummary } from '@/lib/engine/auto-maintenance'
+import { getWorkflowBlockReason } from '@/lib/engine/project-flow'
 
 export async function POST(
   request: NextRequest,
@@ -24,6 +25,9 @@ export async function POST(
       select: {
         id: true,
         aiModelId: true,
+        workflowStage: true,
+        blueprintConfirmedAt: true,
+        arcPlanConfirmedAt: true,
         bookBlueprint: { select: { id: true } },
         arcPlans: { select: { id: true } },
         storyState: { select: { id: true } },
@@ -35,6 +39,26 @@ export async function POST(
       return NextResponse.json(
         { success: false, error: { code: 'NOT_FOUND', message: '项目不存在' } },
         { status: 404 }
+      )
+    }
+
+    const flowBlockReason = getWorkflowBlockReason({
+      workflowStage: project.workflowStage,
+      blueprintConfirmedAt: project.blueprintConfirmedAt,
+      arcPlanConfirmedAt: project.arcPlanConfirmedAt,
+      hasBlueprint: Boolean(project.bookBlueprint),
+      hasArcPlans: project.arcPlans.length > 0,
+    })
+    if (flowBlockReason) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: 'FLOW_BLOCKED',
+            message: flowBlockReason,
+          },
+        },
+        { status: 409 }
       )
     }
 

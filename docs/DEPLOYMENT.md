@@ -1,6 +1,13 @@
 # Novel AI 项目部署指南
 
-## 一、服务器信息
+## 一、版本信息
+
+| 版本 | 日期 | 更新内容 |
+|------|------|----------|
+| v0.2.0 | 2026-05-25 | RAG 向量检索、分析任务管理、章节提交重播、反检测系统 |
+| v0.1.0 | 2026-05-19 | 初始版本，基础创作功能 |
+
+## 二、服务器信息
 
 | 项目 | 值 |
 |------|-----|
@@ -10,7 +17,7 @@
 | 部署目录 | /opt/novel-ai |
 | 数据库端口 | 5433 (docker-compose 映射自容器 5432) |
 
-## 二、部署流程
+## 三、部署流程
 
 ### 前置条件
 
@@ -32,6 +39,11 @@
    ```bash
    echo ".deploy-password" >> .gitignore
    ```
+
+4. **数据库要求**
+   - PostgreSQL 14+
+   - pgvector 扩展（用于 RAG 向量检索）
+   - 使用 Docker 部署时已包含 pgvector 支持
 
 ### 一键部署
 
@@ -66,13 +78,22 @@ tar -xzf novel-ai-code.tar.gz
 npm ci
 npx prisma generate
 
+# 初始化 pgvector 扩展
+docker exec -i -e PGPASSWORD=password novelai-db psql -U novelai -d novel_ai << 'SQLEOF' || true
+CREATE EXTENSION IF NOT EXISTS vector;
+SQLEOF
+
 # 应用数据库迁移（新增枚举和字段）
 docker exec -i -e PGPASSWORD=password novelai-db psql -U novelai -d novel_ai << 'SQLEOF' || true
+ALTER TYPE "AIVendor" ADD VALUE IF NOT EXISTS 'ZHIPU';
 ALTER TYPE "AIVendor" ADD VALUE IF NOT EXISTS 'MIMO';
 ALTER TABLE "ai_model_configs" ADD COLUMN IF NOT EXISTS "embeddingVendor" "AIVendor";
 ALTER TABLE "ai_model_configs" ADD COLUMN IF NOT EXISTS "embeddingApiKey" TEXT;
 ALTER TABLE "ai_model_configs" ADD COLUMN IF NOT EXISTS "embeddingApiEndpoint" TEXT;
 SQLEOF
+
+# 运行数据库迁移
+DATABASE_URL='postgresql://novelai:password@localhost:5433/novel_ai?schema=public' npx prisma migrate deploy
 
 npm run build
 
@@ -83,7 +104,7 @@ PORT=3200 HOSTNAME=0.0.0.0 nohup npx next start -p 3200 > app.log 2>&1 &
 EOF
 ```
 
-## 三、常见问题与解决方案
+## 四、常见问题与解决方案
 
 ### 1. 数据库连接失败
 
@@ -144,15 +165,29 @@ DATABASE_URL='postgresql://novelai:password@localhost:5433/novel_ai?schema=publi
 
 **错误信息**：`The column ai_model_configs.embeddingVendor does not exist` 或 `invalid input value for enum AIVendor: "MIMO"`
 
-**原因**：新增的 AI 厂商（如 MIMO）或表字段（embeddingVendor 等）未在数据库中应用
+**原因**：新增的 AI 厂商（如 ZHIPU、MIMO）或表字段（embeddingVendor 等）未在数据库中应用
 
 **解决方案**：部署脚本已自动处理，手动执行：
 ```bash
 docker exec -i -e PGPASSWORD=password novelai-db psql -U novelai -d novel_ai << 'EOF'
+ALTER TYPE "AIVendor" ADD VALUE IF NOT EXISTS 'ZHIPU';
 ALTER TYPE "AIVendor" ADD VALUE IF NOT EXISTS 'MIMO';
 ALTER TABLE "ai_model_configs" ADD COLUMN IF NOT EXISTS "embeddingVendor" "AIVendor";
 ALTER TABLE "ai_model_configs" ADD COLUMN IF NOT EXISTS "embeddingApiKey" TEXT;
 ALTER TABLE "ai_model_configs" ADD COLUMN IF NOT EXISTS "embeddingApiEndpoint" TEXT;
+EOF
+```
+
+### 4.2 pgvector 扩展缺失
+
+**错误信息**：`type "vector" does not exist` 或 `operator does not exist: vector <-> vector`
+
+**原因**：pgvector 扩展未在数据库中启用
+
+**解决方案**：
+```bash
+docker exec -i -e PGPASSWORD=password novelai-db psql -U novelai -d novel_ai << 'EOF'
+CREATE EXTENSION IF NOT EXISTS vector;
 EOF
 ```
 
@@ -162,7 +197,7 @@ EOF
 
 **解决方案**：使用本地打包上传方式，不要使用 git clone/pull
 
-## 四、验证部署
+## 五、验证部署
 
 ```bash
 # 检查服务健康状态
@@ -177,7 +212,7 @@ curl -X POST http://47.109.85.168:3200/api/novel/projects \
   -d '{"title":"测试项目","genre":"玄幻","platform":"QIDIAN","lengthType":"LONG","corePitch":"测试"}'
 ```
 
-## 五、日志查看
+## 六、日志查看
 
 ```bash
 # 查看应用日志
@@ -187,7 +222,7 @@ sshpass -p "密码" ssh root@47.109.85.168 "tail -30 /opt/novel-ai/app.log"
 sshpass -p "密码" ssh root@47.109.85.168 "ps aux | grep node"
 ```
 
-## 六、注意事项
+## 七、注意事项
 
 1. **密码安全**：不要将 `.deploy-password` 提交到 git
 2. **数据库端口**：docker-compose.db.yml 映射端口为 5433，部署脚本会自动处理
@@ -198,3 +233,6 @@ sshpass -p "密码" ssh root@47.109.85.168 "ps aux | grep node"
 7. **Next.js 16 兼容**：Dockerfile 已更新为不依赖 standalone 模式
 8. **数据库迁移**：部署脚本会自动检查并应用新增的枚举值和表字段
 9. **健康检查**：部署完成后会自动测试 API 连通性
+10. **pgvector 扩展**：确保 PostgreSQL 启用 pgvector 扩展用于 RAG 向量检索
+11. **RAG 向量重建**：首次部署或更新后，可在项目设置中重建向量索引
+12. **AI 厂商配置**：新增支持 ZHIPU（智谱）和 MIMO（秘塔），需在 `.env` 中配置对应密钥

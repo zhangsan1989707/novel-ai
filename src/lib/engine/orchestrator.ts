@@ -27,6 +27,7 @@ import type {
   SSEEvent,
   AgentType,
 } from './types'
+import { normalizePopularFictionProfile, scorePopularFictionChapter } from './popular-fiction'
 
 const MAX_RETRY_COUNT = 3
 
@@ -102,12 +103,15 @@ export async function runChapterGenerationPipeline(
   // 获取项目信息
   const project = await prisma.novelProject.findUnique({
     where: { id: projectId },
-    include: { aiModelConfig: true },
+    include: { aiModelConfig: true, bookBlueprint: true },
   })
 
   if (!project) {
     return { success: false, chapterId: 0, error: '项目不存在' }
   }
+  const popularFictionProfile = normalizePopularFictionProfile(
+    (project.bookBlueprint as unknown as { popularFictionProfile?: unknown } | null)?.popularFictionProfile
+  )
 
   // 初始化故事状态（如果不存在）
   await storyState.initStoryState(projectId, project.totalVolumes * 25)
@@ -206,6 +210,7 @@ export async function runChapterGenerationPipeline(
           recentChapterSummaries: memoryPack.recentChapterSummaries,
           recentChapterCount: memoryPack.recentChapterSummaries.length,
           provider: sharedProvider,
+          popularFictionProfile,
         })
 
         outline = plannerResult.outline
@@ -267,6 +272,7 @@ export async function runChapterGenerationPipeline(
           characterProfiles: memoryPack.characterProfiles,
           recentSummaries: memoryPack.recentChapterSummaries,
           provider: sharedProvider,
+          popularFictionProfile,
         },
         (token) => {
           draftContent += token
@@ -407,8 +413,34 @@ export async function runChapterGenerationPipeline(
           recentSummaries: memoryPack.recentChapterSummaries,
           worldSetting: project.worldSetting,
           openPlotlines: memoryPack.openPlotlines,
+          chapterTitle: outline.chapterTitle,
+          chapterGoal: outline.chapterGoal,
           provider: sharedProvider,
+          popularFictionProfile,
         })
+
+        const popularScore = scorePopularFictionChapter({
+          content: reviewedContent,
+          outline,
+          profile: popularFictionProfile,
+        })
+        validationReport = {
+          ...validationReport,
+          popularFiction: popularScore,
+          result: popularScore.emotion < 7 || popularScore.conflict < 7 || popularScore.hook < 7 || popularScore.character < 7
+            ? 'retry'
+            : validationReport.result,
+          issues: [
+            ...validationReport.issues,
+            ...popularScore.issues.map(issue => ({
+              type: 'emotion' as const,
+              severity: 'major' as const,
+              description: issue,
+              location: '全文',
+              reference: '爆款四因子诊断',
+            })),
+          ],
+        }
 
         emit({
           type: 'validation',
@@ -464,6 +496,11 @@ export async function runChapterGenerationPipeline(
         return runChapterGenerationPipeline(projectId, chapterNo, emit, { speedMode })
       }
     } else {
+      const popularScore = scorePopularFictionChapter({
+        content: polishedContent,
+        outline,
+        profile: popularFictionProfile,
+      })
       validationReport = {
         result: 'pass',
         score: 85,
@@ -471,6 +508,7 @@ export async function runChapterGenerationPipeline(
         characterUpdates: {},
         newPlotlines: [],
         resolvedPlotlines: [],
+        popularFiction: popularScore,
         qualityMetrics: {
           logicScore: 85,
           characterScore: 85,

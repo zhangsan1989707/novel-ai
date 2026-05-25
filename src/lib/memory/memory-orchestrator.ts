@@ -49,6 +49,7 @@ export interface MemoryPack {
     mainlineDirection: string | null
     growthDirection: string | null
     endingDirection: string | null
+    popularFictionProfile?: Record<string, unknown> | null
     constraints: string[]
   } | null
   bookSummary: Awaited<ReturnType<typeof getBookSummary>>
@@ -169,6 +170,7 @@ function buildBookBlueprintSection(blueprint: MemoryPack['bookBlueprint']): stri
     blueprint.mainlineDirection ? `主线方向：${blueprint.mainlineDirection}` : '',
     blueprint.growthDirection ? `成长方向：${blueprint.growthDirection}` : '',
     blueprint.endingDirection ? `结局方向：${blueprint.endingDirection}` : '',
+    blueprint.popularFictionProfile ? `爆款四因子：${JSON.stringify(blueprint.popularFictionProfile)}` : '',
     blueprint.constraints.length > 0 ? `约束：${blueprint.constraints.join('、')}` : '',
   ].filter(Boolean).join('\n')
 }
@@ -410,6 +412,7 @@ export async function buildChapterMemoryPack(
         mainlineDirection: project.bookBlueprint.mainlineDirection,
         growthDirection: project.bookBlueprint.growthDirection,
         endingDirection: project.bookBlueprint.endingDirection,
+        popularFictionProfile: (project.bookBlueprint as unknown as { popularFictionProfile?: unknown }).popularFictionProfile as Record<string, unknown> | null,
         constraints: project.bookBlueprint.constraints,
       }
     : null

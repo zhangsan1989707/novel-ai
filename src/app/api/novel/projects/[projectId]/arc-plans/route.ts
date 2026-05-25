@@ -122,7 +122,7 @@ Book Blueprint：
 ]
 
 阶段枚举值只能是：OPENING, GROWTH, EXPANSION, MID_CONFLICT, PRE_FINALE, FINALE
-batchSize建议范围10-30，根据阶段节奏调整。`
+batchSize必须保守控制在 5-15 之间：开局5-8，成长8-12，扩张10-15，中段冲突8-12，前置高潮5-8，终局3-6。`
 
     let result = ''
     for await (const token of provider.generateStream(prompt, {
@@ -167,7 +167,7 @@ batchSize建议范围10-30，根据阶段节奏调整。`
           description: (ap.description as string) || '',
           startChapter: (ap.startChapter as number) || 1,
           endChapter: (ap.endChapter as number) || null,
-          batchSize: (ap.batchSize as number) || batchSize,
+          batchSize: Math.max(3, Math.min(15, (ap.batchSize as number) || batchSize)),
           goals: Array.isArray(ap.goals) ? (ap.goals as string[]) : [],
           keyEvents: Array.isArray(ap.keyEvents) ? (ap.keyEvents as string[]) : [],
           isCompleted: false,
@@ -176,11 +176,103 @@ batchSize建议范围10-30，根据阶段节奏调整。`
       created.push(plan)
     }
 
+    await prisma.novelProject.update({
+      where: { id: projectId },
+      data: {
+        workflowStage: 'ARC_PLAN_CONFIRM',
+        arcPlanConfirmedAt: null,
+      },
+    })
+
     return NextResponse.json({ success: true, data: created })
   } catch (error) {
     console.error('Arc plan generation error:', error)
     return NextResponse.json(
       { success: false, error: { code: 'INTERNAL_ERROR', message: 'ArcPlan生成失败' } },
+      { status: 500 }
+    )
+  }
+}
+
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ projectId: string }> }
+) {
+  try {
+    const { projectId: projectIdStr } = await params
+    const projectId = parseInt(projectIdStr)
+
+    if (isNaN(projectId)) {
+      return NextResponse.json(
+        { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
+        { status: 400 }
+      )
+    }
+
+    const body = await request.json()
+    const plans = Array.isArray(body.arcPlans) ? body.arcPlans : []
+    if (plans.length === 0) {
+      return NextResponse.json(
+        { success: false, error: { code: 'VALIDATION_ERROR', message: '缺少 ArcPlan 数据' } },
+        { status: 400 }
+      )
+    }
+
+    const existing = await prisma.arcPlan.findMany({
+      where: { projectId },
+      orderBy: { arcNumber: 'asc' },
+    })
+    const existingMap = new Map(existing.map(plan => [plan.id, plan]))
+
+    const updated = await prisma.$transaction(async tx => {
+      const results = []
+      for (const item of plans) {
+        if (!item || typeof item !== 'object' || typeof item.id !== 'string') continue
+        const current = existingMap.get(item.id)
+        if (!current) continue
+
+        const startChapter = typeof item.startChapter === 'number' ? Math.max(1, Math.floor(item.startChapter)) : current.startChapter
+        const endChapter = typeof item.endChapter === 'number'
+          ? Math.max(startChapter, Math.floor(item.endChapter))
+          : current.endChapter
+        const goals = Array.isArray(item.goals)
+          ? item.goals.filter((goal: unknown): goal is string => typeof goal === 'string').map((goal: string) => goal.trim()).filter(Boolean)
+          : current.goals
+        const keyEvents = Array.isArray(item.keyEvents)
+          ? item.keyEvents.filter((event: unknown): event is string => typeof event === 'string').map((event: string) => event.trim()).filter(Boolean)
+          : current.keyEvents
+
+        results.push(await tx.arcPlan.update({
+          where: { id: current.id },
+          data: {
+            name: typeof item.name === 'string' ? item.name.trim() || current.name : current.name,
+            startChapter,
+            endChapter,
+            batchSize: typeof item.batchSize === 'number'
+              ? Math.max(3, Math.min(15, Math.floor(item.batchSize)))
+              : current.batchSize,
+            goals,
+            keyEvents,
+          },
+        }))
+      }
+
+      await tx.novelProject.update({
+        where: { id: projectId },
+        data: {
+          workflowStage: 'ARC_PLAN_CONFIRM',
+          arcPlanConfirmedAt: null,
+        },
+      })
+
+      return results
+    })
+
+    return NextResponse.json({ success: true, data: updated })
+  } catch (error) {
+    console.error('Update arc plans error:', error)
+    return NextResponse.json(
+      { success: false, error: { code: 'INTERNAL_ERROR', message: '更新ArcPlan失败' } },
       { status: 500 }
     )
   }

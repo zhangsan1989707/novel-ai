@@ -538,6 +538,7 @@ export interface BookBlueprintInfo {
   platformStrategy?: string
   genreStrategy?: string
   styleStrategy?: string
+  popularFictionProfile?: Record<string, unknown> | null
   constraints: string[]
 }
 

@@ -63,6 +63,7 @@ export interface ExportedBlueprint {
   platformStrategy?: string | null
   genreStrategy?: string | null
   styleStrategy?: string | null
+  popularFictionProfile?: Record<string, unknown> | null
   constraints: string[]
   createdAt?: string
   updatedAt?: string

@@ -20,6 +20,28 @@ interface JobProgress {
   error?: string
 }
 
+export type JobRecoveryTarget =
+  | { mode: 'continue' }
+  | { mode: 'retry_batch' }
+  | { mode: 'retry_chapter'; chapterNumber: number }
+
+function normalizePayload(payload: unknown): Record<string, unknown> {
+  return payload && typeof payload === 'object' && !Array.isArray(payload)
+    ? payload as Record<string, unknown>
+    : {}
+}
+
+function normalizeRecoveryTarget(value: unknown): JobRecoveryTarget | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const candidate = value as Record<string, unknown>
+  if (candidate.mode === 'continue') return { mode: 'continue' }
+  if (candidate.mode === 'retry_batch') return { mode: 'retry_batch' }
+  if (candidate.mode === 'retry_chapter' && typeof candidate.chapterNumber === 'number') {
+    return { mode: 'retry_chapter', chapterNumber: candidate.chapterNumber }
+  }
+  return null
+}
+
 export async function createJob(projectId: number, type: string = 'FULL_PIPELINE'): Promise<number> {
   const job = await prisma.generationJob.create({
     data: {
@@ -162,6 +184,49 @@ export async function updateJobRuntime(jobId: number, runtime: PipelineRuntimeSt
   })
 }
 
+export async function setJobRecoveryTarget(jobId: number, target: JobRecoveryTarget): Promise<void> {
+  const job = await prisma.generationJob.findUnique({
+    where: { id: jobId },
+    select: { payload: true },
+  })
+  const payload = normalizePayload(job?.payload)
+
+  await prisma.generationJob.update({
+    where: { id: jobId },
+    data: {
+      payload: {
+        ...payload,
+        recoveryTarget: target,
+      } as any,
+    },
+  })
+}
+
+export async function clearJobRecoveryTarget(jobId: number): Promise<void> {
+  const job = await prisma.generationJob.findUnique({
+    where: { id: jobId },
+    select: { payload: true },
+  })
+  const payload = normalizePayload(job?.payload)
+  const nextPayload = { ...payload }
+  delete nextPayload.recoveryTarget
+
+  await prisma.generationJob.update({
+    where: { id: jobId },
+    data: {
+      payload: nextPayload as any,
+    },
+  })
+}
+
+export async function getJobRecoveryTarget(jobId: number): Promise<JobRecoveryTarget | null> {
+  const job = await prisma.generationJob.findUnique({
+    where: { id: jobId },
+    select: { payload: true },
+  })
+  return normalizeRecoveryTarget(normalizePayload(job?.payload).recoveryTarget)
+}
+
 export async function getJobProgress(jobId: number): Promise<JobProgress | null> {
   const job = await prisma.generationJob.findUnique({
     where: { id: jobId },
@@ -207,6 +272,30 @@ export async function resumeJob(jobId: number): Promise<boolean> {
       stepIndex,
       retryCount: job.status === 'FAILED' ? job.retryCount + 1 : job.retryCount,
       errorMessage: null,
+    },
+  })
+
+  return true
+}
+
+export async function prepareJobRecovery(jobId: number, target: JobRecoveryTarget): Promise<boolean> {
+  const job = await prisma.generationJob.findUnique({
+    where: { id: jobId },
+  })
+
+  if (!job || (job.status !== 'FAILED' && job.status !== 'PAUSED')) return false
+
+  const payload = normalizePayload(job.payload)
+  await prisma.generationJob.update({
+    where: { id: jobId },
+    data: {
+      status: 'PENDING',
+      errorMessage: null,
+      retryCount: job.status === 'FAILED' ? job.retryCount + 1 : job.retryCount,
+      payload: {
+        ...payload,
+        recoveryTarget: target,
+      } as any,
     },
   })
 

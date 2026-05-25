@@ -11,6 +11,15 @@ const stageMultipliers: Record<ArcStage, number> = {
   finale: 0.5,
 }
 
+const stageRanges: Record<ArcStage, { min: number; max: number }> = {
+  opening: { min: 5, max: 8 },
+  growth: { min: 8, max: 12 },
+  expansion: { min: 10, max: 15 },
+  mid_conflict: { min: 8, max: 12 },
+  pre_finale: { min: 5, max: 8 },
+  finale: { min: 3, max: 6 },
+}
+
 export interface BatchPlanningOptions {
   progressRatio?: number
   stageRemainingChapters?: number
@@ -111,5 +120,6 @@ export function calculateBatchSize(
     styleFactor
   )
 
-  return clamp(raw, 8, 28)
+  const range = stageRanges[internalStage] || { min: 5, max: 12 }
+  return clamp(raw, range.min, range.max)
 }

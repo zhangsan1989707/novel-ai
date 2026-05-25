@@ -1,7 +1,18 @@
+import { Prisma } from '@prisma/client'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { createProviderFromConfigId, createProviderFromDefaultConfig } from '@/lib/ai/factory'
 import { parseAiJsonObject } from '@/lib/engine/ai-json'
+import { normalizePopularFictionProfile } from '@/lib/engine/popular-fiction'
+
+function normalizeStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string').map(item => item.trim()).filter(Boolean) : []
+}
+
+function toPopularFictionJson(value: unknown) {
+  const normalized = normalizePopularFictionProfile(value)
+  return normalized ? (normalized as unknown as Prisma.InputJsonValue) : Prisma.JsonNull
+}
 
 export async function POST(
   request: NextRequest,
@@ -58,6 +69,12 @@ export async function POST(
   "platformStrategy": "平台策略（章节长度、钩子密度、高潮频率）",
   "genreStrategy": "题材策略（世界扩张、冲突形态、读者期待）",
   "styleStrategy": "风格策略（叙事口吻、节奏、去AI味方向）",
+  "popularFictionProfile": {
+    "emotionEngine": { "primaryEmotion": "爽", "openingBomb": "开篇情绪炸弹", "readerPayoff": "读者回报", "forbiddenSlowStart": true },
+    "cheatAbility": { "name": "金手指名称", "oneLineRule": "一句话规则", "firstRevealChapter": 1, "firstPayoffChapter": 3, "growthMechanism": "成长机制", "limitation": "限制", "readerFantasy": "读者代入点" },
+    "conflictEngine": { "conflictTypes": ["羞辱", "打脸"], "conflictFrequency": "每1-2章一次强冲突", "payoffInterval": "1-3章一次回报", "hookStrategy": "每章结尾必须给下一章承诺" },
+    "characterTagEngine": { "protagonistTags": ["稳健", "记仇"], "behaviorProofs": [{ "tag": "稳健", "requiredScene": "遇强敌先探信息", "forbiddenBehavior": "无脑硬冲" }] }
+  },
   "constraints": ["约束条件1", "约束条件2"]
 }`
 
@@ -101,6 +118,7 @@ export async function POST(
       platformStrategy: (blueprint.platformStrategy as string) || '',
       genreStrategy: (blueprint.genreStrategy as string) || '',
       styleStrategy: (blueprint.styleStrategy as string) || '',
+      popularFictionProfile: toPopularFictionJson(blueprint.popularFictionProfile),
       constraints,
     }
 
@@ -110,6 +128,15 @@ export async function POST(
     } else {
       await prisma.bookBlueprint.create({ data: { projectId, ...data } })
     }
+
+    await prisma.novelProject.update({
+      where: { id: projectId },
+      data: {
+        workflowStage: 'BLUEPRINT_CONFIRM',
+        blueprintConfirmedAt: null,
+        arcPlanConfirmedAt: null,
+      },
+    })
 
     const saved = await prisma.bookBlueprint.findUnique({ where: { projectId } })
 
@@ -145,6 +172,70 @@ export async function GET(
     console.error('Get blueprint error:', error)
     return NextResponse.json(
       { success: false, error: { code: 'INTERNAL_ERROR', message: '获取Blueprint失败' } },
+      { status: 500 }
+    )
+  }
+}
+
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ projectId: string }> }
+) {
+  try {
+    const { projectId: projectIdStr } = await params
+    const projectId = parseInt(projectIdStr)
+
+    if (isNaN(projectId)) {
+      return NextResponse.json(
+        { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
+        { status: 400 }
+      )
+    }
+
+    const body = await request.json()
+    const existing = await prisma.bookBlueprint.findUnique({ where: { projectId } })
+    if (!existing) {
+      return NextResponse.json(
+        { success: false, error: { code: 'NOT_FOUND', message: 'Blueprint不存在' } },
+        { status: 404 }
+      )
+    }
+
+    const data = {
+      corePitch: typeof body.corePitch === 'string' ? body.corePitch.trim() : existing.corePitch,
+      worldDirection: typeof body.worldDirection === 'string' ? body.worldDirection.trim() : existing.worldDirection,
+      mainlineDirection: typeof body.mainlineDirection === 'string' ? body.mainlineDirection.trim() : existing.mainlineDirection,
+      growthDirection: typeof body.growthDirection === 'string' ? body.growthDirection.trim() : existing.growthDirection,
+      endingDirection: typeof body.endingDirection === 'string' ? body.endingDirection.trim() : existing.endingDirection,
+      platformStrategy: typeof body.platformStrategy === 'string' ? body.platformStrategy.trim() : existing.platformStrategy,
+      genreStrategy: typeof body.genreStrategy === 'string' ? body.genreStrategy.trim() : existing.genreStrategy,
+      styleStrategy: typeof body.styleStrategy === 'string' ? body.styleStrategy.trim() : existing.styleStrategy,
+      popularFictionProfile: body.popularFictionProfile !== undefined
+        ? toPopularFictionJson(body.popularFictionProfile)
+        : existing.popularFictionProfile ?? Prisma.JsonNull,
+      constraints: body.constraints !== undefined ? normalizeStringArray(body.constraints) : existing.constraints,
+    }
+
+    const [saved] = await prisma.$transaction([
+      prisma.bookBlueprint.update({
+        where: { projectId },
+        data,
+      }),
+      prisma.novelProject.update({
+        where: { id: projectId },
+        data: {
+          workflowStage: 'BLUEPRINT_CONFIRM',
+          blueprintConfirmedAt: null,
+          arcPlanConfirmedAt: null,
+        },
+      }),
+    ])
+
+    return NextResponse.json({ success: true, data: saved })
+  } catch (error) {
+    console.error('Update blueprint error:', error)
+    return NextResponse.json(
+      { success: false, error: { code: 'INTERNAL_ERROR', message: '更新Blueprint失败' } },
       { status: 500 }
     )
   }

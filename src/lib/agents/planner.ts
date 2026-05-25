@@ -8,6 +8,7 @@ import { logger } from '@/lib/logger'
 import { buildPlannerPrompt as buildPlannerPromptV2 } from '../prompts/chapter/planning-v2'
 import type { ChapterOutline, AgentContext } from '../engine/types'
 import { parseAiJsonObject } from '@/lib/engine/ai-json'
+import type { PopularFictionProfile } from '../engine/popular-fiction'
 
 interface PlannerInput extends AgentContext {
   characterProfiles: { name: string; role: string; description: string }[]
@@ -19,6 +20,7 @@ interface PlannerInput extends AgentContext {
   memoryContext?: string
   useEnhancedPrompt?: boolean
   provider?: AIProvider
+  popularFictionProfile?: PopularFictionProfile | null
 }
 
 // 默认使用增强版提示词
@@ -35,6 +37,13 @@ function buildFallbackOutline(input: PlannerInput & AgentContext): ChapterOutlin
     chapterTitle: `${genrePrefix}推进：第${input.chapterNo}章`,
     chapterGoal: `承接第${previousSummary}章的剧情，围绕${latestPlotline}继续推进，并保持${tone}节奏`,
     mainConflict: `主角需要直面${latestPlotline}带来的新阻力，同时避免前文伏笔在此处过早收束`,
+    emotionTarget: input.popularFictionProfile?.emotionEngine.primaryEmotion || '期待',
+    conflictTarget: latestPlotline,
+    payoffTarget: input.popularFictionProfile?.emotionEngine.readerPayoff || '给读者一个阶段性回报',
+    cliffhanger: '在章节结尾留下新的威胁或承诺，强迫读者进入下一章',
+    cheatUsage: input.popularFictionProfile?.cheatAbility.oneLineRule || '让主角优势在本章至少触发一次',
+    characterTagProof: input.popularFictionProfile?.characterTagEngine.behaviorProofs[0]?.requiredScene || '用关键选择证明主角标签',
+    forbiddenMistakes: ['禁止大段设定说明', '禁止冲突不足', '禁止结尾无钩子'],
     keyScenes: [
       {
         scene: '开场场景：沿用上一章末尾的紧张点，快速把读者拉回当前矛盾。',
@@ -87,6 +96,7 @@ export async function plannerAgent(
     })),
     openPlotlines: input.openPlotlines,
     emotionalArc: input.emotionalArc,
+    popularFictionProfile: input.popularFictionProfile,
   })
 
   // 执行生成
@@ -110,6 +120,13 @@ JSON 格式要求：
   "chapterTitle": "string",
   "chapterGoal": "string",
   "mainConflict": "string",
+  "emotionTarget": "string",
+  "conflictTarget": "string",
+  "payoffTarget": "string",
+  "cliffhanger": "string",
+  "cheatUsage": "string",
+  "characterTagProof": "string",
+  "forbiddenMistakes": ["string"],
   "keyScenes": [
     { "scene": "string", "characters": ["string"], "emotion": "string" }
   ],

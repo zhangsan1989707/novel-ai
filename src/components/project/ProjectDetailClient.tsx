@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { Button, Card, CardContent, CardHeader, CardTitle, Badge, Progress, Modal, toast, MoreActionsMenu } from '@/components/ui'
 import { BlueprintConsole, ProjectBaseInfoForm, ProjectBaseInfoFormData } from '@/components/project'
+import { WorkflowBlueprintCard } from '@/components/project/WorkflowBlueprintCard'
+import { WorkflowArcPlanCard } from '@/components/project/WorkflowArcPlanCard'
 import { Toolbox, CharacterPanel } from '@/components/ai'
 import { CoverGenerator, ResearchPanel, ReviewPanel, DeslopPanel, ExportPanel, AnalysisWorkbench } from '@/components/ai'
 import { BookOpen, Clock, Target, Users, Layers, Search, ClipboardList, Rocket, Shield, Sparkles, ChevronRight, ChevronDown, Wrench, Eye, Play, Pause, AlertCircle, CheckCircle2, Loader2, Download } from 'lucide-react'
@@ -24,15 +26,44 @@ interface Chapter {
 }
 
 interface ArcPlan {
-  id: number
+  id: string
   arcNumber: number
   name: string
   stage: string
+  startChapter: number
+  endChapter?: number | null
   goals: string[]
   keyEvents: string[]
   batchSize: number
   isCompleted: boolean
   chapters?: Chapter[]
+}
+
+interface BookBlueprint {
+  corePitch: string
+  worldDirection?: string | null
+  mainlineDirection?: string | null
+  growthDirection?: string | null
+  endingDirection?: string | null
+  platformStrategy?: string | null
+  genreStrategy?: string | null
+  styleStrategy?: string | null
+  popularFictionProfile?: Record<string, unknown> | null
+  constraints: string[]
+}
+
+interface StoryRoadmapItem {
+  arcId?: string
+  arcNumber: number
+  title: string
+  chapterRange: string
+  summary: string
+  mainEmotion: string
+  stagePayoff: string
+  conflictFocus: string
+  hookStrategy: string
+  highlights: string[]
+  forbidden: string[]
 }
 
 interface Project {
@@ -67,7 +98,12 @@ interface Project {
   conflictIntensity?: number
   mysteryDensity?: number
   chapters: Chapter[]
+  workflowStage?: 'BLUEPRINT_CONFIRM' | 'ARC_PLAN_CONFIRM' | 'GENERATE'
+  blueprintConfirmedAt?: string | null
+  arcPlanConfirmedAt?: string | null
+  bookBlueprint?: BookBlueprint | null
   arcPlans?: ArcPlan[]
+  storyRoadmap?: StoryRoadmapItem[]
   recentCommits?: Array<{
     id: string
     chapterNo: number
@@ -260,7 +296,7 @@ type NextStepState = {
   title: string
   description: string
   ctaLabel: string
-  ctaAction: 'start' | 'edit' | 'settings' | 'retry' | 'wait' | 'resume' | 'tab-settings'
+  ctaAction: 'start' | 'edit' | 'settings' | 'retry' | 'wait' | 'resume' | 'tab-settings' | 'confirm-blueprint' | 'confirm-arc-plan'
   disabled?: boolean
 }
 
@@ -511,8 +547,20 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
   }
 
   const handleStartPipeline = async () => {
+    if (!project) return
+
     if (maintenanceActive) {
       toast.error('创作系统仍在初始化，请完成后再开始 AI 生成')
+      return
+    }
+
+    if (!project.blueprintConfirmedAt) {
+      toast.error('请先确认蓝图')
+      return
+    }
+
+    if (!project.arcPlanConfirmedAt) {
+      toast.error('请先确认故事路线图')
       return
     }
 
@@ -539,6 +587,25 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
       toast.error('启动 AI 生成失败')
     } finally {
       setPipelineStarting(false)
+    }
+  }
+
+  const handleRecoverPipeline = async (action: 'continue' | 'retry_chapter' | 'retry_batch', chapterNumber?: number) => {
+    try {
+      const res = await fetch(`/api/novel/projects/${projectId}/pipeline/recover`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, chapterNumber }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        toast.success(data.data?.message || '恢复动作已触发')
+        fetchProject()
+      } else {
+        toast.error(data.error?.message || '恢复失败')
+      }
+    } catch {
+      toast.error('恢复失败')
     }
   }
 
@@ -643,6 +710,16 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
   const recentChapterRuns = pipeline?.runtime?.recentChapters || []
   const hasBoundModel = Boolean(project.aiModelConfig)
   const isAnalyzeMode = project.projectMode === 'ANALYZE'
+  const workflowStage = project.workflowStage || (!project.blueprintConfirmedAt ? 'BLUEPRINT_CONFIRM' : !project.arcPlanConfirmedAt ? 'ARC_PLAN_CONFIRM' : 'GENERATE')
+  const flowBlockedReason = !project.bookBlueprint
+    ? '请先生成并确认全书蓝图'
+    : !project.blueprintConfirmedAt
+      ? 'Blueprint 未确认前，不允许启动正文生成'
+      : !project.arcPlans?.length
+        ? '请先生成 ArcPlan'
+        : !project.arcPlanConfirmedAt
+          ? 'ArcPlan 未确认前，不允许生成章节目录'
+          : null
   const steeringValues = {
     pace: project.pace ?? defaultSteeringValues.pace,
     darkness: project.darkness ?? defaultSteeringValues.darkness,
@@ -692,10 +769,32 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
         badgeVariant: 'secondary',
         badgeLabel: '等待中',
         title: 'AI 正在接管底层创作配置',
-        description: '系统正在自动补齐 Blueprint、阶段规划、故事状态和 RAG 索引。这里完成后，再开始整书生成。',
+        description: '系统正在自动补齐 Blueprint、故事路线和故事状态。这里完成后，再开始整书生成。',
         ctaLabel: '等待完成',
         ctaAction: 'wait',
         disabled: true,
+      }
+    }
+
+    if (!project.bookBlueprint || !project.blueprintConfirmedAt) {
+      return {
+        badgeVariant: 'warning',
+        badgeLabel: '待确认',
+        title: '先确认全书蓝图',
+        description: '核心卖点、世界方向、主线方向、成长方向、终局方向以及平台/题材/风格策略需要先被人工确认，之后才能进入后续生产。',
+        ctaLabel: '确认蓝图',
+        ctaAction: 'confirm-blueprint',
+      }
+    }
+
+    if (!project.arcPlans?.length || !project.arcPlanConfirmedAt) {
+      return {
+        badgeVariant: 'warning',
+        badgeLabel: '待确认',
+        title: '先确认故事路线图',
+        description: 'AI 已经给出全书发展路线。你只需要判断故事这样发展是否顺眼，确认后才允许生成目录和正文。',
+        ctaLabel: '确认故事路线',
+        ctaAction: 'confirm-arc-plan',
       }
     }
 
@@ -761,6 +860,12 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
     switch (nextStepState.ctaAction) {
       case 'start':
         void handleStartPipeline()
+        break
+      case 'confirm-blueprint':
+        setActiveTab('dashboard')
+        break
+      case 'confirm-arc-plan':
+        setActiveTab('dashboard')
         break
       case 'edit':
         setShowEditModal(true)
@@ -866,10 +971,23 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
                 暂停
               </Button>
             ) : (
-              <Button variant="primary" size="sm" onClick={handleResumePipeline} className="gap-1.5">
-                <Play className="h-3.5 w-3.5" />
-                继续运行
-              </Button>
+              <>
+                <Button variant="primary" size="sm" onClick={() => handleRecoverPipeline('continue')} className="gap-1.5">
+                  <Play className="h-3.5 w-3.5" />
+                  继续生成
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleRecoverPipeline('retry_chapter', liveChapter?.chapterNumber || pipeline.currentChapter)}
+                  className="gap-1.5"
+                >
+                  重试当前章节
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => handleRecoverPipeline('retry_batch')} className="gap-1.5">
+                  重试当前批次目录
+                </Button>
+              </>
             )}
           </div>
         </div>
@@ -886,10 +1004,23 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
           {pipeline.error && (
             <p className="text-sm text-red-600 dark:text-red-400 mb-3">{pipeline.error}</p>
           )}
-          <Button variant="outline" size="sm" onClick={handleResumePipeline} className="gap-1.5">
-            <Play className="h-3.5 w-3.5" />
-            恢复运行
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="primary" size="sm" onClick={() => handleRecoverPipeline('continue')} className="gap-1.5">
+              <Play className="h-3.5 w-3.5" />
+              继续生成
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleRecoverPipeline('retry_chapter', liveChapter?.chapterNumber || pipeline.currentChapter)}
+              className="gap-1.5"
+            >
+              重试当前章节
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => handleRecoverPipeline('retry_batch')} className="gap-1.5">
+              重试当前批次目录
+            </Button>
+          </div>
         </div>
       )}
 
@@ -923,11 +1054,12 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
                 size="sm"
                 onClick={handleStartPipeline}
                 loading={pipelineStarting}
-                disabled={pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING' || pipeline?.status === 'PAUSED' || !hasBoundModel || maintenanceActive}
+                disabled={pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING' || pipeline?.status === 'PAUSED' || !hasBoundModel || maintenanceActive || Boolean(flowBlockedReason)}
                 className="gap-1.5"
+                title={flowBlockedReason || undefined}
               >
                 <Rocket className="h-4 w-4" />
-                {projectInitializing ? '初始化中' : '开始 AI 生成'}
+                {projectInitializing ? '初始化中' : '开始生成'}
               </Button>
               <Button
                 variant="outline"
@@ -1087,6 +1219,67 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
                 </Card>
               )}
 
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">主流程</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <div className={`rounded-xl border p-4 ${workflowStage === 'BLUEPRINT_CONFIRM' ? 'border-blue-300 bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/20' : 'border-gray-200 dark:border-gray-800'}`}>
+                      <div className="text-xs text-gray-500">步骤 1</div>
+                      <div className="mt-1 font-medium text-gray-900 dark:text-gray-100">蓝图确认</div>
+                      <div className="mt-2 text-xs text-gray-500">{project.blueprintConfirmedAt ? '已确认，可进入故事路线图。' : '编辑并确认 BookBlueprint。'}</div>
+                    </div>
+                    <div className={`rounded-xl border p-4 ${workflowStage === 'ARC_PLAN_CONFIRM' ? 'border-amber-300 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/20' : 'border-gray-200 dark:border-gray-800'}`}>
+                      <div className="text-xs text-gray-500">步骤 2</div>
+                      <div className="mt-1 font-medium text-gray-900 dark:text-gray-100">故事路线图</div>
+                      <div className="mt-2 text-xs text-gray-500">{project.arcPlanConfirmedAt ? '已确认，可开始批次生成。' : '查看 AI 规划的全书发展路线，并做轻量确认。'}</div>
+                    </div>
+                    <div className={`rounded-xl border p-4 ${workflowStage === 'GENERATE' ? 'border-green-300 bg-green-50 dark:border-green-900/50 dark:bg-green-950/20' : 'border-gray-200 dark:border-gray-800'}`}>
+                      <div className="text-xs text-gray-500">步骤 3</div>
+                      <div className="mt-1 font-medium text-gray-900 dark:text-gray-100">开始生成</div>
+                      <div className="mt-2 text-xs text-gray-500">{flowBlockedReason || '主链路已经解锁，可以开始批次章节生成。'}</div>
+                    </div>
+                  </div>
+                  <WorkflowBlueprintCard
+                    key={`bp-${project.updatedAt}-${project.blueprintConfirmedAt || 'pending'}`}
+                    projectId={projectId}
+                    blueprint={project.bookBlueprint}
+                    confirmed={Boolean(project.blueprintConfirmedAt)}
+                    onUpdated={fetchProject}
+                  />
+                  <WorkflowArcPlanCard
+                    key={`arc-${project.updatedAt}-${project.arcPlanConfirmedAt || 'pending'}`}
+                    projectId={projectId}
+                    roadmap={project.storyRoadmap || []}
+                    confirmed={Boolean(project.arcPlanConfirmedAt)}
+                    disabled={!project.blueprintConfirmedAt}
+                    onUpdated={fetchProject}
+                  />
+                  <Card className="border-green-200 bg-green-50/60 dark:border-green-900/40 dark:bg-green-950/20">
+                    <CardContent className="flex flex-col gap-3 p-5 lg:flex-row lg:items-center lg:justify-between">
+                      <div>
+                        <div className="text-sm font-medium text-green-800 dark:text-green-200">3. 开始生成</div>
+                        <div className="mt-1 text-sm text-green-700 dark:text-green-300">
+                          只有当 Blueprint 和 ArcPlan 都确认后，系统才允许生成章节目录和正文。
+                        </div>
+                        {flowBlockedReason && (
+                          <div className="mt-2 text-xs text-green-700/80 dark:text-green-300/80">{flowBlockedReason}</div>
+                        )}
+                      </div>
+                      <Button
+                        variant="primary"
+                        onClick={handleStartPipeline}
+                        loading={pipelineStarting}
+                        disabled={pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING' || pipeline?.status === 'PAUSED' || !hasBoundModel || maintenanceActive || Boolean(flowBlockedReason)}
+                      >
+                        开始生成
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </CardContent>
+              </Card>
+
               {/* Chapter Preview List */}
               <Card>
                 <CardHeader>
@@ -1117,11 +1310,12 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
                         size="sm"
                         onClick={handleStartPipeline}
                         loading={pipelineStarting}
-                        disabled={pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING' || pipeline?.status === 'PAUSED' || !hasBoundModel || maintenanceActive}
+                        disabled={pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING' || pipeline?.status === 'PAUSED' || !hasBoundModel || maintenanceActive || Boolean(flowBlockedReason)}
                         className="mt-4 gap-1.5"
+                        title={flowBlockedReason || undefined}
                       >
                         <Rocket className="h-4 w-4" />
-                        {projectInitializing ? '初始化中' : '开始 AI 生成'}
+                        {projectInitializing ? '初始化中' : '开始生成'}
                       </Button>
                     </div>
                   ) : (
@@ -1354,7 +1548,7 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
                         <div className="mt-1 text-xs leading-5 text-blue-700 dark:text-blue-300">
                           {maintenanceFailed
                             ? (project.maintenanceSummary?.bootstrapError || project.maintenanceSummary?.ragError || '后台初始化任务失败，请检查当前 AI 模型配置后重试。')
-                            : '系统会自动补齐 Book Blueprint、阶段规划、世界状态、故事状态以及 RAG 索引。完成前请勿开始 AI 生成。页面会自动刷新，无需手动刷新。'}
+                            : '系统会自动补齐 Book Blueprint、故事路线、世界状态、故事状态以及 RAG 索引。完成前请勿开始 AI 生成。页面会自动刷新，无需手动刷新。'}
                         </div>
                         {maintenanceFailed && (
                           <div className="mt-3 flex flex-wrap gap-2">
@@ -1405,7 +1599,7 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
                     <div className="grid grid-cols-2 gap-2 text-gray-600 dark:text-gray-400">
                       <div>模型：{project.preflight.hasModel ? '已绑定' : '未绑定'}</div>
                       <div>蓝图：{project.preflight.hasBlueprint ? '已生成' : '未生成'}</div>
-                      <div>阶段规划：{project.preflight.hasArcPlans ? '已生成' : '未生成'}</div>
+                      <div>故事路线：{project.preflight.hasArcPlans ? '已生成' : '未生成'}</div>
                       <div>故事状态：{project.preflight.hasStoryState ? '已初始化' : '未初始化'}</div>
                       <div>世界状态：{project.preflight.hasWorldState ? '已初始化' : '未初始化'}</div>
                       <div>已完成：{project.preflight.completedChapters} 章</div>

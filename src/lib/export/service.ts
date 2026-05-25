@@ -59,6 +59,7 @@ function buildReusableContext(project: NonNullable<ExportProject>): ExportReusab
         platformStrategy: project.bookBlueprint.platformStrategy,
         genreStrategy: project.bookBlueprint.genreStrategy,
         styleStrategy: project.bookBlueprint.styleStrategy,
+        popularFictionProfile: (project.bookBlueprint as unknown as { popularFictionProfile?: unknown }).popularFictionProfile as Record<string, unknown> | null,
         constraints: Array.isArray(project.bookBlueprint.constraints) ? project.bookBlueprint.constraints : [],
         createdAt: project.bookBlueprint.createdAt.toISOString(),
         updatedAt: project.bookBlueprint.updatedAt.toISOString(),

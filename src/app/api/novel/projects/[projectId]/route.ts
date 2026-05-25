@@ -8,6 +8,7 @@ import { buildProjectHealthReport } from '@/lib/engine/project-health'
 import { buildBlueprintConsoleSnapshot } from '@/lib/engine/blueprint-console'
 import { getDefaultAIConfigRecord } from '@/lib/ai/factory'
 import { ensureProjectMaintenanceQueued, getProjectMaintenanceSummary } from '@/lib/engine/auto-maintenance'
+import { buildStoryRoadmap } from '@/lib/engine/story-roadmap'
 
 function buildProjectPreflight(project: {
   aiModelConfig: unknown
@@ -300,6 +301,23 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       },
     })
     const blueprintConsole = await buildBlueprintConsoleSnapshot(id)
+    const storyRoadmap = buildStoryRoadmap(
+      project.arcPlans.map(plan => ({
+        id: plan.id,
+        arcNumber: plan.arcNumber,
+        name: plan.name,
+        stage: plan.stage,
+        description: plan.description,
+        startChapter: plan.startChapter,
+        endChapter: plan.endChapter,
+        goals: plan.goals,
+        keyEvents: plan.keyEvents,
+        popularFictionProfile: (project.bookBlueprint as unknown as { popularFictionProfile?: unknown } | null)?.popularFictionProfile as {
+          emotionEngine?: { primaryEmotion?: string; readerPayoff?: string } | null
+          conflictEngine?: { conflictTypes?: string[]; hookStrategy?: string } | null
+        } | null,
+      }))
+    )
 
     // 返回带计算后字数的项目数据
     return NextResponse.json({
@@ -310,6 +328,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         recentCommits,
         preflight,
         blueprintConsole,
+        storyRoadmap,
         maintenanceSummary,
       }
     })

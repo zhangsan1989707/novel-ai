@@ -17,6 +17,12 @@ interface WriterPromptInput {
   characterProfiles: string
   recentSummaries: string
   targetWordCount: number
+  popularFictionProfile?: {
+    emotionEngine?: { primaryEmotion?: string; readerPayoff?: string } | null
+    cheatAbility?: { name?: string; oneLineRule?: string; limitation?: string; readerFantasy?: string } | null
+    conflictEngine?: { conflictTypes?: string[]; hookStrategy?: string } | null
+    characterTagEngine?: { protagonistTags?: string[]; behaviorProofs?: Array<{ tag: string; requiredScene: string; forbiddenBehavior: string }> } | null
+  } | null
 }
 
 export function buildWriterPrompt(input: WriterPromptInput): string {
@@ -78,6 +84,19 @@ export function buildWriterPrompt(input: WriterPromptInput): string {
     }
   }
 
+  if (input.popularFictionProfile) {
+    parts.push(`\n## 爆款四因子硬要求`)
+    parts.push(`- 本章主情绪：${input.outline.emotionTarget || input.popularFictionProfile.emotionEngine?.primaryEmotion || '爽'}`)
+    parts.push(`- 本章回报：${input.outline.payoffTarget || input.popularFictionProfile.emotionEngine?.readerPayoff || '给读者明确反馈'}`)
+    parts.push(`- 金手指使用：${input.outline.cheatUsage || `${input.popularFictionProfile.cheatAbility?.name || '主角优势'} / ${input.popularFictionProfile.cheatAbility?.oneLineRule || '一句话可解释'}`}`)
+    parts.push(`- 金手指限制：${input.popularFictionProfile.cheatAbility?.limitation || '不要一次性暴露全部能力'}`)
+    parts.push(`- 读者代入点：${input.popularFictionProfile.cheatAbility?.readerFantasy || '让读者觉得给我我也能翻盘'}`)
+    parts.push(`- 冲突重点：${input.outline.conflictTarget || input.popularFictionProfile.conflictEngine?.conflictTypes?.join('、') || '本章必须有明确冲突'}`)
+    parts.push(`- 人设证明：${input.outline.characterTagProof || input.popularFictionProfile.characterTagEngine?.behaviorProofs?.map(item => `${item.tag}:${item.requiredScene}`).join('；') || '通过行为证明主角标签'}`)
+    parts.push(`- 结尾钩子：${input.outline.cliffhanger || input.popularFictionProfile.conflictEngine?.hookStrategy || '本章结尾必须留下新威胁或承诺'}`)
+    parts.push(`- 禁止错误：${input.outline.forbiddenMistakes?.join('；') || '禁止大段设定说明、流水账、关键时刻圣母、复杂说明金手指'}`)
+  }
+
   parts.push(`\n## 写作规范`)
   
   parts.push(`\n### 节奏控制`)
@@ -94,6 +113,7 @@ export function buildWriterPrompt(input: WriterPromptInput): string {
   parts.push(`3. 人物反应要符合性格，有差异化`)
   parts.push(`4. 场景描写要"五感"俱全，调动读者感官`)
   parts.push(`5. 避免与前文重复的表达和情节`)
+  parts.push(`6. 本章必须提供明确情绪价值、明确冲突、明确人设证明和明确章节钩子`)
 
   parts.push(`\n### 叙事视角要求`)
   parts.push(`- 尽量保持第三人称视角一致`)

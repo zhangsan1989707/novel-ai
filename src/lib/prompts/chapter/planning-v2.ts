@@ -16,6 +16,12 @@ interface PlannerPromptInput {
   openPlotlines: { id: string; description: string }[]
   emotionalArc: { chapterNo: number; value: number }[]
   targetWordCount: number
+  popularFictionProfile?: {
+    emotionEngine?: { primaryEmotion?: string; openingBomb?: string; readerPayoff?: string; forbiddenSlowStart?: boolean } | null
+    cheatAbility?: { name?: string; oneLineRule?: string; readerFantasy?: string } | null
+    conflictEngine?: { conflictTypes?: string[]; conflictFrequency?: string; payoffInterval?: string; hookStrategy?: string } | null
+    characterTagEngine?: { protagonistTags?: string[]; behaviorProofs?: Array<{ tag: string; requiredScene: string; forbiddenBehavior: string }> } | null
+  } | null
 }
 
 interface PlannerPromptOutput {
@@ -110,6 +116,22 @@ export function buildPlannerPrompt(input: PlannerPromptInput): string {
     }
   }
 
+  if (input.popularFictionProfile) {
+    parts.push(`\n## 爆款四因子约束`)
+    parts.push(`- 主情绪：${input.popularFictionProfile.emotionEngine?.primaryEmotion || '爽'}`)
+    parts.push(`- 开篇情绪炸弹：${input.popularFictionProfile.emotionEngine?.openingBomb || '第一屏就给读者情绪刺激'}`)
+    parts.push(`- 读者回报：${input.popularFictionProfile.emotionEngine?.readerPayoff || '本章要给读者明确回报'}`)
+    parts.push(`- 金手指：${input.popularFictionProfile.cheatAbility?.name || '主角优势'} / ${input.popularFictionProfile.cheatAbility?.oneLineRule || '一句话就能解释清'} `)
+    parts.push(`- 冲突类型：${input.popularFictionProfile.conflictEngine?.conflictTypes?.join('、') || '羞辱、争夺、危机'}`)
+    parts.push(`- 冲突频率：${input.popularFictionProfile.conflictEngine?.conflictFrequency || '每章必须有明确冲突'}`)
+    parts.push(`- 爽点间隔：${input.popularFictionProfile.conflictEngine?.payoffInterval || '1-3章内必须兑现一次'}`)
+    parts.push(`- 钩子策略：${input.popularFictionProfile.conflictEngine?.hookStrategy || '结尾留下下一章承诺'}`)
+    parts.push(`- 主角标签：${input.popularFictionProfile.characterTagEngine?.protagonistTags?.join('、') || '鲜明标签'}`)
+    if (input.popularFictionProfile.characterTagEngine?.behaviorProofs?.length) {
+      parts.push(`- 行为证明：${input.popularFictionProfile.characterTagEngine.behaviorProofs.map(item => `${item.tag}:${item.requiredScene}`).join('；')}`)
+    }
+  }
+
   parts.push(`\n## 章节结构设计指南`)
   
   parts.push(`\n### 开篇钩子设计（占章节前10%字数）`)
@@ -150,6 +172,13 @@ export function buildPlannerPrompt(input: PlannerPromptInput): string {
   parts.push(`  "chapterTitle": "章节标题（简洁有力，最好包含爆点）",`)
   parts.push(`  "chapterGoal": "本章核心目标（一句话说明这章要完成什么）",`)
   parts.push(`  "mainConflict": "本章主要冲突（是什么在阻碍主角？）",`)
+  parts.push(`  "emotionTarget": "本章主情绪目标",`)
+  parts.push(`  "conflictTarget": "本章冲突目标",`)
+  parts.push(`  "payoffTarget": "本章回报/爽点目标",`)
+  parts.push(`  "cliffhanger": "本章结尾钩子",`)
+  parts.push(`  "cheatUsage": "本章如何使用金手指或主角优势",`)
+  parts.push(`  "characterTagProof": "本章如何证明主角标签",`)
+  parts.push(`  "forbiddenMistakes": ["本章禁止犯的错误"],`)
   parts.push(`  "keyScenes": [`)
   parts.push(`    {`)
   parts.push(`      "scene": "场景描述",`)

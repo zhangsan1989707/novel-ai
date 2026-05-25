@@ -5,6 +5,7 @@ import { AIService } from '@/lib/ai/service'
 import type { AIProvider } from '@/lib/ai/types'
 import { buildValidatorPrompt as buildValidatorPromptV2, type ValidationReport as ValidationReportV2 } from '../prompts/chapter/validating-v2'
 import type { CharacterProfile, PlotlineData } from '../engine/types'
+import type { PopularFictionProfile } from '../engine/popular-fiction'
 
 interface ValidatorInput {
   projectId: number
@@ -19,6 +20,7 @@ interface ValidatorInput {
   chapterGoal?: string
   useEnhancedPrompt?: boolean
   provider?: AIProvider
+  popularFictionProfile?: PopularFictionProfile | null
 }
 
 // 默认使用增强版校验
@@ -57,6 +59,7 @@ export async function validatorAgent(
     openPlotlines: plotlinesStr,
     chapterTitle,
     chapterGoal,
+    popularFictionProfile: input.popularFictionProfile,
   })
 
   // 执行校验
