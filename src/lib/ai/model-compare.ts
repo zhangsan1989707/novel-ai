@@ -258,6 +258,7 @@ export async function quickCompare(
     AIVendor.DEEPSEEK,
     AIVendor.OPENAI,
     AIVendor.ANTHROPIC,
+    AIVendor.MIMO,
   ]
 
   const comparator = new ModelComparator()
@@ -282,7 +283,9 @@ export function getVendorDisplayName(vendor: AIVendor): string {
     [AIVendor.ALIBABA]: '阿里云通义千问',
     [AIVendor.DEEPSEEK]: 'DeepSeek',
     [AIVendor.MINIMAX]: 'MiniMax',
+    [AIVendor.MIMO]: '小米 MiMo',
     [AIVendor.VOLCENGINE]: '火山引擎',
+    [AIVendor.ZHIPU]: '智谱 AI (GLM)',
   }
   return names[vendor] || vendor
 }

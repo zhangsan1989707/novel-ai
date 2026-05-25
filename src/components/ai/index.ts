@@ -5,6 +5,9 @@ export { OutlineGenerator } from './OutlineGenerator'
 export { SuggestionButtons } from './SuggestionButtons'
 export { PlotAnalyzer } from './PlotAnalyzer'
 export { BookAnalysisPanel } from './BookAnalysisPanel'
+export { BookAnalysisDashboard } from './BookAnalysisDashboard'
+export { AnalysisTaskPanel } from './AnalysisTaskPanel'
+export { AnalysisWorkbench } from './AnalysisWorkbench'
 // 续写功能
 export { ContinuationPanel } from './ContinuationPanel'
 export { ContinuationResults } from './ContinuationResults'
@@ -12,6 +15,7 @@ export { ContinuationResults } from './ContinuationResults'
 export { PlotlineTracker } from './PlotlineTracker'
 // P1
 export { CharacterRelationshipGraph } from './CharacterRelationshipGraph'
+export { CharacterPanel } from './CharacterPanel'
 export { CharacterNode } from './CharacterNode'
 export { RelationshipEdge } from './RelationshipEdge'
 export { RealtimeAnalysisPanel } from './RealtimeAnalysisPanel'
@@ -29,7 +33,13 @@ export { CoverGenerator } from './CoverGenerator'
 export { DeslopPanel } from './DeslopPanel'
 // Short Story
 export { ShortStoryPanel } from './ShortStoryPanel'
-// Agent Manager
-export { AgentManager } from './AgentManager'
-// Hooks
-export { WorkflowHooksPanel } from './WorkflowHooksPanel'
+// Story Steering
+export { StorySteeringPanel } from './StorySteeringPanel'
+// Toolbox
+export { Toolbox } from './Toolbox'
+// Export
+export { ExportPanel } from './ExportPanel'
+// Anti Detect
+export { AntiDetectPanel } from './AntiDetectPanel'
+// Chapter Quality
+export { ChapterQualityPanel } from './ChapterQualityPanel'

@@ -4,19 +4,6 @@ import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/Badge'
 import { Card } from '@/components/ui/Card'
-import type { CharacterProfile } from '@/lib/engine/types'
-
-interface PlotlineInfo {
-  id: string
-  description: string
-  plantedAt: number
-  status: string
-}
-
-interface ChapterEmotion {
-  chapterNo: number
-  emotion: string
-}
 
 interface DimensionCorrelationViewProps {
   projectId: number

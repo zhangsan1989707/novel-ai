@@ -307,7 +307,7 @@ describe('Validation Report Schema', () => {
       description: z.string(),
       severity: z.enum(['error', 'warning', 'info']),
     })).optional(),
-    characterUpdates: z.record(z.string(), z.record(z.unknown())).optional(),
+    characterUpdates: z.record(z.string(), z.record(z.string(), z.unknown())).optional(),
     newPlotlines: z.array(z.string()).optional(),
     resolvedPlotlines: z.array(z.string()).optional(),
   })

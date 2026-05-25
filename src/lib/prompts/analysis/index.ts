@@ -2,6 +2,7 @@
  * 拆书分析提示词
  */
 import { AnalysisDimension } from '@/types'
+import { ANALYSIS_DIMENSION_LABELS, ANALYSIS_FORMAT_TEMPLATES } from '@/lib/analysis/config'
 
 interface PlotAnalysisInput {
   projectTitle: string
@@ -10,6 +11,7 @@ interface PlotAnalysisInput {
   powerSystem?: string
   protagonistProfile?: string
   antagonistSetting?: string
+  memoryContext?: string
   previousChapters?: { chapterNumber: number; title: string; content: string }[]
 }
 
@@ -60,6 +62,11 @@ export function buildPlotAnalysisPrompt(
     parts.push(context.antagonistSetting)
   }
 
+  if (context.memoryContext) {
+    parts.push(`\n【记忆编排上下文】`)
+    parts.push(context.memoryContext)
+  }
+
   // 【待分析内容】
   if (context.previousChapters && context.previousChapters.length > 0) {
     parts.push(`\n【待分析内容】`)
@@ -73,94 +80,13 @@ export function buildPlotAnalysisPrompt(
   }
 
   // 【输出要求 - 每个维度独立输出】
-  const dimensionLabels: Record<AnalysisDimension, string> = {
-    [AnalysisDimension.CHARACTER_RELATION]: '人物关系分析',
-    [AnalysisDimension.PLOT_LINE]: '剧情线梳理',
-    [AnalysisDimension.FORESHADOWING]: '伏笔悬念标记',
-    [AnalysisDimension.CHAPTER_STRUCTURE]: '章节结构分析',
-    [AnalysisDimension.WORLD_SETTING]: '世界观设定提取',
-  }
-
-  // 各维度格式模板
-  const formatTemplates: Record<AnalysisDimension, string> = {
-    [AnalysisDimension.CHARACTER_RELATION]: `{
-  "characters": [
-    {
-      "name": "角色名",
-      "role": "protagonist|antagonist|supporting|minor",
-      "description": "角色描述（50-100字）",
-      "relationships": [
-        { "target": "相关角色", "type": "关系类型如：兄弟/敌对/爱慕", "description": "关系描述" }
-      ]
-    }
-  ],
-  "summary": "人物关系整体概述（100-200字）"
-}`,
-    [AnalysisDimension.PLOT_LINE]: `{
-  "mainPlot": [
-    { "title": "主线标题", "keyEvents": ["关键事件1", "关键事件2"], "emotionalArc": "情感弧线描述" }
-  ],
-  "subPlots": [
-    { "title": "副线标题", "keyEvents": ["关键事件"], "relationship": "与主线关联" }
-  ],
-  "timeline": [
-    { "event": "事件", "chapter": 章节号, "significance": "重要程度:major|minor" }
-  ]
-}`,
-    [AnalysisDimension.FORESHADOWING]: `{
-  "items": [
-    {
-      "setup": "伏笔内容（首次出现）",
-      "description": "伏笔描述（30-50字）",
-      "payoff": "回收位置（章节号或待回收）",
-      "chapter": 章节号,
-      "importance": "major|minor",
-      "type": "plot|character|world|prophecy"
-    }
-  ],
-  "unresolved": ["未回收伏笔列表"]
-}`,
-    [AnalysisDimension.CHAPTER_STRUCTURE]: `{
-  "chapters": [
-    {
-      "number": 1,
-      "title": "章节标题",
-      "function": "setup|development|climax|resolution|transition",
-      "keyEvents": ["关键事件"],
-      "wordCount": 字数,
-      "emotionalBeat": "本章情感基调"
-    }
-  ],
-  "arcAnalysis": "整体结构分析（200-300字）",
-  "pacingAssessment": "节奏评估"
-}`,
-    [AnalysisDimension.WORLD_SETTING]: `{
-  "settings": [
-    {
-      "name": "设定名称",
-      "description": "详细描述（100-200字）",
-      "rules": ["规则1", "规则2"],
-      "firstAppear": "首次出现章节"
-    }
-  ],
-  "powerSystem": {
-    "name": "力量体系名称",
-    "levels": ["等级1", "等级2"],
-    "rules": ["修炼规则1", "规则2"]
-  },
-  "locations": [
-    { "name": "地名", "description": "描述", "significance": "重要程度" }
-  ]
-}`,
-  }
-
   parts.push(`\n【输出要求】`)
   parts.push(`请对以上内容进行深度分析，按指定维度输出结构化结果。`)
 
   for (const dim of dimensions) {
-    parts.push(`\n【${dimensionLabels[dim]}】`)
+    parts.push(`\n【${ANALYSIS_DIMENSION_LABELS[dim]}】`)
     parts.push('字段说明：')
-    parts.push(formatTemplates[dim])
+    parts.push(ANALYSIS_FORMAT_TEMPLATES[dim])
   }
 
   return parts.join('\n')

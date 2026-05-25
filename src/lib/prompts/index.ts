@@ -68,6 +68,10 @@ export {
   buildIdeaGenerationPrompt,
   type IdeaGenerationInput,
 } from './novel/idea'
+export {
+  buildTitleGenerationPrompt,
+  type TitleGenerationInput,
+} from './novel/title'
 
 // ============================================
 // 分析提示词

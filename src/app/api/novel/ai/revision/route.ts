@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { getAIProvider, buildPromptContext, buildRevisionPrompt, createProviderFromDefaultConfig } from '@/lib/ai'
+import { buildChapterMemoryPack } from '@/lib/memory'
 import { countChineseWords } from '@/lib/utils'
 import { AIVendor } from '@/types'
 import { logError } from '@/lib/logger'
@@ -95,12 +96,24 @@ export async function POST(request: NextRequest) {
         })
       : []
 
+    const memoryPack = await buildChapterMemoryPack(projectId, chapter.chapterNumber, {
+      recentChapterCount: Math.max(3, contextChapterCount),
+      recentVolumeCount: 2,
+      characterLimit: 10,
+      plotlineLimit: 10,
+      researchLimit: 3,
+    })
     // 构建提示词上下文
     const context = await buildPromptContext(
       project,
       chapter,
       previousChapters.map(toChapterDTO),
-      { useContext, contextChapterCount, includeStageOutline: true }
+      {
+        useContext,
+        contextChapterCount,
+        includeStageOutline: true,
+        memoryContext: memoryPack.writerContext,
+      }
     )
 
     // 构建改稿提示词

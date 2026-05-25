@@ -1,7 +1,7 @@
 'use client'
 
-import { Badge } from '@/components/ui'
 import { Sparkles, BookOpen, PenTool, MessageSquare, Compass, Target } from 'lucide-react'
+import { formatDisplayDateTime } from '@/lib/helpers'
 
 interface StylePreviewProps {
   styleFeatures?: string | null
@@ -56,7 +56,7 @@ export function StylePreview({
     <div className="space-y-4">
       {trainedAt && (
         <div className="text-xs text-gray-500 text-right">
-          训练时间: {new Date(trainedAt).toLocaleString()}
+          训练时间: {formatDisplayDateTime(trainedAt)}
         </div>
       )}
 

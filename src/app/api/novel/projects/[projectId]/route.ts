@@ -1,7 +1,53 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { PlotlineStatus } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { logError } from '@/lib/logger'
+import { getRAGDocumentCount, getRagRuntimeStatus } from '@/lib/engine/rag-vector'
+import { buildProjectHealthReport } from '@/lib/engine/project-health'
+import { buildBlueprintConsoleSnapshot } from '@/lib/engine/blueprint-console'
+import { getDefaultAIConfigRecord } from '@/lib/ai/factory'
+import { ensureProjectMaintenanceQueued, getProjectMaintenanceSummary } from '@/lib/engine/auto-maintenance'
+
+function buildProjectPreflight(project: {
+  aiModelConfig: unknown
+  bookBlueprint: unknown
+  arcPlans: Array<unknown>
+  storyState: unknown
+  worldState: unknown
+  chapters: Array<{ status: string; wordCount: number; chapterNumber: number }>
+  recentCommits: Array<{ projectionStatus: unknown; status: string }>
+  plotlines: Array<{ status: string; plantedAt: number; plannedAt: number | null; resolvedAt: number | null }>
+  villains: Array<{
+    isFinalBoss: boolean
+    lifecycle?: string | null
+    tier?: string | null
+    defeatedAt?: number | null
+    introducedAt?: number | null
+  }>
+  chapterWordCount: number
+  chapterSummaryCount: number
+  volumeSummaryCount: number
+  bookSummaryCount: number
+  characterCount: number
+  plotlineCount: number
+  openPlotlineCount: number
+  resolvedPlotlineCount: number
+  researchRefCount: number
+  ragDocumentCount: number
+  automationState?: {
+    bootstrapQueued?: boolean
+    ragQueued?: boolean
+  }
+  ragRuntime?: {
+    inFlight: boolean
+    cooldownRemainingMs: number
+    embeddingFallbackActive: boolean
+    lastError?: string | null
+  }
+}) {
+  return buildProjectHealthReport(project)
+}
 
 // ============================================
 // Schema 验证
@@ -13,7 +59,6 @@ const updateProjectSchema = z.object({
   genre: z.string().optional(),
   writingStyle: z.string().optional(),
   targetWordCount: z.number().int().positive().optional(),
-  currentWordCount: z.number().int().min(0).optional(),
   chapterWordCount: z.number().int().positive().optional(),
   outline: z.string().optional(),
   outlineStages: z.object({
@@ -33,6 +78,13 @@ const updateProjectSchema = z.object({
   totalVolumes: z.number().int().min(1).max(10).optional(),
   status: z.enum(['DRAFT', 'WRITING', 'COMPLETED', 'PAUSED']).optional(),
   aiModelId: z.number().int().positive().nullable().optional(),
+  pace: z.number().min(0).max(1).optional(),
+  darkness: z.number().min(0).max(1).optional(),
+  humor: z.number().min(0).max(1).optional(),
+  romance: z.number().min(0).max(1).optional(),
+  powerGrowth: z.number().min(0).max(1).optional(),
+  conflictIntensity: z.number().min(0).max(1).optional(),
+  mysteryDensity: z.number().min(0).max(1).optional(),
 })
 
 // ============================================
@@ -60,10 +112,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       )
     }
 
-    const project = await prisma.novelProject.findUnique({
+    let project = await prisma.novelProject.findUnique({
       where: { id },
       include: {
         aiModelConfig: true,
+        bookBlueprint: true,
+        storyState: true,
+        worldState: true,
         chapters: {
           orderBy: { chapterNumber: 'asc' },
           select: {
@@ -73,10 +128,124 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             wordCount: true,
             status: true,
             sortOrder: true,
+            summary: true,
+            content: true,
           },
+        },
+        plotlines: {
+          orderBy: { plantedAt: 'asc' },
+          select: {
+            status: true,
+            plantedAt: true,
+            plannedAt: true,
+            resolvedAt: true,
+          },
+        },
+        villains: {
+          select: {
+            isFinalBoss: true,
+            lifecycle: true,
+            tier: true,
+            defeatedAt: true,
+            introducedAt: true,
+          },
+        },
+        arcPlans: {
+          orderBy: { arcNumber: 'asc' },
         },
       },
     })
+
+    if (project && !project.aiModelId) {
+      const defaultConfig = await getDefaultAIConfigRecord()
+      if (defaultConfig) {
+        await prisma.novelProject.update({
+          where: { id },
+          data: { aiModelId: defaultConfig.id },
+        })
+        project = await prisma.novelProject.findUnique({
+          where: { id },
+          include: {
+            aiModelConfig: true,
+            bookBlueprint: true,
+            storyState: true,
+            worldState: true,
+            chapters: {
+              orderBy: { chapterNumber: 'asc' },
+              select: {
+                id: true,
+                chapterNumber: true,
+                title: true,
+                wordCount: true,
+                status: true,
+                sortOrder: true,
+                summary: true,
+                content: true,
+              },
+            },
+            plotlines: {
+              orderBy: { plantedAt: 'asc' },
+              select: {
+                status: true,
+                plantedAt: true,
+                plannedAt: true,
+                resolvedAt: true,
+              },
+            },
+            villains: {
+              select: {
+                isFinalBoss: true,
+                lifecycle: true,
+                tier: true,
+                defeatedAt: true,
+                introducedAt: true,
+              },
+            },
+            arcPlans: {
+              orderBy: { arcNumber: 'asc' },
+            },
+          },
+        })
+      }
+    }
+
+    const recentCommits = await prisma.chapterCommit.findMany({
+      where: { projectId: id },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+      select: {
+        id: true,
+        chapterNo: true,
+        source: true,
+        status: true,
+        projectionStatus: true,
+        replayCount: true,
+        appliedAt: true,
+        createdAt: true,
+      },
+    })
+
+    const [
+      chapterSummaryCount,
+      volumeSummaryCount,
+      bookSummaryCount,
+      characterCount,
+      plotlineCount,
+      openPlotlineCount,
+      resolvedPlotlineCount,
+      researchRefCount,
+      ragDocumentCount,
+    ] = await Promise.all([
+      prisma.chapterSummary.count({ where: { projectId: id } }),
+      prisma.volumeSummary.count({ where: { projectId: id } }),
+      prisma.bookSummary.count({ where: { projectId: id } }),
+      prisma.character.count({ where: { projectId: id } }),
+      prisma.plotline.count({ where: { projectId: id } }),
+      prisma.plotline.count({ where: { projectId: id, status: PlotlineStatus.OPEN } }),
+      prisma.plotline.count({ where: { projectId: id, status: PlotlineStatus.RESOLVED } }),
+      prisma.researchRef.count({ where: { projectId: id } }),
+      getRAGDocumentCount(id),
+    ])
 
     if (!project) {
       return NextResponse.json(
@@ -89,6 +258,48 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const totalWordCount = project.chapters.reduce((sum, chapter) => {
       return sum + (chapter.wordCount || 0)
     }, 0)
+    await ensureProjectMaintenanceQueued(id, {
+      hasModel: Boolean(project.aiModelConfig),
+      hasBlueprint: Boolean(project.bookBlueprint),
+      hasArcPlans: project.arcPlans.length > 0,
+      hasStoryState: Boolean(project.storyState),
+      hasWorldState: Boolean(project.worldState),
+      ragDocumentCount,
+      completedChapters: project.chapters.filter(chapter => chapter.status === 'COMPLETED').length,
+      chapterSummaryCount,
+      volumeSummaryCount,
+      bookSummaryCount,
+    })
+
+    const maintenanceSummary = await getProjectMaintenanceSummary(id)
+
+    const preflight = buildProjectPreflight({
+      aiModelConfig: project.aiModelConfig,
+      bookBlueprint: project.bookBlueprint,
+      storyState: project.storyState,
+      arcPlans: project.arcPlans,
+      chapters: project.chapters,
+      recentCommits,
+      chapterWordCount: project.chapterWordCount,
+      chapterSummaryCount,
+      volumeSummaryCount,
+      bookSummaryCount,
+      characterCount,
+      plotlineCount,
+      openPlotlineCount,
+      resolvedPlotlineCount,
+      researchRefCount,
+      ragDocumentCount,
+      plotlines: project.plotlines,
+      villains: project.villains,
+      worldState: project.worldState,
+      ragRuntime: getRagRuntimeStatus(id),
+      automationState: {
+        bootstrapQueued: maintenanceSummary.bootstrapQueued || maintenanceSummary.bootstrapRunning,
+        ragQueued: maintenanceSummary.ragQueued || maintenanceSummary.ragRunning,
+      },
+    })
+    const blueprintConsole = await buildBlueprintConsoleSnapshot(id)
 
     // 返回带计算后字数的项目数据
     return NextResponse.json({
@@ -96,6 +307,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       data: {
         ...project,
         currentWordCount: totalWordCount, // 实时计算替换数据库字段
+        recentCommits,
+        preflight,
+        blueprintConsole,
+        maintenanceSummary,
       }
     })
   } catch (error) {
@@ -149,6 +364,14 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       { status: 500 }
     )
   }
+}
+
+/**
+ * PATCH /api/novel/projects/{projectId}
+ * 兼容部分前端调用
+ */
+export async function PATCH(request: NextRequest, context: RouteParams) {
+  return PUT(request, context)
 }
 
 /**

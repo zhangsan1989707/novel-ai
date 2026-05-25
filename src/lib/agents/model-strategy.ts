@@ -18,11 +18,13 @@ const modelTierMap: Record<ModelTier, ModelConfig[]> = {
   [ModelTier.SONNET]: [
     { vendor: AIVendor.ANTHROPIC, modelId: 'claude-sonnet-4', description: '常规写作', costPerMillionInput: 3, costPerMillionOutput: 15 },
     { vendor: AIVendor.DEEPSEEK, modelId: 'deepseek-chat', description: '经济写作', costPerMillionInput: 0.27, costPerMillionOutput: 1.1 },
+    { vendor: AIVendor.MIMO, modelId: 'mimo-v2.5-pro', description: '长文写作', costPerMillionInput: 1.0, costPerMillionOutput: 2.0 },
     { vendor: AIVendor.OPENAI, modelId: 'gpt-4o-mini', description: '快速写作', costPerMillionInput: 0.15, costPerMillionOutput: 0.6 },
   ],
   [ModelTier.HAIKU]: [
     { vendor: AIVendor.ANTHROPIC, modelId: 'claude-haiku-4', description: '轻量检查', costPerMillionInput: 0.8, costPerMillionOutput: 4 },
     { vendor: AIVendor.DEEPSEEK, modelId: 'deepseek-chat', description: '经济检查', costPerMillionInput: 0.27, costPerMillionOutput: 1.1 },
+    { vendor: AIVendor.MIMO, modelId: 'mimo-v2.5-pro', description: '通用检查', costPerMillionInput: 1.0, costPerMillionOutput: 2.0 },
   ],
 }
 

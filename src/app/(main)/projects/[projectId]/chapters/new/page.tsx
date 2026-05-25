@@ -1,15 +1,17 @@
-'use client'
-
-import { use } from 'react'
+import { notFound } from 'next/navigation'
 import { ChapterEditor } from '@/components/chapter'
 
-interface PageProps {
+export default async function NewChapterPage({
+  params,
+}: {
   params: Promise<{ projectId: string }>
-}
+}) {
+  const resolvedParams = await params
+  const projectId = Number(resolvedParams.projectId)
 
-export default function NewChapterPage({ params }: PageProps) {
-  const { projectId } = use(params)
-  const projectIdNum = parseInt(projectId)
+  if (!Number.isFinite(projectId)) {
+    notFound()
+  }
 
-  return <ChapterEditor projectId={projectIdNum} />
+  return <ChapterEditor projectId={projectId} />
 }

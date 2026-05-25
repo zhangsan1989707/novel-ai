@@ -3,9 +3,9 @@
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
-import { Progress } from '@/components/ui/Progress'
 import { Badge } from '@/components/ui/Badge'
 import { AlertCircle, CheckCircle, AlertTriangle } from 'lucide-react'
+import { countChineseWords } from '@/lib/utils'
 
 interface StyleConsistencyResult {
   overall: number
@@ -51,6 +51,7 @@ export function StyleConsistencyPanel({
   const [result, setResult] = useState<StyleConsistencyResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [content, setContent] = useState('')
+  const displayWordCount = countChineseWords(content)
 
   const handleCheck = async () => {
     if (!content.trim() || content.length < 100) return
@@ -87,12 +88,12 @@ export function StyleConsistencyPanel({
         />
         <div className="flex items-center justify-between mt-2">
           <span className="text-xs text-muted-foreground">
-            字数: {content.length}
+            字数: {displayWordCount}
           </span>
           <Button
             size="sm"
             onClick={handleCheck}
-            disabled={loading || content.length < 100}
+            disabled={loading || displayWordCount < 100}
           >
             {loading ? '检测中...' : '检测文风一致性'}
           </Button>

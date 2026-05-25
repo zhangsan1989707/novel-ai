@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { AnalysisDimension, AnalysisType } from '@/types'
 import { logError } from '@/lib/logger'
+import { buildChapterMemoryPack, buildMemorySnapshotPack } from '@/lib/memory'
 
 // ============================================
 // Schema 验证
@@ -133,6 +134,15 @@ export async function GET(
         }
       }
 
+      const endingChapterNumber = lastChapter ? lastChapter.chapterNumber + 1 : 1
+      const memoryPack = await buildChapterMemoryPack(projectIdNum, endingChapterNumber, {
+        recentChapterCount: 5,
+        recentVolumeCount: 3,
+        characterLimit: 10,
+        plotlineLimit: 10,
+        researchLimit: 3,
+      })
+
       // 获取全书摘要
       const bookSummary = await prisma.bookSummary.findFirst({
         where: { projectId: projectIdNum },
@@ -149,6 +159,13 @@ export async function GET(
           bookSummary: bookSummary?.summary || null,
           totalChapters: chapters.length,
           completedChapters: completedChapters.length,
+          memoryPack: buildMemorySnapshotPack(memoryPack),
+          contexts: {
+            planner: memoryPack.plannerContext,
+            writer: memoryPack.writerContext,
+            validator: memoryPack.validatorContext,
+            summarizer: memoryPack.summarizerContext,
+          },
         },
       })
     }
@@ -165,6 +182,14 @@ export async function GET(
       })
       recentChapters.sort((a, b) => a.chapterNo - b.chapterNo)
 
+      const memoryPack = await buildChapterMemoryPack(projectIdNum, nextChapterNumber, {
+        recentChapterCount: 3,
+        recentVolumeCount: 3,
+        characterLimit: 10,
+        plotlineLimit: 10,
+        researchLimit: 3,
+      })
+
       return NextResponse.json({
         success: true,
         data: {
@@ -177,6 +202,13 @@ export async function GET(
             summary: s.summary,
           })),
           totalCompletedChapters: completedChapters.length,
+          memoryPack: buildMemorySnapshotPack(memoryPack),
+          contexts: {
+            planner: memoryPack.plannerContext,
+            writer: memoryPack.writerContext,
+            validator: memoryPack.validatorContext,
+            summarizer: memoryPack.summarizerContext,
+          },
         },
       })
     }
@@ -193,6 +225,13 @@ export async function GET(
         where: { projectId: projectIdNum },
         orderBy: { volumeNumber: 'asc' },
       })
+      const memoryPack = await buildChapterMemoryPack(projectIdNum, lastChapter?.chapterNumber || 1, {
+        recentChapterCount: 10,
+        recentVolumeCount: 4,
+        characterLimit: 12,
+        plotlineLimit: 12,
+        researchLimit: 5,
+      })
 
       return NextResponse.json({
         success: true,
@@ -204,6 +243,13 @@ export async function GET(
             summary: v.summary,
           })),
           totalChapters: chapters.length,
+          memoryPack: buildMemorySnapshotPack(memoryPack),
+          contexts: {
+            planner: memoryPack.plannerContext,
+            writer: memoryPack.writerContext,
+            validator: memoryPack.validatorContext,
+            summarizer: memoryPack.summarizerContext,
+          },
         },
       })
     }

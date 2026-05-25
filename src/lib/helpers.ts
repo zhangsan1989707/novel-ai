@@ -225,6 +225,44 @@ export function formatDate(date: Date | string, format: string = 'YYYY-MM-DD'): 
     .replace('ss', seconds)
 }
 
+const DISPLAY_TIME_ZONE = 'Asia/Shanghai'
+
+const displayDateFormatter = new Intl.DateTimeFormat('zh-CN', {
+  timeZone: DISPLAY_TIME_ZONE,
+  year: 'numeric',
+  month: 'numeric',
+  day: 'numeric',
+})
+
+const displayDateTimeFormatter = new Intl.DateTimeFormat('zh-CN', {
+  timeZone: DISPLAY_TIME_ZONE,
+  year: 'numeric',
+  month: 'numeric',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: false,
+})
+
+/**
+ * 格式化稳定日期显示
+ * 固定使用 zh-CN + Asia/Shanghai，避免 SSR/客户端本地化差异导致 hydration mismatch。
+ */
+export function formatDisplayDate(date: Date | string): string {
+  const d = typeof date === 'string' ? new Date(date) : date
+  return displayDateFormatter.format(d)
+}
+
+/**
+ * 格式化稳定日期时间显示
+ * 固定使用 zh-CN + Asia/Shanghai，避免 SSR/客户端本地化差异导致 hydration mismatch。
+ */
+export function formatDisplayDateTime(date: Date | string): string {
+  const d = typeof date === 'string' ? new Date(date) : date
+  return displayDateTimeFormatter.format(d)
+}
+
 /**
  * 计算百分比
  */

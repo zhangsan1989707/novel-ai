@@ -3,13 +3,19 @@ import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { logError } from '@/lib/logger'
 import { getCurrentUserId } from '@/lib/auth'
+import { createProviderFromConfigId, createProviderFromDefaultConfig, getDefaultAIConfigRecord } from '@/lib/ai/factory'
+import { queueProjectBootstrap } from '@/lib/engine/auto-maintenance'
+import { buildFallbackNovelTitle, isLikelyNovelTitle, normalizeNovelTitle } from '@/lib/novel-title'
 
 // ============================================
 // Schema 验证
 // ============================================
 
+const PLATFORM_ENUM = z.enum(['QIDIAN', 'FANQIE', 'FEILU', 'JINJIANG', 'QIMAO'])
+const LENGTH_TYPE_ENUM = z.enum(['SHORT', 'MEDIUM', 'LONG', 'ULTRA_LONG'])
+
 const createProjectSchema = z.object({
-  title: z.string().min(1, '标题不能为空').max(200),
+  title: z.string().max(200).optional(),
   description: z.string().optional(),
   genre: z.string().optional(),
   writingStyle: z.string().optional(),
@@ -33,9 +39,71 @@ const createProjectSchema = z.object({
   totalVolumes: z.coerce.number().int().min(1).max(10).default(4),
   aiModelId: z.coerce.number().int().positive().optional(),
   targetAudience: z.enum(['MALE', 'FEMALE']).optional(),
+  platform: PLATFORM_ENUM.optional(),
+  lengthType: LENGTH_TYPE_ENUM.optional(),
+  corePitch: z.string().optional(),
 })
 
-const updateProjectSchema = createProjectSchema.partial()
+async function generateNovelTitle(input: {
+  corePitch?: string
+  description?: string
+  genre?: string
+  writingStyle?: string
+  platform?: string
+  lengthType?: string
+  aiModelId?: number
+}): Promise<string | null> {
+  const pitch = input.corePitch || input.description || '暂无'
+  const sourceText = input.corePitch || input.description || ''
+  const textPrompt = `请根据一句话卖点生成一个中文小说标题，只输出标题，不要解释。
+
+卖点：${pitch}`
+
+  try {
+    const provider = input.aiModelId
+      ? await createProviderFromConfigId(input.aiModelId)
+      : await createProviderFromDefaultConfig()
+
+    if (!provider) return null
+
+    const attempts = [
+      {
+        prompt: textPrompt,
+        params: {
+          temperature: 0.2,
+          maxTokens: 192,
+          timeoutMs: 20000,
+        },
+      },
+      {
+        prompt: `请直接给出最适合这个卖点的中文小说标题，只输出标题：${pitch}`,
+        params: {
+          temperature: 0.2,
+          maxTokens: 96,
+          timeoutMs: 20000,
+        },
+      },
+    ] as const
+
+    for (const attempt of attempts) {
+      try {
+        const result = await provider.generate(attempt.prompt, attempt.params)
+        if (!result.content?.trim()) continue
+
+        const title = normalizeNovelTitle(result.content)
+        if (isLikelyNovelTitle(title, sourceText)) return title
+      } catch (error) {
+        logError(error instanceof Error ? error : new Error(String(error)), {
+          type: 'generate_project_title_attempt',
+        })
+      }
+    }
+  } catch (error) {
+    logError(error instanceof Error ? error : new Error(String(error)), { type: 'generate_project_title' })
+  }
+
+  return null
+}
 
 // ============================================
 // API Handlers
@@ -151,27 +219,56 @@ export async function POST(request: NextRequest) {
 
     let creatorId = getCurrentUserId()
 
-    // 确保用户存在
-    const user = await prisma.user.findUnique({ where: { id: creatorId } })
-    if (!user) {
-      const newUser = await prisma.user.create({
-        data: {
-          email: 'dev@example.com',
-          name: '开发者',
-          password: 'hashed_password_placeholder',
-        },
-      })
-      creatorId = newUser.id
+    // 确保用户存在：优先使用当前 ID，否则回退到开发用户（按邮箱查找或创建）
+    const userById = await prisma.user.findUnique({ where: { id: creatorId } })
+    if (!userById) {
+      const devEmail = 'dev@example.com'
+      let devUser = await prisma.user.findUnique({ where: { email: devEmail } })
+      if (!devUser) {
+        devUser = await prisma.user.create({
+          data: {
+            email: devEmail,
+            name: '开发者',
+            password: 'hashed_password_placeholder',
+          },
+        })
+      }
+      creatorId = devUser.id
     }
+
+  const title = validatedData.title?.trim()
+      || await generateNovelTitle({
+        corePitch: validatedData.corePitch,
+        description: validatedData.description,
+        genre: validatedData.genre,
+        writingStyle: validatedData.writingStyle,
+        platform: validatedData.platform,
+        lengthType: validatedData.lengthType,
+        aiModelId: validatedData.aiModelId,
+      })
+      || buildFallbackNovelTitle({
+        corePitch: validatedData.corePitch,
+        description: validatedData.description,
+        genre: validatedData.genre,
+      })
+
+    const aiModelId = validatedData.aiModelId ?? (await getDefaultAIConfigRecord())?.id
 
     const project = await prisma.novelProject.create({
       data: {
         ...validatedData,
+        aiModelId,
+        title,
         creatorId,
       },
       include: {
         aiModelConfig: true,
       },
+    })
+
+    await queueProjectBootstrap(project.id, {
+      source: 'project_create',
+      title: project.title,
     })
 
     return NextResponse.json({ success: true, data: project }, { status: 201 })

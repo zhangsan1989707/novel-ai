@@ -1,6 +1,3 @@
-// This is your Prisma schema file
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,93 +7,41 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ============================================
-// 枚举类型
-// ============================================
-
-enum ProjectStatus {
-  DRAFT       // 草稿
-  WRITING     // 写作中
-  COMPLETED   // 已完成
-  PAUSED      // 暂停
-}
-
-enum ChapterStatus {
-  DRAFT
-  GENERATING
-  COMPLETED
-  REVIEWING
-}
-
-enum WriterType {
-  REAL_AUTHOR  // 真实作者风格
-  CUSTOM       // 自定义风格
-}
-
-enum TrainingStatus {
-  UNTRAINED  // 未训练
-  TRAINING   // 训练中
-  TRAINED    // 已训练
-  FAILED     // 失败
-}
-
-enum DocumentStatus {
-  PENDING    // 待处理
-  PROCESSING // 处理中
-  COMPLETED  // 已完成
-  FAILED     // 失败
-}
-
-enum AIVendor {
-  OPENAI     // OpenAI (GPT系列)
-  ANTHROPIC  // Anthropic (Claude系列)
-  ALIBABA    // 阿里云 (通义千问)
-  DEEPSEEK   // DeepSeek
-  MINIMAX    // MiniMax
-  VOLCENGINE // 火山引擎 (字节跳动)
-}
-
-// ============================================
-// 数据模型
-// ============================================
-
 model User {
-  id            Int             @id @default(autoincrement())
-  email         String          @unique
-  name          String?
-  password      String?
-  emailVerified DateTime?
-  image         String?
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
-
-  accounts      Account[]
-  sessions      Session[]
-  projects      NovelProject[]
-  virtualWriters VirtualWriter[]
-  publicCharacters Character[]   @relation("CharacterCreator")
-  quota         UserQuota?
-  aiUsages      AIUsage[]
-  notifications Notification[]
+  id               Int             @id @default(autoincrement())
+  email            String          @unique
+  name             String?
+  password         String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  emailVerified    DateTime?
+  image            String?
+  accounts         Account[]
+  aiUsages         AIUsage[]
+  publicCharacters Character[]     @relation("CharacterCreator")
+  notifications    Notification[]
+  projects         NovelProject[]
+  sessions         Session[]
+  quota            UserQuota?
+  virtualWriters   VirtualWriter[]
 
   @@map("users")
 }
 
 model Account {
-  id                Int      @id @default(autoincrement())
+  id                Int     @id @default(autoincrement())
   userId            Int
   type              String
   provider          String
   providerAccountId String
-  refresh_token     String?  @db.Text
-  access_token      String?  @db.Text
+  refresh_token     String?
+  access_token      String?
   expires_at        Int?
   token_type        String?
   scope             String?
-  id_token          String?  @db.Text
+  id_token          String?
   session_state     String?
-
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
   @@map("accounts")
@@ -122,86 +67,93 @@ model VerificationToken {
 }
 
 model AIModelConfig {
-  id            Int             @id @default(autoincrement())
-  name          String          // 配置名称，如 "GPT-4o"
-  vendor        AIVendor
-  modelId       String          // 实际模型 ID
-  apiKey        String?         // API Key（加密存储）
-  apiEndpoint   String?         // 自定义端点
-  isDefault     Boolean         @default(false)
-  sortOrder     Int             @default(0)
-
-  projects      NovelProject[]
-
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  id                   Int            @id @default(autoincrement())
+  name                 String
+  vendor               AIVendor
+  modelId              String
+  apiKey               String?
+  apiEndpoint          String?
+  isDefault            Boolean        @default(false)
+  sortOrder            Int            @default(0)
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+  embeddingModelId     String?
+  embeddingDimensions  Int?
+  embeddingVendor      AIVendor?
+  embeddingApiKey      String?
+  embeddingApiEndpoint String?
+  projects             NovelProject[]
 
   @@index([isDefault])
   @@map("ai_model_configs")
 }
 
 model NovelProject {
-  id                  Int             @id @default(autoincrement())
-  title               String
-  description         String?         @db.Text
-  genre               String?         // 玄幻/奇幻/仙侠/都市/科幻/历史/游戏/悬疑/言情/军事/体育/轻小说
-  writingStyle        String?         // 轻松幽默/热血激昂/暗黑沉重/唯美文艺/悬疑烧脑/搞笑吐槽/史诗宏大/细腻温情/快节奏爽文/慢热养成
-  targetWordCount     Int?            // 目标总字数
-  currentWordCount    Int             @default(0)  // 当前总字数
-  chapterWordCount    Int             @default(3000)  // 每章目标字数
-
-  // 大纲设定
-  outline             String?         @db.Text
-  outlineStages       Json?          // {stage1: [], stage2: [], stage3: [], stage4: []} 分阶段大纲
-
-  // 详细设定
-  worldSetting        String?         @db.Text        // 世界观设定
-  powerSystem         String?         @db.Text        // 力量体系
-  protagonistProfile  String?         @db.Text        // 主角人设
-  protagonistGoal     String?         @db.Text        // 主角目标
-  antagonistSetting   String?         @db.Text        // 反派设定
-  endingPlan          String?         @db.Text        // 结局规划
-  writingPrompt       String?         @db.Text        // 写作提示词
-
-  // 目标受众: MALE=男频, FEMALE=女频
-  targetAudience      String?         // 目标受众
-
-  status              ProjectStatus   @default(DRAFT)
-  coverImage          String?         // 封面图 URL
-  totalVolumes        Int             @default(4)      // 总卷数
-
-  // 项目模式: CREATE=创作模式, ANALYZE=拆解模式
-  projectMode         String          @default("CREATE")
-
-  storyType           String          @default("LONG")
-
-  // 外键
-  aiModelId           Int?
-  aiModelConfig       AIModelConfig?  @relation(fields: [aiModelId], references: [id])
-  creatorId           Int
-  creator             User            @relation(fields: [creatorId], references: [id])
-
-  chapters            NovelChapter[]
-  bookAnalyses        BookAnalysis[]
-  sourceNovel         SourceNovel?
-
-  // 小说引擎关联
-  characters          Character[]
-  plotlines           Plotline[]
-  storyState          StoryState?
-  storyEvents         StoryEvent[]
-  agentLogs           AgentLog[]
-  chapterSummaries    ChapterSummary[]
-  volumeSummaries     VolumeSummary[]
-  bookSummary         BookSummary?
-  aiUsages            AIUsage[]
-  researchRefs        ResearchRef[]
-  coverDesigns        CoverDesign[]
-  reviewReports       ReviewReport[]
-  shortStory          ShortStory?
-
-  createdAt           DateTime        @default(now())
-  updatedAt           DateTime        @updatedAt
+  id                 Int                      @id @default(autoincrement())
+  title              String
+  description        String?
+  genre              String?
+  writingStyle       String?
+  targetWordCount    Int?
+  currentWordCount   Int                      @default(0)
+  chapterWordCount   Int                      @default(3000)
+  outline            String?
+  outlineStages      Json?
+  worldSetting       String?
+  powerSystem        String?
+  protagonistProfile String?
+  protagonistGoal    String?
+  antagonistSetting  String?
+  endingPlan         String?
+  writingPrompt      String?
+  status             ProjectStatus            @default(DRAFT)
+  coverImage         String?
+  totalVolumes       Int                      @default(4)
+  aiModelId          Int?
+  creatorId          Int
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+  projectMode        String                   @default("CREATE")
+  targetAudience     String?
+  storyType          String                   @default("LONG")
+  conflictIntensity  Float                    @default(0.5)
+  corePitch          String?
+  darkness           Float                    @default(0.3)
+  humor              Float                    @default(0.3)
+  lengthType         LengthType?
+  mysteryDensity     Float                    @default(0.3)
+  pace               Float                    @default(0.5)
+  pipelineJobId      Int?
+  platform           Platform?
+  powerGrowth        Float                    @default(0.5)
+  romance            Float                    @default(0.2)
+  agentLogs          AgentLog[]
+  aiUsages           AIUsage[]
+  analysisTasks      AnalysisTask[]
+  arcPlans           ArcPlan[]
+  bookAnalyses       BookAnalysis[]
+  bookBlueprint      BookBlueprint?
+  bookSummary        BookSummary?
+  chapterGraphSnapshot ChapterGraphSnapshot?
+  chapterCommits     ChapterCommit[]
+  chapterSummaries   ChapterSummary[]
+  characters         Character[]
+  coverDesigns       CoverDesign[]
+  pipelineJobs       GenerationJob[]
+  chapters           NovelChapter[]
+  aiModelConfig      AIModelConfig?           @relation(fields: [aiModelId], references: [id])
+  creator            User                     @relation(fields: [creatorId], references: [id])
+  plotlines          Plotline[]
+  maintenanceTasks   ProjectMaintenanceTask[]
+  researchRefs       ResearchRef[]
+  reviewReports      ReviewReport[]
+  shortStory         ShortStory?
+  sourceNovel        SourceNovel?
+  storyEvents        StoryEvent[]
+  storyState         StoryState?
+  villains           Villain[]
+  volumeSummaries    VolumeSummary[]
+  worldState         WorldState?
 
   @@index([creatorId])
   @@index([status])
@@ -210,37 +162,30 @@ model NovelProject {
 }
 
 model NovelChapter {
-  id                  Int             @id @default(autoincrement())
-  projectId           Int
-  project             NovelProject    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  chapterNumber       Int             // 章节编号
-  title               String
-  content             String?         @db.Text
-  summary             String?         @db.Text
-  wordCount           Int             @default(0)
-
-  generationPrompt    String?         @db.Text        // 生成提示词
-  generationParams    Json?          // 生成参数
-  generationCount     Int             @default(0)     // 生成次数
-  lastGeneratedTime   DateTime?
-
-  sortOrder           Int             @default(0)
-  status              ChapterStatus   @default(DRAFT)
-
-  // 小说引擎字段
-  chapterOutline      Json?          // 策划 Agent 输出的章节大纲
-  validationReport    Json?          // 校验 Agent 的验证报告
-  retryCount          Int             @default(0)     // 校验失败重试次数
-  lastAgentType       AgentType?      // 最后执行的 Agent 类型
-
-  virtualWriterId     Int?
-  virtualWriter       VirtualWriter?  @relation(fields: [virtualWriterId], references: [id])
-
-  versions            ChapterVersion[]
-
-  createdAt           DateTime        @default(now())
-  updatedAt           DateTime        @updatedAt
+  id                Int              @id @default(autoincrement())
+  projectId         Int
+  chapterNumber     Int
+  title             String
+  content           String?
+  summary           String?
+  wordCount         Int              @default(0)
+  generationPrompt  String?
+  generationParams  Json?
+  generationCount   Int              @default(0)
+  lastGeneratedTime DateTime?
+  sortOrder         Int              @default(0)
+  status            ChapterStatus    @default(DRAFT)
+  virtualWriterId   Int?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  chapterOutline    Json?
+  lastAgentType     AgentType?
+  retryCount        Int              @default(0)
+  validationReport  Json?
+  chapterCommits    ChapterCommit[]
+  versions          ChapterVersion[]
+  project           NovelProject     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  virtualWriter     VirtualWriter?   @relation(fields: [virtualWriterId], references: [id])
 
   @@unique([projectId, chapterNumber])
   @@index([projectId])
@@ -248,204 +193,193 @@ model NovelChapter {
   @@map("novel_chapters")
 }
 
+model ChapterCommit {
+  id               String        @id @default(cuid())
+  projectId        Int
+  chapterId        Int?
+  chapterNo        Int
+  source           String        @default("pipeline")
+  status           String        @default("accepted")
+  payload          Json          @default("{}")
+  projectionStatus Json          @default("{}")
+  replayCount      Int           @default(0)
+  appliedAt        DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  chapter          NovelChapter? @relation(fields: [chapterId], references: [id])
+  project          NovelProject  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([projectId, chapterNo])
+  @@map("chapter_commits")
+}
+
 model VirtualWriter {
-  id                  Int             @id @default(autoincrement())
-  name                String
-  description         String?         @db.Text
-  writerType          WriterType      @default(CUSTOM)
-
-  // 风格特征
-  styleFeatures       String?         @db.Text        // 整体风格描述
-  vocabularyFeatures  String?         @db.Text        // 词汇特征
-  sentenceFeatures    String?         @db.Text        // 句式特征
-  rhetoricFeatures     String?         @db.Text        // 修辞特征
-  themeFeatures       String?         @db.Text        // 主题特征
-
-  trainingStatus      TrainingStatus  @default(UNTRAINED)
-  trainingProgress    Int             @default(0)
-  trainedAt           DateTime?
-
-  documentCount       Int             @default(0)
-  totalWordCount      Int             @default(0)
-
-  isPublic            Boolean         @default(false)
-  tags                String?
-
-  creatorId           Int
-  creator             User            @relation(fields: [creatorId], references: [id])
-
-  chapters            NovelChapter[]
-  documents           WriterDocument[]
-
-  createdAt           DateTime        @default(now())
-  updatedAt           DateTime        @updatedAt
+  id                 Int              @id @default(autoincrement())
+  name               String
+  description        String?
+  writerType         WriterType       @default(CUSTOM)
+  styleFeatures      String?
+  vocabularyFeatures String?
+  sentenceFeatures   String?
+  rhetoricFeatures   String?
+  themeFeatures      String?
+  trainingStatus     TrainingStatus   @default(UNTRAINED)
+  trainingProgress   Int              @default(0)
+  trainedAt          DateTime?
+  documentCount      Int              @default(0)
+  totalWordCount     Int              @default(0)
+  isPublic           Boolean          @default(false)
+  tags               String?
+  creatorId          Int
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  chapters           NovelChapter[]
+  creator            User             @relation(fields: [creatorId], references: [id])
+  documents          WriterDocument[]
 
   @@index([creatorId])
   @@map("virtual_writers")
 }
 
 model WriterDocument {
-  id                  Int             @id @default(autoincrement())
-  virtualWriterId     Int
-  virtualWriter       VirtualWriter   @relation(fields: [virtualWriterId], references: [id], onDelete: Cascade)
-
-  fileName            String
-  filePath            String
-  fileSize            Int
-  wordCount           Int
-
-  status              DocumentStatus  @default(PENDING)
-  errorMessage        String?
-
-  createdAt           DateTime        @default(now())
-  processedAt         DateTime?
+  id              Int            @id @default(autoincrement())
+  virtualWriterId Int
+  fileName        String
+  filePath        String
+  fileSize        Int
+  wordCount       Int
+  status          DocumentStatus @default(PENDING)
+  errorMessage    String?
+  createdAt       DateTime       @default(now())
+  processedAt     DateTime?
+  virtualWriter   VirtualWriter  @relation(fields: [virtualWriterId], references: [id], onDelete: Cascade)
 
   @@index([virtualWriterId])
   @@map("writer_documents")
 }
 
 model ChapterVersion {
-  id            Int             @id @default(autoincrement())
+  id            Int          @id @default(autoincrement())
   chapterId     Int
-  chapter       NovelChapter    @relation(fields: [chapterId], references: [id], onDelete: Cascade)
-
-  content       String          @db.Text
+  content       String
   wordCount     Int
-  prompt        String?         @db.Text
+  prompt        String?
   versionNumber Int
-
-  createdAt     DateTime        @default(now())
+  createdAt     DateTime     @default(now())
+  chapter       NovelChapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
 
   @@index([chapterId])
   @@map("chapter_versions")
 }
 
 model BookAnalysis {
-  id            String          @id @default(cuid())
-  projectId     Int
-  project       NovelProject    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  // 粒度: -1=整书, 0=全卷, 1-N=具体卷
-  volumeNumber  Int             @default(-1)
-  // 分析类型: BREAKDOWN/CONTINUATION
-  analysisType  String
-  // 分析维度: CHARACTER_RELATION/PLOT_LINE/FORESHADOWING/CHAPTER_STRUCTURE/WORLD_SETTING
-  dimension     String
-  // 结构化分析结果
-  analysisData  Json
-  // 原始分析文本
-  rawContent    String?         @db.Text
-  wordCount     Int?
-
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  id           String       @id @default(cuid())
+  projectId    Int
+  volumeNumber Int          @default(-1)
+  analysisType String
+  dimension    String
+  analysisData Json
+  rawContent   String?
+  wordCount    Int?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  project      NovelProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, volumeNumber, analysisType, dimension])
   @@index([projectId])
   @@map("book_analysis")
 }
 
-// 拆解模式：存储原始小说文本
+model ChapterGraphSnapshot {
+  id             String       @id @default(cuid())
+  projectId      Int          @unique
+  graph          Json         @default("{}")
+  sourceUpdatedAt DateTime?
+  generatedAt    DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  project        NovelProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("chapter_graph_snapshots")
+}
+
+model AnalysisTask {
+  id                  String             @id @default(cuid())
+  projectId           Int
+  volumeNumber        Int                @default(-1)
+  dimensions          Json
+  contextChapterCount Int                @default(3)
+  status              AnalysisTaskStatus @default(PENDING)
+  progress            Int                @default(0)
+  progressMessage     String?
+  totalDimensions     Int
+  completedDimensions Int                @default(0)
+  currentDimension    String?
+  errorMessage        String?
+  startedAt           DateTime?
+  completedAt         DateTime?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  project             NovelProject       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([projectId, status])
+  @@index([projectId, createdAt(sort: Desc)])
+  @@map("analysis_tasks")
+}
+
 model SourceNovel {
-  id            String          @id @default(cuid())
-  projectId     Int             @unique
-  project       NovelProject    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  // 原始小说文本
-  originalText  String          @db.Text
-  wordCount     Int             // 字数统计
-
-  // 来源信息
-  sourceName    String?         // 来源名称，如"《斗破苍穹》"
-
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  id           String       @id @default(cuid())
+  projectId    Int          @unique
+  originalText String
+  wordCount    Int
+  sourceName   String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  project      NovelProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@map("source_novels")
 }
 
-// ============================================
-// 小说引擎 - Agent 协作系统
-// ============================================
-
-enum CharacterRole {
-  PROTAGONIST  // 主角
-  ANTAGONIST  // 反派
-  SUPPORTING  // 配角
-  MINOR       // 次要
-}
-
-enum PlotlineType {
-  FORESHADOW  // 伏笔
-  SUBPLOT     // 支线
-  CONFLICT    // 冲突
-}
-
-enum PlotlineStatus {
-  OPEN       // 进行中
-  RESOLVED   // 已回收
-  ABANDONED  // 已放弃
-}
-
-enum AgentType {
-  PLANNER    // 策划 Agent
-  WRITER     // 写作 Agent
-  POLISHER   // 润色 Agent
-  VALIDATOR  // 校验 Agent
-  SUMMARIZER // 摘要 Agent
-  RESEARCHER // 研究 Agent
-}
-
-// 角色档案
 model Character {
-  id              String            @id @default(cuid())
-  projectId       Int
-  project         NovelProject      @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  name            String           // 角色名
-  role            CharacterRole    @default(SUPPORTING)  // 角色类型
-  aliases         String[]         @default([])         // 别名/称呼列表
-  appearance      String?          @db.Text             // 外貌描述
-  personality     String?          @db.Text             // 性格特征
-  catchphrases    String[]         @default([])         // 口头禅/习惯用语
-  background      String?          @db.Text             // 背景故事
-  relationships   Json?            @default("{}")        // {角色名: 关系描述} 键值对
-  currentState    Json?            @default("{}")        // 当前状态：位置、情绪、阵营
-
-  firstChapter    Int?             // 首次出场章节
-  lastUpdated     Int?             // 最后一次更新的章节号
-
-  // 复用库字段
-  isPublic        Boolean          @default(false)     // 是否公开到复用库
-  tags            String[]         @default([])         // 标签
-  creatorId       Int?             // 创建者（用于公开角色的用户）
-  creator         User?            @relation("CharacterCreator", fields: [creatorId], references: [id])
-
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  id            String        @id @default(cuid())
+  projectId     Int
+  name          String
+  role          CharacterRole @default(SUPPORTING)
+  aliases       String[]      @default([])
+  appearance    String?
+  personality   String?
+  catchphrases  String[]      @default([])
+  background    String?
+  relationships Json?         @default("{}")
+  currentState  Json?         @default("{}")
+  firstChapter  Int?
+  lastUpdated   Int?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  creatorId     Int?
+  isPublic      Boolean       @default(false)
+  tags          String[]      @default([])
+  creator       User?         @relation("CharacterCreator", fields: [creatorId], references: [id])
+  project       NovelProject  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId])
   @@map("characters")
 }
 
-// 伏笔/支线追踪
 model Plotline {
-  id              String           @id @default(cuid())
-  projectId       Int
-  project         NovelProject     @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  type            PlotlineType     @default(FORESHADOW)
-  description     String           @db.Text             // 伏笔/线索描述
-  plantedAt       Int              // 埋入章节号
-  resolvedAt      Int?             // 回收章节号（null=未回收）
-  plannedAt       Int?             // 计划回收章节号
-  status          PlotlineStatus  @default(OPEN)
-
-  // 追踪元数据
-  metadata        Json?           @default("{}")
-
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  id          String         @id @default(cuid())
+  projectId   Int
+  type        PlotlineType   @default(FORESHADOW)
+  description String
+  plantedAt   Int
+  resolvedAt  Int?
+  plannedAt   Int?
+  status      PlotlineStatus @default(OPEN)
+  metadata    Json?          @default("{}")
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  project     NovelProject   @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId])
   @@index([status])
@@ -453,44 +387,31 @@ model Plotline {
   @@map("plotlines")
 }
 
-// 故事状态机快照
 model StoryState {
-  id              String          @id @default(cuid())
-  projectId       Int             @unique
-  project         NovelProject    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  // 情绪热度曲线（0-100），按章节号存储
-  emotionalArc    Json            @default("[]")        // [{chapterNo, value}]
-
-  // 主线/支线冲突状态
-  mainConflict    String?         // 当前主线冲突描述
-  subConflicts    Json?           @default("[]")        // [{id, description, status}]
-
-  // 章节进度
-  currentChapter  Int             @default(0)
-  totalPlanned   Int             @default(100)
-
-  // 元数据
-  metadata        Json?           @default("{}")
-
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  id             String       @id @default(cuid())
+  projectId      Int          @unique
+  emotionalArc   Json         @default("[]")
+  mainConflict   String?
+  subConflicts   Json?        @default("[]")
+  currentChapter Int          @default(0)
+  totalPlanned   Int          @default(100)
+  metadata       Json?        @default("{}")
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  project        NovelProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@map("story_states")
 }
 
-// 故事事件审计日志
 model StoryEvent {
-  id              String          @id @default(cuid())
-  projectId       Int
-  project         NovelProject    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  eventType       String          // 事件类型
-  chapterNo       Int?             // 关联章节号
-  description     String          @db.Text             // 事件描述
-  metadata        Json?           @default("{}")
-
-  createdAt       DateTime        @default(now())
+  id          String       @id @default(cuid())
+  projectId   Int
+  eventType   String
+  chapterNo   Int?
+  description String
+  metadata    Json?        @default("{}")
+  createdAt   DateTime     @default(now())
+  project     NovelProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId])
   @@index([chapterNo])
@@ -498,244 +419,150 @@ model StoryEvent {
   @@map("story_events")
 }
 
-// Agent 执行日志
 model AgentLog {
-  id              String          @id @default(cuid())
-  projectId       Int
-  project         NovelProject    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  chapterNo       Int             // 章节号
-  agentType       AgentType       // Agent 类型
-  status          String          // START/RUNNING/DONE/FAILED
-
-  // 输入输出
-  inputPrompt     String?         @db.Text
-  outputContent   String?         @db.Text
-  errorMessage    String?
-
-  // 性能指标
-  tokenCount      Int?
-  durationMs      Int?
-
-  // 校验结果（仅 Validator）
-  validationResult Json?          @default("{}")
-
-  createdAt       DateTime        @default(now())
+  id               String       @id @default(cuid())
+  projectId        Int
+  chapterNo        Int
+  agentType        AgentType
+  status           String
+  inputPrompt      String?
+  outputContent    String?
+  errorMessage     String?
+  tokenCount       Int?
+  durationMs       Int?
+  validationResult Json?        @default("{}")
+  createdAt        DateTime     @default(now())
+  project          NovelProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId, chapterNo])
   @@index([createdAt])
   @@map("agent_logs")
 }
 
-// 章节摘要（独立存储，支持更多元数据）
 model ChapterSummary {
-  id              String          @id @default(cuid())
-  projectId       Int
-  chapterNo       Int
-  project         NovelProject    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  // 摘要内容（200-300字）
-  summary         String          @db.Text
-
-  // 关键事件列表
-  keyEvents       String[]        @default([])
-
-  // 情绪基调
-  emotionalTone   String?         // 如：紧张、温馨、悲伤
-
-  // 本章埋下的伏笔ID列表
-  plantedPlotlines String[]       @default([])
-
-  // 本章回收的伏笔ID列表
-  resolvedPlotlines String[]      @default([])
-
-  createdAt       DateTime        @default(now())
+  id                String       @id @default(cuid())
+  projectId         Int
+  chapterNo         Int
+  summary           String
+  keyEvents         String[]     @default([])
+  emotionalTone     String?
+  plantedPlotlines  String[]     @default([])
+  resolvedPlotlines String[]     @default([])
+  createdAt         DateTime     @default(now())
+  project           NovelProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, chapterNo])
   @@index([projectId])
   @@map("chapter_summaries")
 }
 
-// ============================================
-// 分层摘要系统 - 解决 760 章大文本 token 超限问题
-// ============================================
-
-// L2 卷摘要
 model VolumeSummary {
-  id              String          @id @default(cuid())
-  projectId       Int
-  project         NovelProject    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  volumeNumber    Int             // 卷号 1-N
-  summary         String          @db.Text  // 500-800字
-
-  // 关键事件（卷内最重要的 N 个事件）
-  keyEvents       String[]        @default([])
-
-  // 情绪曲线
-  emotionalArc    Json            @default("[]")  // [{chapterNo, value}]
-
-  // 伏笔统计
-  plantedPlotlines String[]       @default([])    // 本卷埋下的伏笔ID
-  resolvedPlotlines String[]      @default([])    // 本卷回收的伏笔ID
-
-  // 章节概览（各章节一句话描述）
-  chapterOverview Json             @default("[]")   // [{chapterNo, title, summary}]
-
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  id                String       @id @default(cuid())
+  projectId         Int
+  volumeNumber      Int
+  summary           String
+  keyEvents         String[]     @default([])
+  emotionalArc      Json         @default("[]")
+  plantedPlotlines  String[]     @default([])
+  resolvedPlotlines String[]     @default([])
+  chapterOverview   Json         @default("[]")
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  project           NovelProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, volumeNumber])
   @@index([projectId])
   @@map("volume_summaries")
 }
 
-// L3 全书摘要
 model BookSummary {
-  id              String          @id @default(cuid())
-  projectId       Int             @unique
-  project         NovelProject    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  // 整体摘要
-  summary         String          @db.Text  // 1000-1500字
-
-  // 主线概述
-  mainPlot        String          @db.Text
-
-  // 支线列表
-  subPlots        String[]        @default([])
-
-  // 角色成长弧线
-  characterArcs   Json             @default("[]")  // [{characterId, name, arcDescription}]
-
-  // 主题元素
-  thematicElements String[]       @default([])
-
-  // 全书伏笔统计
-  totalPlotlines    Int           @default(0)
-  resolvedPlotlines Int           @default(0)
-  openPlotlines     Int           @default(0)
-
-  // 结构分析
-  structureAnalysis Json?        @default("{}")  // {openingChapters, developmentChapters, climaxChapters, resolutionChapters}
-
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  id                String       @id @default(cuid())
+  projectId         Int          @unique
+  summary           String
+  mainPlot          String
+  subPlots          String[]     @default([])
+  characterArcs     Json         @default("[]")
+  thematicElements  String[]     @default([])
+  totalPlotlines    Int          @default(0)
+  resolvedPlotlines Int          @default(0)
+  openPlotlines     Int          @default(0)
+  structureAnalysis Json?        @default("{}")
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  project           NovelProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@map("book_summaries")
 }
 
-// ============================================
-// 通知系统
-// ============================================
-
-enum NotificationType {
-  SYSTEM     // 系统通知
-  TASK       // 任务通知
-  QUOTA      // 配额提醒
-  ERROR      // 错误通知
-}
-
-enum NotificationPriority {
-  LOW
-  NORMAL
-  HIGH
-}
-
 model Notification {
-  id          Int                 @id @default(autoincrement())
-  userId      Int
-  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  type        NotificationType    @default(SYSTEM)
-  priority    NotificationPriority @default(NORMAL)
-  title       String              // 通知标题
-  content     String              @db.Text  // 通知内容
-  link        String?             // 点击跳转链接
-  isRead      Boolean             @default(false)
-
-  // 关联信息（可选）
-  projectId   Int?
-  metadata    Json?               @default("{}")
-
-  createdAt   DateTime            @default(now())
-  readAt      DateTime?
+  id        Int                  @id @default(autoincrement())
+  userId    Int
+  type      NotificationType     @default(SYSTEM)
+  priority  NotificationPriority @default(NORMAL)
+  title     String
+  content   String
+  link      String?
+  isRead    Boolean              @default(false)
+  projectId Int?
+  metadata  Json?                @default("{}")
+  createdAt DateTime             @default(now())
+  readAt    DateTime?
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, isRead])
   @@index([userId, createdAt])
   @@map("notifications")
 }
 
-// ============================================
-// AI 调用成本追踪系统
-// ============================================
-
-// 各模型定价配置
 model ModelPricing {
-  id          Int       @id @default(autoincrement())
+  id          Int      @id @default(autoincrement())
   vendor      AIVendor
-  modelId     String    // 模型 ID，如 "deepseek-chat"
-  inputPrice  Decimal   // 输入价格（每百万 token）
-  outputPrice Decimal   // 输出价格（每百万 token）
-  currency    String    @default("CNY") // 货币单位
-
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  modelId     String
+  inputPrice  Decimal
+  outputPrice Decimal
+  currency    String   @default("CNY")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@unique([vendor, modelId])
   @@map("model_pricings")
 }
 
-// 用户月度配额配置
 model UserQuota {
-  id           Int       @id @default(autoincrement())
-  userId       Int       @unique
-  user         User      @relation(fields: [userId], references: [id])
-
-  monthlyLimit Decimal   // 月度限额（金额）
-  alertThreshold Decimal  // 预警阈值（百分比，如 0.8 表示 80%）
-  isLocked     Boolean   @default(false) // 是否锁定（超出限额后）
-
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id             Int      @id @default(autoincrement())
+  userId         Int      @unique
+  monthlyLimit   Decimal
+  alertThreshold Decimal
+  isLocked       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  user           User     @relation(fields: [userId], references: [id])
 
   @@map("user_quotas")
 }
 
-// AI 调用记录
 model AIUsage {
-  id          String    @id @default(cuid())
-  userId      Int
-  user        User      @relation(fields: [userId], references: [id])
-  projectId   Int?
-  project     NovelProject? @relation(fields: [projectId], references: [id], onDelete: SetNull)
-
-  vendor      AIVendor
-  modelId     String
-  usageType   String    // 调用类型：GENERATE, ANALYZE, SUMMARY 等
-
-  // Token 使用
-  promptTokens     Int      @default(0)
-  completionTokens Int     @default(0)
-  totalTokens      Int      @default(0)
-
-  // 费用计算
-  inputCost    Decimal   @default(0)
-  outputCost   Decimal   @default(0)
-  totalCost    Decimal   @default(0)
-
-  // 时间信息
-  usageMonth   Int       // 月份（YYYYMM）
-  createdAt    DateTime  @default(now())
+  id               String        @id @default(cuid())
+  userId           Int
+  projectId        Int?
+  vendor           AIVendor
+  modelId          String
+  usageType        String
+  promptTokens     Int           @default(0)
+  completionTokens Int           @default(0)
+  totalTokens      Int           @default(0)
+  inputCost        Decimal       @default(0)
+  outputCost       Decimal       @default(0)
+  totalCost        Decimal       @default(0)
+  usageMonth       Int
+  createdAt        DateTime      @default(now())
+  project          NovelProject? @relation(fields: [projectId], references: [id])
+  user             User          @relation(fields: [userId], references: [id])
 
   @@index([userId, usageMonth])
   @@index([projectId])
   @@map("ai_usages")
 }
-
-// ============================================
-// 扫榜选材系统
-// ============================================
 
 model MarketTrend {
   id             String   @id @default(cuid())
@@ -747,7 +574,6 @@ model MarketTrend {
   hotTags        String[] @default([])
   trendDirection String?
   analysisData   Json     @default("{}")
-
   createdAt      DateTime @default(now())
 
   @@index([platform, genre, rankDate])
@@ -764,10 +590,9 @@ model MarketBook {
   wordCount    Int      @default(0)
   rating       Float?
   tags         String[] @default([])
-  synopsis     String?  @db.Text
+  synopsis     String?
   analysisData Json     @default("{}")
   rankDate     DateTime
-
   createdAt    DateTime @default(now())
 
   @@index([platform, genre])
@@ -776,59 +601,53 @@ model MarketBook {
 }
 
 model ResearchRef {
-  id          String    @id @default(cuid())
-  projectId   Int
-  project     NovelProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  topic       String
-  summary     String    @db.Text
-  keyFacts    String[]  @default([])
-  creativeMaterials String[] @default([])
-  confidence  String    @default("medium")
-  usageSuggestions String[] @default([])
-  usedInChapter Int?
-
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id                String       @id @default(cuid())
+  projectId         Int
+  topic             String
+  summary           String
+  keyFacts          String[]     @default([])
+  creativeMaterials String[]     @default([])
+  confidence        String       @default("medium")
+  usageSuggestions  String[]     @default([])
+  usedInChapter     Int?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  project           NovelProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId])
   @@map("research_refs")
 }
 
 model CoverDesign {
-  id            String    @id @default(cuid())
-  projectId     Int
-  project       NovelProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  imageUrl      String
-  prompt        String    @db.Text
-  colorScheme   String[]  @default([])
-  composition   String?
-  elements      String[]  @default([])
-  mood          String?
-  style         String?
-  isApplied     Boolean   @default(false)
-
-  createdAt     DateTime  @default(now())
+  id          String       @id @default(cuid())
+  projectId   Int
+  imageUrl    String
+  prompt      String
+  colorScheme String[]     @default([])
+  composition String?
+  elements    String[]     @default([])
+  mood        String?
+  style       String?
+  isApplied   Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+  project     NovelProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId])
   @@map("cover_designs")
 }
 
 model ReviewReport {
-  id              String    @id @default(cuid())
-  projectId       Int
-  project         NovelProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  chapterNo       Int?
-  content         String    @db.Text
-  reviews         Json      @default("[]")
-  overallScore    Float     @default(0)
-  consensus       String?   @db.Text
-  criticalIssues  String[]  @default([])
-  improvementPriority String[] @default([])
-
-  createdAt       DateTime  @default(now())
+  id                  String       @id @default(cuid())
+  projectId           Int
+  chapterNo           Int?
+  content             String
+  reviews             Json         @default("[]")
+  overallScore        Float        @default(0)
+  consensus           String?
+  criticalIssues      String[]     @default([])
+  improvementPriority String[]     @default([])
+  createdAt           DateTime     @default(now())
+  project             NovelProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId])
   @@index([projectId, chapterNo])
@@ -836,43 +655,319 @@ model ReviewReport {
 }
 
 model ShortStory {
-  id              String    @id @default(cuid())
-  projectId       Int       @unique
-  project         NovelProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  structure       String    @default("three_act")
-  targetWordCount Int       @default(10000)
-  currentWordCount Int      @default(0)
-
-  premise         String?   @db.Text
-  emotionalDesign Json?     @default("{}")
-  reversalDesign  Json?     @default("{}")
-  hookDesign      Json?     @default("{}")
-
-  sections        ShortStorySection[]
-
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id               String              @id @default(cuid())
+  projectId        Int                 @unique
+  structure        String              @default("three_act")
+  targetWordCount  Int                 @default(10000)
+  currentWordCount Int                 @default(0)
+  premise          String?
+  emotionalDesign  Json?               @default("{}")
+  reversalDesign   Json?               @default("{}")
+  hookDesign       Json?               @default("{}")
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  project          NovelProject        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sections         ShortStorySection[]
 
   @@map("short_stories")
 }
 
 model ShortStorySection {
-  id              String    @id @default(cuid())
+  id              String     @id @default(cuid())
   storyId         String
-  story           ShortStory @relation(fields: [storyId], references: [id], onDelete: Cascade)
-
   sectionNumber   Int
   title           String
-  content         String?   @db.Text
-  wordCount       Int       @default(0)
-  sectionType     String    @default("setup")
-  emotionalTarget Int       @default(50)
-
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  content         String?
+  wordCount       Int        @default(0)
+  sectionType     String     @default("setup")
+  emotionalTarget Int        @default(50)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  story           ShortStory @relation(fields: [storyId], references: [id], onDelete: Cascade)
 
   @@unique([storyId, sectionNumber])
   @@index([storyId])
   @@map("short_story_sections")
+}
+
+model GenerationJob {
+  id             Int                  @id @default(autoincrement())
+  projectId      Int
+  type           String               @default("FULL_PIPELINE")
+  status         JobStatus            @default(PENDING)
+  currentStep    PipelineStep?
+  stepIndex      Int                  @default(0)
+  totalChapters  Int                  @default(0)
+  currentChapter Int                  @default(0)
+  retryCount     Int                  @default(0)
+  maxRetries     Int                  @default(3)
+  payload        Json?                @default("{}")
+  result         Json?                @default("{}")
+  errorMessage   String?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  completedAt    DateTime?
+  project        NovelProject         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  checkpoints    PipelineCheckpoint[]
+
+  @@index([projectId])
+  @@index([status])
+  @@map("generation_jobs")
+}
+
+model ProjectMaintenanceTask {
+  id           String       @id @default(cuid())
+  projectId    Int
+  taskType     String
+  status       JobStatus    @default(PENDING)
+  payload      Json?        @default("{}")
+  result       Json?        @default("{}")
+  errorMessage String?
+  retryCount   Int          @default(0)
+  maxRetries   Int          @default(3)
+  priority     Int          @default(0)
+  nextRunAt    DateTime?
+  startedAt    DateTime?
+  completedAt  DateTime?
+  lockedAt     DateTime?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  project      NovelProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([status, nextRunAt, priority, createdAt])
+  @@index([projectId, taskType, status])
+  @@map("project_maintenance_tasks")
+}
+
+model PipelineCheckpoint {
+  id        String        @id @default(cuid())
+  jobId     Int
+  step      PipelineStep
+  input     Json?         @default("{}")
+  output    Json?         @default("{}")
+  error     String?
+  status    String        @default("COMPLETED")
+  createdAt DateTime      @default(now())
+  job       GenerationJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@index([jobId, step])
+  @@map("pipeline_checkpoints")
+}
+
+model BookBlueprint {
+  id                String       @id @default(cuid())
+  projectId         Int          @unique
+  corePitch         String
+  worldDirection    String?
+  mainlineDirection String?
+  growthDirection   String?
+  endingDirection   String?
+  platformStrategy  String?
+  genreStrategy     String?
+  styleStrategy     String?
+  constraints       String[]     @default([])
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  project           NovelProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("book_blueprints")
+}
+
+model ArcPlan {
+  id           String       @id @default(cuid())
+  projectId    Int
+  arcNumber    Int
+  name         String
+  stage        ArcStage
+  description  String?
+  batchSize    Int          @default(15)
+  startChapter Int
+  endChapter   Int?
+  goals        String[]     @default([])
+  keyEvents    String[]     @default([])
+  isCompleted  Boolean      @default(false)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  project      NovelProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, arcNumber])
+  @@index([projectId])
+  @@map("arc_plans")
+}
+
+model Villain {
+  id           String       @id @default(cuid())
+  projectId    Int
+  name         String
+  tier         String       @default("stage")
+  isFinalBoss  Boolean      @default(false)
+  arcNumber    Int?
+  description  String?
+  motivation   String?
+  abilities    String[]     @default([])
+  introducedAt Int?
+  defeatedAt   Int?
+  lifecycle    String?      @default("active")
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  project      NovelProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@map("villains")
+}
+
+model WorldState {
+  id                String       @id @default(cuid())
+  projectId         Int          @unique
+  mapLevel          Int          @default(1)
+  factionCount      Int          @default(1)
+  powerLevel        Int          @default(1)
+  civilizationLevel Int          @default(1)
+  classStructure    String[]     @default([])
+  regions           String[]     @default([])
+  currentExpansion  String?
+  lastExpandedAt    DateTime?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  project           NovelProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("world_states")
+}
+
+enum ProjectStatus {
+  DRAFT
+  WRITING
+  COMPLETED
+  PAUSED
+}
+
+enum ChapterStatus {
+  DRAFT
+  GENERATING
+  COMPLETED
+  REVIEWING
+}
+
+enum WriterType {
+  REAL_AUTHOR
+  CUSTOM
+}
+
+enum TrainingStatus {
+  UNTRAINED
+  TRAINING
+  TRAINED
+  FAILED
+}
+
+enum DocumentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum AIVendor {
+  OPENAI
+  ANTHROPIC
+  ALIBABA
+  DEEPSEEK
+  MINIMAX
+  VOLCENGINE
+  ZHIPU
+  MIMO
+}
+
+enum PipelineStep {
+  BLUEPRINT
+  ARC_PLAN
+  CHAPTER_LIST
+  WRITE
+  VALIDATE
+  POLISH
+  DESLOP
+  SUMMARIZE
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  PAUSED
+}
+
+enum AnalysisTaskStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum ArcStage {
+  OPENING
+  GROWTH
+  EXPANSION
+  MID_CONFLICT
+  PRE_FINALE
+  FINALE
+}
+
+enum Platform {
+  QIDIAN
+  FANQIE
+  FEILU
+  JINJIANG
+  QIMAO
+}
+
+enum LengthType {
+  SHORT
+  MEDIUM
+  LONG
+  ULTRA_LONG
+}
+
+enum CharacterRole {
+  PROTAGONIST
+  ANTAGONIST
+  SUPPORTING
+  MINOR
+}
+
+enum PlotlineType {
+  FORESHADOW
+  SUBPLOT
+  CONFLICT
+}
+
+enum PlotlineStatus {
+  OPEN
+  RESOLVED
+  ABANDONED
+}
+
+enum AgentType {
+  PLANNER
+  WRITER
+  POLISHER
+  VALIDATOR
+  SUMMARIZER
+  RESEARCHER
+}
+
+enum NotificationType {
+  SYSTEM
+  TASK
+  QUOTA
+  ERROR
+}
+
+enum NotificationPriority {
+  LOW
+  NORMAL
+  HIGH
 }

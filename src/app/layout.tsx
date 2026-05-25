@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
-import { Analytics } from '@vercel/analytics/next'
 import './globals.css'
 import { ToastContainer } from '@/components/ui/Toast'
+import { VersionInfo } from '@/components/common/VersionInfo'
 import '@/lib/agents/adapters'
 
 export const metadata: Metadata = {
@@ -15,11 +15,11 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="zh-CN">
-      <body className="min-h-full antialiased">
+    <html lang="zh-CN" suppressHydrationWarning>
+      <body className="min-h-full antialiased" suppressHydrationWarning>
         {children}
         <ToastContainer />
-        <Analytics />
+        <VersionInfo />
       </body>
     </html>
   )

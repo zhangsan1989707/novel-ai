@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Button, Input, Modal } from '@/components/ui'
 import { Sparkles, Edit2, Check, X, Plus, Trash2, BookOpen, FileText, Sparkle } from 'lucide-react'
 
@@ -83,6 +83,7 @@ export function ChapterListGenerator({
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [editTitle, setEditTitle] = useState('')
   const [error, setError] = useState('')
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   // 当模态框打开时，使用外部传入的章节初始化内部状态
   useEffect(() => {
@@ -91,15 +92,27 @@ export function ChapterListGenerator({
     }
   }, [isOpen, externalChapters])
 
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+    }
+  }, [])
+
   const currentStyle = titleStyleOptions.find((o) => o.value === titleStyle)!
 
   const handleGenerate = async () => {
     setGenerating(true)
     setError('')
 
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+    const controller = new AbortController()
+    abortControllerRef.current = controller
+
     try {
-      // 如果已有章节，那么需要计算还需要生成多少章节，或者直接让用户决定追加数量
-      // 这里我们保持原有逻辑，但将已有章节传给 API
       const requestBody = {
         projectId,
         projectTitle,
@@ -122,6 +135,7 @@ export function ChapterListGenerator({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody),
+        signal: controller.signal,
       })
 
       const data = await res.json()
@@ -176,11 +190,14 @@ export function ChapterListGenerator({
         setError(data.error?.message || '生成失败')
       }
     } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return
       console.error('[ChapterListGenerator] Error:', err)
-      const errorMessage = err instanceof Error ? err.message : String(err)
       setError('网络错误，请重试')
     } finally {
       setGenerating(false)
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null
+      }
     }
   }
 
@@ -228,9 +245,14 @@ export function ChapterListGenerator({
   }
 
   const handleClose = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+      abortControllerRef.current = null
+    }
     setIsOpen(false)
     setChapters([])
     setError('')
+    setGenerating(false)
   }
 
   return (
@@ -351,7 +373,7 @@ export function ChapterListGenerator({
                     {chapters.map((chapter, index) => (
                       <tr
                         key={index}
-                        className="border-t border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                        className="group border-t border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
                       >
                         <td className="px-4 py-3 text-gray-400 w-12">
                           <span className="flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 dark:bg-gray-700 text-xs font-medium">
@@ -431,7 +453,7 @@ export function ChapterListGenerator({
                 <Sparkles className="h-8 w-8 text-gray-400" />
               </div>
               <p className="text-gray-500 dark:text-gray-400 mb-1">点击上方&quot;生成目录&quot;按钮</p>
-              <p className="text-sm text-gray-400 dark:text-gray-500">AI 将根据项目设定生成专业的章节目录</p>
+              <p className="text-sm text-gray-400 dark:text-gray-500">AI 将根据小说设定生成专业的章节目录</p>
             </div>
           )}
 
@@ -443,7 +465,7 @@ export function ChapterListGenerator({
               </Button>
               <Button variant="primary" onClick={handleApply}>
                 <Check className="h-4 w-4 mr-2" />
-                应用到项目（创建 {chapters.length} 章）
+                应用到小说设定（创建 {chapters.length} 章）
               </Button>
             </div>
           )}

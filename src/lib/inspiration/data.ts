@@ -14,6 +14,66 @@ export interface HotInspiration {
   sampleGenre: string
   sampleWritingStyle: string
   tags: string[]
+  aiInsight?: string
+  openingScene?: string
+  platformFit?: string
+  recommendedLength?: string
+}
+
+function inferPlatformFit(category: InspirationCategory, writingStyle: string) {
+  if (category === 'male') {
+    return '起点 / 番茄 / 飞卢'
+  }
+  if (category === 'female') {
+    return '晋江 / 番茄女频'
+  }
+  if (/(悬疑|科幻|历史|轻小说)/.test(writingStyle)) {
+    return '起点 / 刺猬猫 / 全平台'
+  }
+  return '全平台可试'
+}
+
+function inferRecommendedLength(category: InspirationCategory, writingStyle: string) {
+  if (/(慢热|养成|史诗|群像)/.test(writingStyle)) {
+    return '长线连载，适合 150 万字以上'
+  }
+  if (/(悬疑|烧脑|轻松|日常)/.test(writingStyle)) {
+    return '中长篇，适合 80-150 万字'
+  }
+  if (category === 'female') {
+    return '中篇到长篇，适合 60-120 万字'
+  }
+  return '中长篇，适合 100 万字左右起步'
+}
+
+function buildDirectorFields(inspiration: HotInspiration) {
+  const primaryHook = inspiration.coreElements[0] || inspiration.sampleGenre || '高概念'
+  const secondaryHook = inspiration.coreElements[1] || inspiration.tags[0] || inspiration.description
+  const openingSubject = inspiration.sampleTitle || inspiration.title
+  const aiInsight = `把「${primaryHook}」和「${secondaryHook}」绑定成第一冲突点，再用 ${inspiration.sampleWritingStyle} 节奏兑现爽点。`
+  const openingScene = `开局直接把主角扔进「${openingSubject}」的核心局面，第一章就给出身份反差、利益冲突和即时行动目标。`
+
+  return {
+    aiInsight,
+    openingScene,
+    platformFit: inferPlatformFit(inspiration.category, inspiration.sampleWritingStyle),
+    recommendedLength: inferRecommendedLength(inspiration.category, inspiration.sampleWritingStyle),
+  }
+}
+
+export function enhanceInspiration(inspiration: HotInspiration): HotInspiration {
+  const directorFields = buildDirectorFields(inspiration)
+  return {
+    ...inspiration,
+    aiInsight: inspiration.aiInsight || directorFields.aiInsight,
+    openingScene: inspiration.openingScene || directorFields.openingScene,
+    platformFit: inspiration.platformFit || directorFields.platformFit,
+    recommendedLength: inspiration.recommendedLength || directorFields.recommendedLength,
+  }
+}
+
+export function enhanceInspirations(items: HotInspiration[]): HotInspiration[] {
+  return items.map(enhanceInspiration)
 }
 
 export const inspirations: HotInspiration[] = [
@@ -212,7 +272,7 @@ export function getInspirationsByCategory(category?: InspirationCategory, limit?
     result = result.slice(0, limit)
   }
   
-  return result
+  return enhanceInspirations(result)
 }
 
 export function getRandomInspirations(category?: InspirationCategory, count: number = 6): HotInspiration[] {
@@ -227,5 +287,5 @@ export function getRandomInspirations(category?: InspirationCategory, count: num
     ;[pool[i], pool[j]] = [pool[j], pool[i]]
   }
   
-  return pool.slice(0, count)
+  return enhanceInspirations(pool.slice(0, count))
 }

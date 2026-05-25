@@ -5,6 +5,13 @@ import { prisma } from '@/lib/prisma'
 import type { Prisma } from '@prisma/client'
 import type { CharacterProfile } from '@/lib/engine/types'
 
+function normalizeJsonObject(value: unknown): Record<string, unknown> {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>
+  }
+  return {}
+}
+
 /**
  * 获取项目所有角色档案
  */
@@ -98,13 +105,88 @@ export async function updateCharacterProfile(
  */
 export async function batchUpdateCharacterProfiles(
   projectId: number,
-  updates: Record<string, Record<string, unknown>>
+  updates: Record<string, Record<string, unknown> | string>,
+  lastUpdatedChapter?: number
 ): Promise<void> {
   for (const [characterName, fields] of Object.entries(updates)) {
-    await prisma.character.updateMany({
+    const characters = await prisma.character.findMany({
       where: { projectId, name: characterName },
-      data: fields as Prisma.InputJsonValue,
+      select: { id: true, currentState: true },
     })
+
+    for (const character of characters) {
+      const updateData: Prisma.CharacterUpdateInput = {}
+
+      if (typeof fields === 'string') {
+        updateData.currentState = {
+          ...normalizeJsonObject(character.currentState),
+          aiValidationNote: fields,
+          updatedBy: 'VALIDATOR',
+        } as Prisma.InputJsonValue
+        if (typeof lastUpdatedChapter === 'number') {
+          updateData.lastUpdated = lastUpdatedChapter
+        }
+      } else {
+        for (const [key, value] of Object.entries(fields)) {
+          if (value === undefined || value === null) continue
+
+          switch (key) {
+            case 'appearance':
+              updateData.appearance = String(value)
+              break
+            case 'personality':
+              updateData.personality = String(value)
+              break
+            case 'background':
+              updateData.background = String(value)
+              break
+            case 'aliases':
+              if (Array.isArray(value)) {
+                updateData.aliases = value.filter((item): item is string => typeof item === 'string')
+              }
+              break
+            case 'catchphrases':
+              if (Array.isArray(value)) {
+                updateData.catchphrases = value.filter((item): item is string => typeof item === 'string')
+              }
+              break
+            case 'relationships':
+              updateData.relationships = value as Prisma.InputJsonValue
+              break
+            case 'currentState':
+              updateData.currentState = {
+                ...normalizeJsonObject(character.currentState),
+                ...(value as Record<string, unknown>),
+              } as Prisma.InputJsonValue
+              break
+            case 'lastUpdated':
+              if (typeof value === 'number' && Number.isFinite(value)) {
+                updateData.lastUpdated = value
+              }
+              break
+            default:
+              if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+                updateData.currentState = {
+                  ...normalizeJsonObject(character.currentState),
+                  [key]: value,
+                } as Prisma.InputJsonValue
+              }
+              break
+          }
+        }
+
+        if (typeof lastUpdatedChapter === 'number' && updateData.lastUpdated === undefined) {
+          updateData.lastUpdated = lastUpdatedChapter
+        }
+      }
+
+      if (Object.keys(updateData).length > 0) {
+        await prisma.character.update({
+          where: { id: character.id },
+          data: updateData,
+        })
+      }
+    }
   }
 }
 

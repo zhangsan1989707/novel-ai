@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { createProviderFromDefaultConfig } from '@/lib/ai'
+import { buildChapterMemoryPack } from '@/lib/memory'
 import { saveChapterSummary } from '@/lib/memory/chapter-summary'
 import type { ChapterSummaryData } from '@/lib/engine/types'
 import { logError } from '@/lib/logger'
@@ -119,11 +120,20 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           // 为每章生成摘要
           for (const chapter of batch) {
             try {
+              const memoryPack = await buildChapterMemoryPack(projectIdNum, chapter.chapterNumber, {
+                recentChapterCount: 5,
+                recentVolumeCount: 2,
+                characterLimit: 8,
+                plotlineLimit: 8,
+                researchLimit: 3,
+              })
+
               const summaryData = await generateChapterSummary(
                 chapter.chapterNumber,
                 chapter.title,
                 chapter.content || '',
-                provider
+                provider,
+                memoryPack.summarizerContext
               )
 
               // 持久化到数据库
@@ -183,7 +193,8 @@ async function generateChapterSummary(
   chapterNo: number,
   title: string,
   content: string,
-  provider: Awaited<ReturnType<typeof createProviderFromDefaultConfig>>
+  provider: Awaited<ReturnType<typeof createProviderFromDefaultConfig>>,
+  memoryContext?: string
 ): Promise<ChapterSummaryData> {
   // 截取前 3000 字进行分析
   const truncatedContent = content.slice(0, 3000)
@@ -192,6 +203,7 @@ async function generateChapterSummary(
   const prompt = `你是一个专业的小说分析师。请对以下章节进行精准分析，严格按 JSON 格式返回。
 
 章节标题：第${chapterNo}章 "${title}"
+${memoryContext ? `\n【记忆编排上下文】\n${memoryContext}\n` : ''}
 章节内容：
 ${truncatedContent}${truncatedNote}
 

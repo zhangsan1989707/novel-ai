@@ -1,4 +1,4 @@
-import type { AIProvider, AIConfig, GenerationParams, GenerationResult } from './types'
+import type { AIProvider, AIConfig, EmbeddingParams, GenerationParams, GenerationResult } from './types'
 import type { AIVendor } from '@/types'
 import { getModelPricing, estimateCost } from '@/lib/cost-tracker'
 
@@ -22,6 +22,10 @@ export abstract class BaseAIProvider implements AIProvider {
 
   abstract generate(prompt: string, params?: GenerationParams): Promise<GenerationResult>
   abstract generateStream(prompt: string, params?: GenerationParams): AsyncGenerator<string>
+
+  async embedText(_text: string, _params?: EmbeddingParams): Promise<number[]> {
+    throw new Error(`Provider ${this.name} does not support embeddings`)
+  }
 
   setConfig(config: AIConfig): void {
     this.config = config

@@ -132,10 +132,10 @@ export function ProjectsEmptyState({ onCreate }: { onCreate: () => void }) {
   return (
     <EmptyState
       variant="projects"
-      title="还没有项目"
-      description="创建一个新项目，开始你的小说创作之旅"
+      title="还没有小说"
+      description="创建一部新小说，开始你的小说创作之旅"
       actions={[
-        { label: '创建新项目', onClick: onCreate, variant: 'primary', icon: <Plus className="w-4 h-4" /> },
+        { label: '创建新小说', onClick: onCreate, variant: 'primary', icon: <Plus className="w-4 h-4" /> },
       ]}
     />
   )

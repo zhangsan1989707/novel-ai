@@ -4,9 +4,13 @@ import { Prisma } from '@prisma/client'
 import { createProviderFromDefaultConfig, buildPlotAnalysisPrompt } from '@/lib/ai'
 import { getVolumeChapterRange } from '@/lib/ai/context-manager'
 import { prisma } from '@/lib/prisma'
-import { AIVendor, AnalysisDimension, AnalysisType } from '@/types'
+import { AnalysisDimension, AnalysisType } from '@/types'
+import { buildChapterMemoryPack, buildMemorySnapshotPack } from '@/lib/memory'
 import { getChapterSummariesInRange, saveChapterSummary } from '@/lib/memory/chapter-summary'
 import { logger, logError } from '@/lib/logger'
+import { ANALYSIS_DIMENSION_LABELS, ANALYSIS_FORMAT_TEMPLATES } from '@/lib/analysis/config'
+import { countChineseWords } from '@/lib/utils'
+import { buildFallbackAnalysisData, isRefusalContent } from '@/lib/analysis/book-analysis-fallback'
 
 // ============================================
 // 常量配置
@@ -21,7 +25,7 @@ const BATCH_SIZE = 8
 // Schema 验证
 // ============================================
 
-const vendorEnum = z.enum(['OPENAI', 'ANTHROPIC', 'ALIBABA', 'DEEPSEEK', 'MINIMAX', 'VOLCENGINE'])
+const vendorEnum = z.enum(['OPENAI', 'ANTHROPIC', 'ALIBABA', 'DEEPSEEK', 'MINIMAX', 'VOLCENGINE', 'ZHIPU'])
 
 const analyzePlotSchema = z.object({
   projectId: z.number().int().positive('请选择有效的小说项目'),
@@ -39,7 +43,7 @@ const analyzePlotSchema = z.object({
     'PLOT_LINE',
     'FORESHADOWING',
     'CHAPTER_STRUCTURE',
-    'WORLD_SETTING'
+    'WORLD_SETTING',
   ]),
   // 上下文: 使用前N章作为上下文
   contextChapterCount: z.number().int().min(1).max(10).default(3),
@@ -262,7 +266,8 @@ async function generateLayeredAnalysis(
   recentChapters: { chapterNumber: number; title: string; content: string }[],
   dimensions: AnalysisDimension[],
   provider: Awaited<ReturnType<typeof createProviderFromDefaultConfig>>,
-  temperature: number
+  temperature: number,
+  memoryContext?: string
 ): Promise<string> {
   // 构建摘要文本
   const summaryText = summaries
@@ -278,45 +283,12 @@ async function generateLayeredAnalysis(
     .join('\n')
 
   // 构建提示词
-  const dimensionLabels: Record<string, AnalysisDimension> = {
-    '人物关系': AnalysisDimension.CHARACTER_RELATION,
-    '剧情线': AnalysisDimension.PLOT_LINE,
-    '伏笔': AnalysisDimension.FORESHADOWING,
-    '章节结构': AnalysisDimension.CHAPTER_STRUCTURE,
-    '世界观': AnalysisDimension.WORLD_SETTING,
-  }
-
-  const formatTemplates: Record<AnalysisDimension, string> = {
-    [AnalysisDimension.CHARACTER_RELATION]: `{
-  "characters": [
-    { "name": "角色名", "role": "protagonist|antagonist|supporting|minor", "description": "角色描述", "relationships": [{ "target": "相关角色", "type": "关系类型", "description": "关系描述" }] }
-  ],
-  "summary": "人物关系整体概述"
-}`,
-    [AnalysisDimension.PLOT_LINE]: `{
-  "mainPlot": [{ "title": "主线标题", "keyEvents": ["关键事件"], "emotionalArc": "情感弧线" }],
-  "subPlots": [{ "title": "副线标题", "keyEvents": ["关键事件"], "relationship": "与主线关联" }],
-  "timeline": [{ "event": "事件", "chapter": 章节号, "significance": "major|minor" }]
-}`,
-    [AnalysisDimension.FORESHADOWING]: `{
-  "items": [{ "setup": "伏笔内容", "description": "描述", "payoff": "回收情况", "chapter": 章节号, "importance": "major|minor", "type": "plot|character" }],
-  "unresolved": ["未解伏笔列表"]
-}`,
-    [AnalysisDimension.CHAPTER_STRUCTURE]: `{
-  "chapters": [{ "number": 章节号, "title": "章节名", "function": "setup|development|climax|resolution", "keyEvents": ["事件"], "emotionalBeat": "情感基调" }],
-  "arcAnalysis": "整体结构分析",
-  "pacingAssessment": "节奏评估"
-}`,
-    [AnalysisDimension.WORLD_SETTING]: `{
-  "settings": [{ "name": "设定名称", "description": "描述", "rules": ["规则1"], "firstAppear": "首次出现章节" }],
-  "locations": [{ "name": "地点", "description": "描述", "significance": "major|minor" }]
-}`,
-  }
-
   const prompt = `你是一位专业的小说分析师。请对小说《${projectTitle}》进行全面的拆书分析。
 
 【基础信息】
 类型: ${genre || '未知'}
+
+${memoryContext ? `【记忆编排上下文】\n${memoryContext}\n` : ''}
 
 【章节摘要汇总】
 ${summaryText}
@@ -331,8 +303,8 @@ ${recentChapters.map(ch => `第${ch.chapterNumber}章 "${ch.title}":\n${ch.conte
 请对以下 ${dimensions.length} 个维度进行深入分析：
 
 ${dimensions.map(dim => {
-    const label = Object.keys(dimensionLabels).find(k => dimensionLabels[k] === dim) || dim
-    return `### 【${label}】\n\`\`\`json\n${formatTemplates[dim]}\n\`\`\``
+    const label = ANALYSIS_DIMENSION_LABELS[dim] || dim
+    return `### 【${label}】\n\`\`\`json\n${ANALYSIS_FORMAT_TEMPLATES[dim]}\n\`\`\``
   }).join('\n\n')}
 
 【重要说明】
@@ -366,7 +338,6 @@ export async function POST(request: NextRequest) {
       volumeNumber,
       dimensions,
       contextChapterCount,
-      vendor,
       temperature,
     } = parsed
 
@@ -444,6 +415,16 @@ export async function POST(request: NextRequest) {
 
     // 获取 AI Provider - 优先使用数据库默认配置
     const provider = await createProviderFromDefaultConfig()
+    const targetChapterNo = chaptersToAnalyze.length > 0
+      ? chaptersToAnalyze[chaptersToAnalyze.length - 1].chapterNumber
+      : (project.chapters[project.chapters.length - 1]?.chapterNumber || 1)
+    const memoryPack = await buildChapterMemoryPack(projectId, targetChapterNo, {
+      recentChapterCount: Math.max(3, contextChapterCount),
+      recentVolumeCount: 3,
+      characterLimit: 10,
+      plotlineLimit: 10,
+      researchLimit: 3,
+    })
 
     // 决定使用哪种分析模式
     const useLayeredAnalysis = chapters.length > LAYERED_ANALYSIS_THRESHOLD
@@ -494,7 +475,8 @@ export async function POST(request: NextRequest) {
         recentChapters,
         dimensions as AnalysisDimension[],
         provider,
-        temperature
+        temperature,
+        memoryPack.summarizerContext
       )
     } else {
       // 直接分析（章节数较少时）
@@ -507,6 +489,7 @@ export async function POST(request: NextRequest) {
           protagonistProfile: project.protagonistProfile || undefined,
           antagonistSetting: project.antagonistSetting || undefined,
           previousChapters: chapters,
+          memoryContext: memoryPack.summarizerContext,
         },
         {
           dimensions: dimensions as AnalysisDimension[],
@@ -537,7 +520,27 @@ export async function POST(request: NextRequest) {
 
     for (const dim of dimensions) {
       const dimLabel = Object.keys(dimensionLabels).find(k => dimensionLabels[k] === dim) || dim
-      const analysisData = extractJsonFromMarkdownBlock(resultContent, dimLabel)
+      const extractedData = extractJsonFromMarkdownBlock(resultContent, dimLabel)
+      const analysisData = Object.keys(extractedData).length > 0 && !isRefusalContent(resultContent)
+        ? extractedData
+        : buildFallbackAnalysisData({
+            title: project.title,
+            genre: project.genre || null,
+            outline: project.outline || null,
+            outlineStages: project.outlineStages || undefined,
+            worldSetting: project.worldSetting || null,
+            powerSystem: project.powerSystem || null,
+            protagonistProfile: project.protagonistProfile || null,
+            protagonistGoal: project.protagonistGoal || null,
+            antagonistSetting: project.antagonistSetting || null,
+            endingPlan: project.endingPlan || null,
+            writingPrompt: project.writingPrompt || null,
+            chapters: project.chapters.map(ch => ({
+              chapterNumber: ch.chapterNumber,
+              title: ch.title,
+              summary: ch.summary || null,
+            })),
+          }, dim as AnalysisDimension)
 
       await prisma.bookAnalysis.upsert({
         where: {
@@ -551,7 +554,7 @@ export async function POST(request: NextRequest) {
         update: {
           analysisData: analysisData as Prisma.InputJsonValue,
           rawContent: resultContent,
-          wordCount: resultContent.length,
+          wordCount: countChineseWords(resultContent),
         },
         create: {
           projectId,
@@ -560,7 +563,7 @@ export async function POST(request: NextRequest) {
           dimension: dim,
           analysisData: analysisData as Prisma.InputJsonValue,
           rawContent: resultContent,
-          wordCount: resultContent.length,
+          wordCount: countChineseWords(resultContent),
         },
       })
 
@@ -577,11 +580,17 @@ export async function POST(request: NextRequest) {
         analysisId: results[0]?.dimension || 'unknown',
         results,
         layeredAnalysis: useLayeredAnalysis,
+        memoryPack: buildMemorySnapshotPack(memoryPack),
+        contexts: {
+          planner: memoryPack.plannerContext,
+          writer: memoryPack.writerContext,
+          validator: memoryPack.validatorContext,
+          summarizer: memoryPack.summarizerContext,
+        },
       },
     })
   } catch (error) {
     if (typeof error === 'object' && error !== null && 'issues' in error) {
-      const err = error as { issues: { message: string }[] }
       if (Array.isArray(error.issues) && error.issues.length > 0) {
         return NextResponse.json(
           { success: false, error: { code: 'VALIDATION_ERROR', message: error.issues[0].message } },

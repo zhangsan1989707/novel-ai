@@ -39,6 +39,9 @@ const CONTEXT_OPTIONS = [
 interface BatchGeneratorProps {
   projectId: number
   chapters: Chapter[]
+  buttonLabel?: string
+  buttonVariant?: 'default' | 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger'
+  buttonSize?: 'sm' | 'md' | 'lg'
   onGenerate: (options: {
     chapterIds?: number[]
     useContext: boolean
@@ -48,7 +51,14 @@ interface BatchGeneratorProps {
   }) => void
 }
 
-export function BatchGenerator({ projectId, chapters, onGenerate }: BatchGeneratorProps) {
+export function BatchGenerator({
+  projectId,
+  chapters,
+  buttonLabel = '启动 AI 生产',
+  buttonVariant = 'primary',
+  buttonSize = 'sm',
+  onGenerate,
+}: BatchGeneratorProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [showCostModal, setShowCostModal] = useState(false)
   const [generationType, setGenerationType] = useState<'all' | 'selected'>('all')
@@ -67,9 +77,6 @@ export function BatchGenerator({ projectId, chapters, onGenerate }: BatchGenerat
   const chapterCountToGenerate = generationType === 'all'
     ? pendingChapters.length
     : selectedChapterIds.length
-
-  // 获取当前选中的风格预设索引
-  const currentStyleIndex = STYLE_PRESETS.findIndex(s => s.temperature === temperature)
 
   const handleOpen = () => {
     setSelectedChapterIds(pendingChapters.map((ch) => ch.id))
@@ -107,20 +114,17 @@ export function BatchGenerator({ projectId, chapters, onGenerate }: BatchGenerat
     )
   }
 
-  if (pendingChapters.length === 0) {
-    return null
-  }
-
   return (
     <>
       <Button
-        variant="primary"
-        size="sm"
+        variant={buttonVariant}
+        size={buttonSize}
         onClick={handleOpen}
-        disabled={chapters.length === 0}
+        disabled={chapters.length === 0 || pendingChapters.length === 0}
+        title={pendingChapters.length === 0 ? '暂无待写章节' : undefined}
       >
         <Sparkles className="h-4 w-4 mr-2" />
-        一键生成 ({pendingChapters.length})
+        {pendingChapters.length > 0 ? `${buttonLabel} (${pendingChapters.length})` : '暂无待写章节'}
       </Button>
 
       <Modal
@@ -129,24 +133,24 @@ export function BatchGenerator({ projectId, chapters, onGenerate }: BatchGenerat
         title={
           <div className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-blue-500" />
-            <span>批量生成章节内容</span>
+            <span>{buttonLabel}</span>
           </div>
         }
         className="max-w-lg"
       >
         <div className="space-y-4">
           {/* ===== 生成范围 ===== */}
-          <SectionCard icon={<BookOpen className="w-4 h-4" />} title="生成范围">
+          <SectionCard icon={<BookOpen className="w-4 h-4" />} title="生成目标">
             <RadioGroup
               options={[
                 {
                   value: 'all',
-                  label: '全部待生成章节',
+                  label: '全部待写章节',
                   badge: `${pendingChapters.length} 章`,
                 },
                 {
                   value: 'selected',
-                  label: '选择特定章节',
+                  label: '指定章节',
                   badge: generationType === 'selected'
                     ? `${selectedChapterIds.length} 章`
                     : undefined,
@@ -178,7 +182,7 @@ export function BatchGenerator({ projectId, chapters, onGenerate }: BatchGenerat
                         第{chapter.chapterNumber}章 {chapter.title || '无标题'}
                       </span>
                       {!isPending && (
-                        <span className="text-xs text-gray-400">已完成</span>
+                        <span className="text-xs text-gray-400">已生成</span>
                       )}
                     </label>
                   )
@@ -188,7 +192,7 @@ export function BatchGenerator({ projectId, chapters, onGenerate }: BatchGenerat
           </SectionCard>
 
           {/* ===== 创作风格 ===== */}
-          <SectionCard icon={<PenLine className="w-4 h-4" />} title="创作风格">
+          <SectionCard icon={<PenLine className="w-4 h-4" />} title="生成风格">
             {/* 字数选择 - 按钮组 */}
             <div className="space-y-2">
               <label className="text-xs font-medium text-gray-500">目标字数</label>
@@ -215,7 +219,7 @@ export function BatchGenerator({ projectId, chapters, onGenerate }: BatchGenerat
 
             {/* 风格选择 - 卡片式 */}
             <div className="space-y-2 mt-3">
-              <label className="text-xs font-medium text-gray-500">AI 创作风格</label>
+              <label className="text-xs font-medium text-gray-500">AI 生成风格</label>
               <div className="grid grid-cols-3 gap-2">
                 {STYLE_PRESETS.map((style) => {
                   const isActive = style.temperature === temperature

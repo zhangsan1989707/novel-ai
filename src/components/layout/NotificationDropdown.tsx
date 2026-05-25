@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { Bell, Check, CheckCheck, AlertCircle, Info, AlertTriangle, Clock } from 'lucide-react'
+import { formatDisplayDate } from '@/lib/helpers'
 
 interface Notification {
   id: number
@@ -121,7 +122,7 @@ export function NotificationDropdown() {
     if (minutes < 60) return `${minutes} 分钟前`
     if (hours < 24) return `${hours} 小时前`
     if (days < 7) return `${days} 天前`
-    return date.toLocaleDateString('zh-CN')
+    return formatDisplayDate(date)
   }
 
   return (

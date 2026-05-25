@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
-import { Prisma } from '@prisma/client'
 import { getCurrentUserId } from '@/lib/auth'
 
 // ============================================
@@ -91,7 +90,7 @@ export async function POST(request: NextRequest) {
         content: data.content,
         link: data.link,
         projectId: data.projectId,
-        metadata: data.metadata as Prisma.InputJsonValue,
+        metadata: data.metadata as any,
       },
     })
 

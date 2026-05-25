@@ -60,11 +60,13 @@ export function buildOutlineGenerationPrompt(input: OutlineGenerationInput): str
   // 【输出格式】
   parts.push(`\n【输出格式】`)
   parts.push(`请以 JSON 格式输出，字段说明：`)
-  parts.push(`- stages: 阶段数组，每个阶段包含 {name, description, coreEvents, chapterPlan}`)
+  parts.push(`- stages: 阶段数组，每个阶段包含 {name, description, coreEvents, chapterRatio, chapterPlan}`)
   parts.push(`- stages[].name: string, 阶段名称（如"开篇"）`)
   parts.push(`- stages[].description: string, 阶段概述（50-100字）`)
   parts.push(`- stages[].coreEvents: string[], 核心事件列表（3-5个）`)
-  parts.push(`- stages[].chapterPlan: string, 章节规划说明（100-200字）`)
+  parts.push(`- stages[].chapterRatio: number, 该阶段占全书的比例（0-1之间，所有阶段比例之和必须等于1）`)
+  parts.push(`- stages[].chapterPlan: string, 章节规划说明（100-200字），使用比例描述而非固定章节数`)
+  parts.push(`\n⚠️ 重要：chapterRatio 和 chapterPlan 中不要出现固定章节数（如"第1-10章"），必须使用比例（如"约占全书15%"）。因为后续生成目录时用户可能指定任意总章数，固定章节数会导致不匹配。`)
   parts.push(`\n示例输出：`)
   parts.push(`{
   "stages": [
@@ -72,7 +74,8 @@ export function buildOutlineGenerationPrompt(input: OutlineGenerationInput): str
       "name": "开篇",
       "description": "主人公意外获得异能，面临第一个重大挑战",
       "coreEvents": ["获得异能", "遭遇敌人", "结交伙伴"],
-      "chapterPlan": "第1-10章，重点建立世界观和主角初始能力"
+      "chapterRatio": 0.15,
+      "chapterPlan": "约占全书15%，重点建立世界观和主角初始能力，完成人物出场和核心设定铺垫"
     }
   ]
 }`)

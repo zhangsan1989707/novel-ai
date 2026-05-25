@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3200",
+    "prebuild": "node scripts/generate-version.js",
     "build": "next build",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",
@@ -17,7 +18,13 @@
     "docker:stop": "bash scripts/docker-stop.sh",
     "docker:build": "bash scripts/docker-build.sh",
     "docker:restart": "bash scripts/docker-restart.sh",
-    "docker:logs": "bash scripts/docker-logs.sh"
+    "docker:logs": "bash scripts/docker-logs.sh",
+    "deploy": "bash scripts/deploy-simple.sh",
+    "deploy:fast": "bash scripts/deploy-fast.sh",
+    "deploy:quick": "bash scripts/deploy-quick.sh",
+    "deploy:server": "bash scripts/deploy-server-build.sh",
+    "deploy:npm": "bash scripts/deploy-npm.sh",
+    "deploy:temp": "bash scripts/deploy-temp.sh"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.2",
@@ -27,11 +34,11 @@
     "@hookform/resolvers": "^5.2.2",
     "@prisma/client": "^6.19.3",
     "@types/jszip": "^3.4.0",
-    "@vercel/analytics": "^2.0.1",
     "@xyflow/react": "^12.10.2",
     "adm-zip": "^0.5.17",
     "clsx": "^2.1.1",
     "d3": "^7.9.0",
+    "epub-gen": "^0.1.0",
     "epubjs": "^0.4.2",
     "jszip": "^3.10.1",
     "lru-cache": "^11.3.6",
@@ -51,6 +58,7 @@
     "@tailwindcss/postcss": "^4",
     "@types/adm-zip": "^0.5.8",
     "@types/d3": "^7.4.3",
+    "@types/epub-gen": "^0.1.2",
     "@types/node": "^20",
     "@types/pino": "^7.0.4",
     "@types/react": "^19",

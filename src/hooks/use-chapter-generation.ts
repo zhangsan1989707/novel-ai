@@ -1,287 +1,432 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { countChineseWords } from '@/lib/utils'
 
-// ================================
-// SSE 状态类型
-// ================================
+export type ChapterGenerationStatus =
+  | 'idle'
+  | 'connecting'
+  | 'streaming'
+  | 'complete'
+  | 'error'
 
-export type SSEStatus = 
-  | 'IDLE'
-  | 'CONNECTING'
-  | 'CONNECTED'
-  | 'RECONNECTING'
-  | 'DISCONNECTED'
-  | 'ERROR'
+export interface ChapterGenerationRequest {
+  useContext: boolean
+  contextChapterCount: number
+  targetWordCount: number
+  temperature: number
+}
 
-export interface GenerationState {
-  status: SSEStatus
+export interface ChapterGenerationResult {
+  chapterId: number
+  content: string
+  wordCount: number
+  title?: string
+  warning?: string
+  minimumWordCount?: number
+  qualityStatus?: 'completed' | 'reviewing'
+  status?: 'completed' | 'reviewing'
+}
+
+interface ChapterGenerationErrorPayload {
+  message?: string
+}
+
+interface StartEventPayload {
+  chapterId: number
+  status?: string
+}
+
+interface TokenEventPayload {
+  content?: string
+}
+
+interface WordCountEventPayload {
+  count?: number
+}
+
+type ChapterGenerationEvent =
+  | { event: 'start'; data: StartEventPayload }
+  | { event: 'token'; data: TokenEventPayload }
+  | { event: 'wordCount'; data: WordCountEventPayload }
+  | { event: 'done'; data: ChapterGenerationResult }
+  | { event: 'error'; data: ChapterGenerationErrorPayload }
+
+export interface ChapterGenerationState {
+  status: ChapterGenerationStatus
   progress: number
   message: string
   content: string
+  wordCount: number
+  targetWordCount: number
   error?: string
   isComplete: boolean
+  warning?: string
+  title?: string
 }
-
-// ================================
-// 生成管理器 Hook
-// ================================
 
 export interface UseChapterGenerationOptions {
   projectId: number
-  chapterNo: number
-  autoReconnect?: boolean
-  maxReconnectAttempts?: number
-  onToken?: (token: string) => void
-  onProgress?: (progress: number, message: string) => void
-  onComplete?: (content: string) => void
+  chapterId: number
+  initialContent?: string
+  initialWordCount?: number
+  onStart?: () => void
+  onToken?: (token: string, nextContent: string, nextWordCount: number) => void
+  onProgress?: (progress: number, wordCount: number) => void
+  onComplete?: (result: ChapterGenerationResult) => void
   onError?: (error: string) => void
+}
+
+interface ParsedSSEEvent {
+  event: string
+  data: string
+}
+
+export function parseSSEMessageBuffer(buffer: string): {
+  events: ParsedSSEEvent[]
+  remaining: string
+} {
+  const events: ParsedSSEEvent[] = []
+  let remaining = buffer
+  const delimiter = '\n\n'
+
+  while (remaining.includes(delimiter)) {
+    const index = remaining.indexOf(delimiter)
+    const block = remaining.slice(0, index)
+    remaining = remaining.slice(index + delimiter.length)
+
+    let event = 'message'
+    const dataLines: string[] = []
+
+    for (const line of block.split('\n')) {
+      if (line.startsWith('event:')) {
+        event = line.slice('event:'.length).trim()
+        continue
+      }
+
+      if (line.startsWith('data:')) {
+        dataLines.push(line.slice('data:'.length).trimStart())
+      }
+    }
+
+    if (dataLines.length > 0) {
+      events.push({ event, data: dataLines.join('\n') })
+    }
+  }
+
+  return { events, remaining }
 }
 
 export function useChapterGeneration(options: UseChapterGenerationOptions) {
   const {
     projectId,
-    chapterNo,
-    autoReconnect = true,
-    maxReconnectAttempts = 5,
+    chapterId,
+    initialContent = '',
+    initialWordCount = initialContent ? countChineseWords(initialContent) : 0,
+    onStart,
     onToken,
     onProgress,
     onComplete,
-    onError
+    onError,
   } = options
 
-  const [state, setState] = useState<GenerationState>({
-    status: 'IDLE',
+  const [state, setState] = useState<ChapterGenerationState>({
+    status: 'idle',
     progress: 0,
-    message: 'Ready',
-    content: '',
-    isComplete: false
+    message: '待生成',
+    content: initialContent,
+    wordCount: initialWordCount,
+    targetWordCount: 3000,
+    isComplete: false,
   })
 
-  const eventSourceRef = useRef<EventSource | null>(null)
-  const reconnectAttemptsRef = useRef(0)
-  const reconnectTimerRef = useRef<NodeJS.Timeout | null>(null)
-  const contentBufferRef = useRef('')
+  const abortControllerRef = useRef<AbortController | null>(null)
+  const contentBufferRef = useRef(initialContent)
 
-  // ================================
-  // 连接管理
-  // ================================
+  const applyProgress = useCallback(
+    (wordCount: number, targetWordCount: number) => {
+      const progress = Math.min(100, (wordCount / Math.max(targetWordCount, 1)) * 100)
+      onProgress?.(progress, wordCount)
+      return progress
+    },
+    [onProgress]
+  )
 
-  const connect = useCallback(() => {
-    if (eventSourceRef.current) {
-      return
-    }
+  const reset = useCallback(() => {
+    abortControllerRef.current?.abort()
+    abortControllerRef.current = null
+    contentBufferRef.current = initialContent
 
-    setState(prev => ({ ...prev, status: 'CONNECTING', message: 'Connecting...' }))
-
-    try {
-      const url = `/api/novel/projects/${projectId}/chapters/${chapterNo}/generate/stream`
-      const eventSource = new EventSource(url)
-      eventSourceRef.current = eventSource
-
-      // 连接成功
-      eventSource.onopen = () => {
-        setState(prev => ({ ...prev, status: 'CONNECTED', message: 'Connected' }))
-        reconnectAttemptsRef.current = 0
-      }
-
-      // 消息处理
-      eventSource.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data)
-          handleMessage(data)
-        } catch (err) {
-          console.warn('Failed to parse SSE message:', err)
-        }
-      }
-
-      // 错误处理
-      eventSource.onerror = (error) => {
-        console.error('SSE error:', error)
-        setState(prev => ({ 
-          ...prev, 
-          status: 'ERROR',
-          error: 'Connection error'
-        }))
-
-        if (autoReconnect) {
-          attemptReconnect()
-        }
-      }
-
-      // 自定义事件
-      eventSource.addEventListener('token', (event) => {
-        const data = JSON.parse(event.data)
-        handleToken(data)
-      })
-
-      eventSource.addEventListener('progress', (event) => {
-        const data = JSON.parse(event.data)
-        handleProgress(data)
-      })
-
-      eventSource.addEventListener('complete', (event) => {
-        const data = JSON.parse(event.data)
-        handleComplete(data)
-      })
-
-      eventSource.addEventListener('heartbeat', () => {
-        // 保持活跃，什么都不做
-      })
-
-    } catch (error) {
-      console.error('Failed to create EventSource:', error)
-      setState(prev => ({ 
-        ...prev, 
-        status: 'ERROR',
-        error: 'Failed to connect'
-      }))
-
-      if (autoReconnect) {
-        attemptReconnect()
-      }
-    }
-  }, [projectId, chapterNo, autoReconnect])
-
-  const disconnect = useCallback(() => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close()
-      eventSourceRef.current = null
-    }
-
-    if (reconnectTimerRef.current) {
-      clearTimeout(reconnectTimerRef.current)
-      reconnectTimerRef.current = null
-    }
-
-    setState(prev => ({ ...prev, status: 'DISCONNECTED' }))
-  }, [])
-
-  const attemptReconnect = useCallback(() => {
-    if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
-      setState(prev => ({
-        ...prev,
-        status: 'ERROR',
-        error: `Max reconnect attempts (${maxReconnectAttempts}) exceeded`
-      }))
-      return
-    }
-
-    reconnectAttemptsRef.current++
-    
-    // 指数退避
-    const delay = Math.min(
-      1000 * Math.pow(2, reconnectAttemptsRef.current),
-      30000
-    )
-
-    setState(prev => ({
-      ...prev,
-      status: 'RECONNECTING',
-      message: `Reconnecting in ${Math.round(delay / 1000)}s (${reconnectAttemptsRef.current}/${maxReconnectAttempts})`
-    }))
-
-    reconnectTimerRef.current = setTimeout(() => {
-      connect()
-    }, delay)
-  }, [connect, maxReconnectAttempts])
-
-  // ================================
-  // 消息处理
-  // ================================
-
-  const handleMessage = useCallback((data: any) => {
-    // 通用消息处理
-    if (data.type === 'token') {
-      handleToken(data)
-    } else if (data.type === 'progress') {
-      handleProgress(data)
-    } else if (data.type === 'complete') {
-      handleComplete(data)
-    }
-  }, [])
-
-  const handleToken = useCallback((data: any) => {
-    const token = data.content || data.text || ''
-    if (token) {
-      contentBufferRef.current += token
-      setState(prev => ({
-        ...prev,
-        content: contentBufferRef.current
-      }))
-      onToken?.(token)
-    }
-  }, [onToken])
-
-  const handleProgress = useCallback((data: any) => {
-    const { progress, message } = data
-    setState(prev => ({
-      ...prev,
-      progress: progress || prev.progress,
-      message: message || prev.message
-    }))
-    onProgress?.(progress || 0, message || '')
-  }, [onProgress])
-
-  const handleComplete = useCallback((data: any) => {
-    setState(prev => ({
-      ...prev,
-      status: 'IDLE',
-      isComplete: true,
-      progress: 100,
-      message: 'Complete'
-    }))
-    onComplete?.(contentBufferRef.current)
-    disconnect()
-  }, [onComplete, disconnect])
-
-  // ================================
-  // 控制方法
-  // ================================
-
-  const start = useCallback(() => {
-    contentBufferRef.current = ''
     setState({
-      status: 'IDLE',
+      status: 'idle',
       progress: 0,
-      message: 'Starting...',
-      content: '',
-      isComplete: false
+      message: '待生成',
+      content: initialContent,
+      wordCount: initialWordCount,
+      targetWordCount: 3000,
+      isComplete: false,
     })
-    connect()
-  }, [connect])
+  }, [initialContent, initialWordCount])
 
   const stop = useCallback(() => {
-    disconnect()
-    setState(prev => ({
+    abortControllerRef.current?.abort()
+    abortControllerRef.current = null
+    setState((prev) => ({
       ...prev,
-      status: 'DISCONNECTED',
-      message: 'Stopped'
+      status: 'idle',
+      message: '已停止接收流式结果',
     }))
-  }, [disconnect])
+  }, [])
 
-  // ================================
-  // 清理
-  // ================================
+  const handleEvent = useCallback(
+    (
+      rawEvent: ParsedSSEEvent,
+      targetWordCount: number
+    ): { completed: boolean; failed: boolean } => {
+      let parsedData: unknown
+
+      try {
+        parsedData = JSON.parse(rawEvent.data)
+      } catch {
+        return { completed: false, failed: false }
+      }
+
+      const event = {
+        event: rawEvent.event,
+        data: parsedData,
+      } as ChapterGenerationEvent
+
+      switch (event.event) {
+        case 'start': {
+          setState((prev) => ({
+            ...prev,
+            status: 'streaming',
+            message: '生成中',
+          }))
+          return { completed: false, failed: false }
+        }
+        case 'token': {
+          const token = event.data.content || ''
+          if (!token) {
+            return { completed: false, failed: false }
+          }
+
+          contentBufferRef.current += token
+          const nextWordCount = countChineseWords(contentBufferRef.current)
+          const progress = applyProgress(nextWordCount, targetWordCount)
+
+          setState((prev) => ({
+            ...prev,
+            content: contentBufferRef.current,
+            wordCount: nextWordCount,
+            progress,
+            message: '生成中',
+          }))
+
+          onToken?.(token, contentBufferRef.current, nextWordCount)
+          return { completed: false, failed: false }
+        }
+        case 'wordCount': {
+          const nextWordCount = event.data.count
+          if (typeof nextWordCount !== 'number') {
+            return { completed: false, failed: false }
+          }
+
+          const progress = applyProgress(nextWordCount, targetWordCount)
+          setState((prev) => ({
+            ...prev,
+            wordCount: nextWordCount,
+            progress,
+          }))
+          return { completed: false, failed: false }
+        }
+        case 'done': {
+          const content = event.data.content || contentBufferRef.current
+          const wordCount = event.data.wordCount || countChineseWords(content)
+          contentBufferRef.current = content
+
+          setState((prev) => ({
+            ...prev,
+            status: 'complete',
+            progress: 100,
+            message: event.data.warning ? '生成完成，待审稿' : '生成完成',
+            content,
+            wordCount,
+            isComplete: true,
+            warning: event.data.warning,
+            title: event.data.title,
+            error: undefined,
+          }))
+
+          onProgress?.(100, wordCount)
+          onComplete?.({
+            ...event.data,
+            content,
+            wordCount,
+          })
+          return { completed: true, failed: false }
+        }
+        case 'error': {
+          const message = event.data.message || '生成失败'
+          setState((prev) => ({
+            ...prev,
+            status: 'error',
+            message: '生成失败',
+            error: message,
+          }))
+          onError?.(message)
+          return { completed: false, failed: true }
+        }
+        default:
+          return { completed: false, failed: false }
+      }
+    },
+    [applyProgress, onComplete, onError, onProgress, onToken]
+  )
+
+  const start = useCallback(
+    async (request: ChapterGenerationRequest) => {
+      abortControllerRef.current?.abort()
+
+      const controller = new AbortController()
+      abortControllerRef.current = controller
+      contentBufferRef.current = ''
+
+      setState({
+        status: 'connecting',
+        progress: 0,
+        message: '连接中...',
+        content: '',
+        wordCount: 0,
+        targetWordCount: request.targetWordCount,
+        isComplete: false,
+      })
+
+      onStart?.()
+
+      try {
+        const response = await fetch(`/api/novel/projects/${projectId}/generate/stream`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chapterId,
+            useContext: request.useContext,
+            contextChapterCount: request.contextChapterCount,
+            targetWordCount: request.targetWordCount,
+            temperature: request.temperature,
+          }),
+          signal: controller.signal,
+        })
+
+        if (!response.ok) {
+          let message = '生成失败'
+
+          try {
+            const data = await response.json()
+            message = data.error?.message || message
+          } catch {}
+
+          setState((prev) => ({
+            ...prev,
+            status: 'error',
+            message: '生成失败',
+            error: message,
+          }))
+          onError?.(message)
+          return
+        }
+
+        const reader = response.body?.getReader()
+        if (!reader) {
+          const message = '无法读取流式响应'
+          setState((prev) => ({
+            ...prev,
+            status: 'error',
+            message: '生成失败',
+            error: message,
+          }))
+          onError?.(message)
+          return
+        }
+
+        const decoder = new TextDecoder()
+        let buffer = ''
+        let completed = false
+        let failed = false
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) {
+            buffer += decoder.decode()
+            break
+          }
+
+          buffer += decoder.decode(value, { stream: true })
+          const parsed = parseSSEMessageBuffer(buffer)
+          buffer = parsed.remaining
+
+          for (const event of parsed.events) {
+            const result = handleEvent(event, request.targetWordCount)
+            completed = completed || result.completed
+            failed = failed || result.failed
+          }
+        }
+
+        if (buffer) {
+          const parsed = parseSSEMessageBuffer(`${buffer}\n\n`)
+          for (const event of parsed.events) {
+            const result = handleEvent(event, request.targetWordCount)
+            completed = completed || result.completed
+            failed = failed || result.failed
+          }
+        }
+
+        if (!completed && !failed && !controller.signal.aborted) {
+          const message = '流式响应提前结束，未收到完成事件'
+          setState((prev) => ({
+            ...prev,
+            status: 'error',
+            message: '生成失败',
+            error: message,
+          }))
+          onError?.(message)
+        }
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          return
+        }
+
+        const message = error instanceof Error ? error.message : '连接中断'
+        setState((prev) => ({
+          ...prev,
+          status: 'error',
+          message: '生成失败',
+          error: message,
+        }))
+        onError?.(message)
+      } finally {
+        if (abortControllerRef.current === controller) {
+          abortControllerRef.current = null
+        }
+      }
+    },
+    [chapterId, handleEvent, onError, onStart, projectId]
+  )
 
   useEffect(() => {
     return () => {
-      disconnect()
+      abortControllerRef.current?.abort()
     }
-  }, [disconnect])
+  }, [])
 
   return {
     state,
     start,
     stop,
-    connect,
-    disconnect
+    reset,
+    isStreaming: state.status === 'connecting' || state.status === 'streaming',
   }
 }
-
-// ================================
-// 全局状态管理 Hook（示例）
-// ================================
 
 export interface GenerationQueueItem {
   taskId: string
@@ -294,20 +439,20 @@ export interface GenerationQueueItem {
 
 export function useGenerationQueue() {
   const [queue, setQueue] = useState<GenerationQueueItem[]>([])
-  const [isProcessing, setIsProcessing] = useState(false)
+  const [isProcessing] = useState(false)
 
   const addToQueue = useCallback((item: GenerationQueueItem) => {
-    setQueue(prev => [...prev, item])
+    setQueue((prev) => [...prev, item])
   }, [])
 
   const removeFromQueue = useCallback((taskId: string) => {
-    setQueue(prev => prev.filter(item => item.taskId !== taskId))
+    setQueue((prev) => prev.filter((item) => item.taskId !== taskId))
   }, [])
 
   const updateItem = useCallback((taskId: string, updates: Partial<GenerationQueueItem>) => {
-    setQueue(prev => prev.map(item =>
-      item.taskId === taskId ? { ...item, ...updates } : item
-    ))
+    setQueue((prev) =>
+      prev.map((item) => (item.taskId === taskId ? { ...item, ...updates } : item))
+    )
   }, [])
 
   return {
@@ -315,6 +460,6 @@ export function useGenerationQueue() {
     isProcessing,
     addToQueue,
     removeFromQueue,
-    updateItem
+    updateItem,
   }
 }

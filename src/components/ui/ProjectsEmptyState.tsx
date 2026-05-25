@@ -44,7 +44,7 @@ export function ProjectsEmptyState({
             <BookOpen className="h-4 w-4 text-blue-500" />
             {projectCount}
           </div>
-          <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">项目总数</div>
+          <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">小说总数</div>
         </div>
         <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4 text-center border border-gray-100 dark:border-gray-700/50">
           <div className="flex items-center justify-center gap-1.5 text-lg font-semibold text-gray-900 dark:text-white">
@@ -76,7 +76,7 @@ export function ProjectsEmptyState({
         <div className="flex items-center justify-center gap-3 flex-wrap">
           <Button onClick={onCreate} className="gap-1.5">
             <Plus className="h-4 w-4" />
-            新建项目
+            新建小说
           </Button>
           {onAnalyze && (
             <Button variant="outline" onClick={onAnalyze} className="gap-1.5">

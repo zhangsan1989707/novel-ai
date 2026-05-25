@@ -99,7 +99,7 @@ export class ExportManager {
   // ================================
 
   private static async performExport(state: ExportState): Promise<void> {
-    let currentState: ExportState = { ...state, status: 'IN_PROGRESS' }
+    const currentState: ExportState = { ...state, status: 'IN_PROGRESS' }
 
     try {
       // 从上次中断的位置继续

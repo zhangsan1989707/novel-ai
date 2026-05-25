@@ -2,7 +2,7 @@
  * 校验 Agent - 一致性检查
  */
 import { AIService } from '@/lib/ai/service'
-import { buildValidatorPrompt as buildValidatorPromptV1 } from '../prompts/chapter/validating'
+import type { AIProvider } from '@/lib/ai/types'
 import { buildValidatorPrompt as buildValidatorPromptV2, type ValidationReport as ValidationReportV2 } from '../prompts/chapter/validating-v2'
 import type { CharacterProfile, PlotlineData } from '../engine/types'
 
@@ -12,24 +12,26 @@ interface ValidatorInput {
   newChapterContent: string
   characterProfiles: CharacterProfile[]
   recentSummaries: { chapterNo: number; summary: string }[]
+  memoryContext?: string
   worldSetting?: string | null
   openPlotlines: PlotlineData[]
   chapterTitle?: string
   chapterGoal?: string
   useEnhancedPrompt?: boolean
+  provider?: AIProvider
 }
 
 // 默认使用增强版校验
 const buildValidatorPrompt = buildValidatorPromptV2
-type ValidationReport = ValidationReportV2
+export type ValidatorValidationReport = ValidationReportV2
 
 export async function validatorAgent(
   input: ValidatorInput
-): Promise<ValidationReport> {
+): Promise<ValidatorValidationReport> {
   const { projectId, chapterNo, newChapterContent, characterProfiles, recentSummaries, worldSetting, openPlotlines, chapterTitle, chapterGoal } = input
 
   // 获取可追踪的 AI Provider
-  const provider = await AIService.createProvider({
+  const provider = input.provider || await AIService.createProvider({
     projectId,
     usageType: 'VALIDATOR',
   })
@@ -49,6 +51,7 @@ export async function validatorAgent(
     chapterNo,
     newChapterContent,
     characterProfiles: characterProfilesStr,
+    memoryContext: input.memoryContext,
     recentSummaries: recentSummaries.map(s => `第${s.chapterNo}章：${s.summary}`).join('\n'),
     worldSetting,
     openPlotlines: plotlinesStr,
@@ -66,22 +69,27 @@ export async function validatorAgent(
   const jsonMatch = result.content.match(/\{[\s\S]*\}/)
   if (jsonMatch) {
     try {
-      const report = JSON.parse(jsonMatch[0]) as ValidationReport
+      const report = JSON.parse(jsonMatch[0]) as ValidatorValidationReport
       return report
     } catch {
-      // 解析失败，返回默认报告
       return {
-        result: 'pass',
-        score: 70,
-        issues: [],
+        result: 'retry',
+        score: 40,
+        issues: [{
+          type: 'worldview',
+          severity: 'major',
+          description: '校验结果解析失败，需要重试',
+          location: '全文',
+          reference: '校验输出',
+        }],
         characterUpdates: {},
         newPlotlines: [],
         resolvedPlotlines: [],
         qualityMetrics: {
-          logicScore: 75,
-          characterScore: 75,
-          emotionScore: 75,
-          styleScore: 70,
+          logicScore: 40,
+          characterScore: 40,
+          emotionScore: 40,
+          styleScore: 40,
         },
       }
     }

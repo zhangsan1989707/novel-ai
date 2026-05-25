@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { toast } from '@/components/ui/Toast'
+import { formatDisplayDateTime } from '@/lib/helpers'
 import {
   Zap,
   Play,
@@ -58,7 +59,7 @@ interface TriggerResult {
 }
 
 const triggerLabels: Record<HookTrigger, string> = {
-  project_create: '项目创建',
+  project_create: '小说创建',
   chapter_generate_start: '章节生成开始',
   chapter_generate_end: '章节生成结束',
   chapter_save: '章节保存',
@@ -358,7 +359,7 @@ export function WorkflowHooksPanel({ className }: WorkflowHooksPanelProps) {
                         <p className="text-xs text-muted-foreground mt-0.5">{record.message}</p>
                       )}
                       <span className="text-xs text-muted-foreground">
-                        {new Date(record.executedAt).toLocaleString('zh-CN')}
+                        {formatDisplayDateTime(record.executedAt)}
                       </span>
                     </div>
                   </div>

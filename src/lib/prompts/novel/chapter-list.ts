@@ -75,24 +75,59 @@ export function buildChapterListPrompt(input: ChapterListGenerationInput): strin
 
   // 【大纲参考】- 如果有大纲，优先参考
   if (input.outlineStages && Object.keys(input.outlineStages).length > 0) {
-    parts.push(`\n【大纲参考】`)
-    parts.push(`请严格按照以下大纲的阶段规划来生成章节列表：`)
+    parts.push(`\n【大纲参考 - 章节分配】`)
+    parts.push(`请严格按照以下大纲的阶段规划来生成章节列表。`)
+    parts.push(`全书共 ${input.totalChapters} 章，各阶段的章节分配如下：`)
     
-    // 处理 outlineStages
     if (input.outlineStages.stages && Array.isArray(input.outlineStages.stages)) {
-      // 标准格式，遍历阶段
-      for (const stage of input.outlineStages.stages) {
-        parts.push(`\n【${stage.name}】`)
-        parts.push(`阶段概述：${stage.description}`)
-        parts.push(`核心事件：${stage.coreEvents?.join('、')}`)
-        parts.push(`章节规划：${stage.chapterPlan}`)
+      const stages = input.outlineStages.stages as Array<{
+        name: string
+        description: string
+        coreEvents?: string[]
+        chapterRatio?: number
+        chapterPlan?: string
+      }>
+      
+      const ratios = stages.map((s) => s.chapterRatio ?? (1 / stages.length))
+      const ratioSum = ratios.reduce((a: number, b: number) => a + b, 0)
+      const normalized = ratios.map((r: number) => r / ratioSum)
+      
+      let chapterCursor = 1
+      const stageRanges: Array<{ name: string; start: number; end: number; description: string; coreEvents: string[]; chapterPlan: string }> = []
+      
+      for (let i = 0; i < stages.length; i++) {
+        const stage = stages[i]
+        let count: number
+        if (i === stages.length - 1) {
+          count = input.totalChapters - chapterCursor + 1
+        } else {
+          count = Math.max(1, Math.round(normalized[i] * input.totalChapters))
+        }
+        const start = chapterCursor
+        const end = chapterCursor + count - 1
+        stageRanges.push({
+          name: stage.name,
+          start,
+          end,
+          description: stage.description || '',
+          coreEvents: stage.coreEvents || [],
+          chapterPlan: stage.chapterPlan || '',
+        })
+        chapterCursor = end + 1
       }
+      
+      for (const range of stageRanges) {
+        parts.push(`\n【${range.name}】第${range.start}-${range.end}章（共${range.end - range.start + 1}章）`)
+        parts.push(`阶段概述：${range.description}`)
+        parts.push(`核心事件：${range.coreEvents.join('、')}`)
+        parts.push(`章节规划：${range.chapterPlan}`)
+      }
+      
+      parts.push(`\n⚠️ 你必须严格按照以上章节分配来生成章节，每个阶段的章节数必须与分配一致！`)
     } else {
-      // 其他格式，直接输出 JSON
       parts.push(JSON.stringify(input.outlineStages, null, 2))
     }
   } else if (input.outline) {
-    // 如果只有文本大纲
     parts.push(`\n【大纲参考】`)
     parts.push(input.outline)
   }
@@ -114,14 +149,20 @@ export function buildChapterListPrompt(input: ChapterListGenerationInput): strin
   }
 
   // 【网文章节要求】
+  const hasOutlineStages = input.outlineStages && Object.keys(input.outlineStages).length > 0
   parts.push(`\n【网文章节要求】`)
   parts.push(`1. 每个章节需有吸睛标题，能激发读者好奇心`)
   parts.push(`2. 章节之间需有合理的情节推进和连贯性`)
   parts.push(`3. 每章结尾需设置悬念或钩子，吸引继续阅读`)
   if (!hasExistingChapters) {
-    parts.push(`4. 前10章为开篇期，需快速建立人设和世界观`)
-    parts.push(`5. 中期（${Math.floor(input.totalChapters * 0.4)}-${Math.floor(input.totalChapters * 0.7)}章）需有持续冲突升级`)
-    parts.push(`6. 后期（${Math.floor(input.totalChapters * 0.7)}-${input.totalChapters}章）需有重大转折和高潮`)
+    if (hasOutlineStages) {
+      parts.push(`4. 请严格按照上方【大纲参考 - 章节分配】中各阶段的章节范围来安排情节节奏`)
+      parts.push(`5. 每个阶段的核心事件必须在该阶段的章节范围内完成`)
+    } else {
+      parts.push(`4. 前${Math.max(3, Math.floor(input.totalChapters * 0.1))}章为开篇期，需快速建立人设和世界观`)
+      parts.push(`5. 中期（${Math.floor(input.totalChapters * 0.4)}-${Math.floor(input.totalChapters * 0.7)}章）需有持续冲突升级`)
+      parts.push(`6. 后期（${Math.floor(input.totalChapters * 0.7)}-${input.totalChapters}章）需有重大转折和高潮`)
+    }
   }
 
   // 【标题风格】

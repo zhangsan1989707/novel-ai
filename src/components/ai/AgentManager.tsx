@@ -26,9 +26,9 @@ interface AgentManagerProps {
 }
 
 const tierConfig: Record<string, { label: string; color: string; icon: typeof Brain }> = {
-  opus: { label: 'OPUS', color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400', icon: Brain },
-  sonnet: { label: 'SONNET', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400', icon: Feather },
-  haiku: { label: 'HAIKU', color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400', icon: Zap },
+  opus: { label: '旗舰', color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400', icon: Brain },
+  sonnet: { label: '均衡', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400', icon: Feather },
+  haiku: { label: '轻量', color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400', icon: Zap },
 }
 
 const agentIcons: Record<string, typeof Bot> = {
@@ -40,6 +40,21 @@ const agentIcons: Record<string, typeof Bot> = {
   RESEARCHER: Bot,
   REVIEWER: Brain,
   DESLOPPER: Zap,
+}
+
+const agentTypeLabels: Record<string, string> = {
+  PLANNER: '策划',
+  WRITER: '写作',
+  POLISHER: '润色',
+  VALIDATOR: '校验',
+  SUMMARIZER: '总结',
+  RESEARCHER: '研究',
+  REVIEWER: '审稿',
+  DESLOPPER: '去AI味',
+}
+
+function getAgentTypeLabel(type: string) {
+  return agentTypeLabels[type] || type
 }
 
 export function AgentManager({ projectId }: AgentManagerProps) {
@@ -158,9 +173,9 @@ export function AgentManager({ projectId }: AgentManagerProps) {
                 return (
                   <div key={tier} className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <Badge className={cfg.color}>{cfg.label}</Badge>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 ml-2">
+                  <Badge className={cfg.color}>{cfg.label}</Badge>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 ml-2">
                       {configs.map((model) => (
                         <div key={`${model.vendor}-${model.modelId}`} className="rounded-md border border-border p-2 text-xs">
                           <div className="font-medium">{model.vendor} / {model.modelId}</div>
@@ -199,7 +214,7 @@ export function AgentManager({ projectId }: AgentManagerProps) {
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">{agent.description}</p>
                     <div className="flex items-center gap-2 mt-2">
-                      <Badge variant="outline" className="text-[10px]">{agent.type}</Badge>
+                      <Badge variant="outline" className="text-[10px]">{getAgentTypeLabel(agent.type)}</Badge>
                       {agent.supportsStreaming && (
                         <Badge variant="success" className="text-[10px]">流式</Badge>
                       )}
@@ -227,7 +242,7 @@ export function AgentManager({ projectId }: AgentManagerProps) {
             <div className="rounded-md border border-border p-3 bg-muted/30">
               <div className="flex items-center gap-3 text-sm">
                 <span className="text-muted-foreground">类型:</span>
-                <Badge variant="outline">{selectedAgent.type}</Badge>
+                <Badge variant="outline">{getAgentTypeLabel(selectedAgent.type)}</Badge>
                 <span className="text-muted-foreground">层级:</span>
                 {tierConfig[selectedAgent.modelTier] && (
                   <Badge className={tierConfig[selectedAgent.modelTier].color}>

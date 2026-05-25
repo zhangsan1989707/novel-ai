@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { getAIProvider, buildPromptContext, buildNovelGenerationPrompt, createProviderFromDefaultConfig } from '@/lib/ai'
+import { buildChapterMemoryPack } from '@/lib/memory'
 import { countChineseWords } from '@/lib/utils'
+import { getMinimumChapterWordCount, isChapterWordCountSufficient, buildChapterWordCountWarning } from '@/lib/ai/chapter-quality'
 import { AIVendor, ChapterStatus } from '@/types'
 import { logError } from '@/lib/logger'
 import { toProjectDTO, toChapterDTO } from '@/types/dto'
+import { countChapterWords, syncProjectChapterWordCount } from '@/lib/novel/chapter-word-count'
 
 // ============================================
 // Schema 验证
@@ -14,7 +17,7 @@ import { toProjectDTO, toChapterDTO } from '@/types/dto'
 const batchGenerateSchema = z.object({
   chapterIds: z.array(z.number().int().positive()).optional(), // 空表示全部待生成章节
   useContext: z.boolean().default(true),
-  contextChapterCount: z.number().int().min(1).max(10).default(3),
+  contextChapterCount: z.number().int().min(1).max(10).default(2),
   targetWordCount: z.number().int().positive().default(3000),
   temperature: z.number().min(0).max(2).default(0.7),
 })
@@ -205,6 +208,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             // 构建提示词上下文
             const chapterData = toChapterDTO(chapter)
 
+            const memoryPack = await buildChapterMemoryPack(projectIdNum, chapter.chapterNumber, {
+              recentChapterCount: Math.max(3, contextChapterCount),
+              recentVolumeCount: 2,
+              characterLimit: 10,
+              plotlineLimit: 10,
+              researchLimit: 3,
+            })
             const context = await buildPromptContext(
               project,
               chapterData,
@@ -213,6 +223,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
                 useContext,
                 contextChapterCount,
                 includeStageOutline: true,
+                memoryContext: memoryPack.writerContext,
               }
             )
 
@@ -276,17 +287,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
               aiTitle = aiTitle.replace(/^第\d+章\s*/, '')
               extractedTitle = aiTitle
               extractedContent = contentMatch[1].trim()
-              wordCount = countChineseWords(extractedContent)
             }
 
+            wordCount = countChapterWords(extractedContent)
+
             // 保存生成内容
-            const oldWordCount = chapter.content?.length || 0
-            const wordCountDiff = wordCount - oldWordCount
+            const minimumWordCount = getMinimumChapterWordCount(targetWordCount, chapter.chapterNumber)
+            const chapterReady = isChapterWordCountSufficient(wordCount, targetWordCount, chapter.chapterNumber)
 
             const updateData: Record<string, unknown> = {
               content: extractedContent,
               wordCount,
-              status: ChapterStatus.COMPLETED,
+              status: chapterReady ? ChapterStatus.COMPLETED : ChapterStatus.REVIEWING,
               generationCount: { increment: 1 },
             }
             if (extractedTitle) {
@@ -304,21 +316,22 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
               durationMs: Date.now() - chapterStartTime,
             })
 
-            // 更新项目总字数
-            if (wordCountDiff !== 0) {
-              await prisma.novelProject.update({
-                where: { id: projectIdNum },
-                data: {
-                  currentWordCount: { increment: wordCountDiff },
-                  status: 'WRITING',
-                },
-              })
-            }
+            // 统一按已保存章节回算项目总字数
+            await syncProjectChapterWordCount(prisma, projectIdNum)
+            await prisma.novelProject.update({
+              where: { id: projectIdNum },
+              data: {
+                status: 'WRITING',
+              },
+            })
 
             // 发送章节完成事件
             sendEvent('chapter_done', {
               chapterId: chapter.id,
               wordCount,
+              minimumWordCount,
+              qualityStatus: chapterReady ? 'completed' : 'reviewing',
+              warning: chapterReady ? undefined : buildChapterWordCountWarning(wordCount, targetWordCount, chapter.chapterNumber),
               index: i,
               total: chaptersToGenerate.length,
             })

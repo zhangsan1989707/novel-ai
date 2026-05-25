@@ -53,6 +53,36 @@ export async function initStoryState(
 }
 
 /**
+ * 创建或初始化世界状态
+ */
+export async function initWorldState(projectId: number): Promise<void> {
+  await prisma.worldState.upsert({
+    where: { projectId },
+    update: {
+      mapLevel: 1,
+      factionCount: 1,
+      powerLevel: 1,
+      civilizationLevel: 1,
+      classStructure: [],
+      regions: [],
+      currentExpansion: null,
+      lastExpandedAt: null,
+    },
+    create: {
+      projectId,
+      mapLevel: 1,
+      factionCount: 1,
+      powerLevel: 1,
+      civilizationLevel: 1,
+      classStructure: [],
+      regions: [],
+      currentExpansion: null,
+      lastExpandedAt: null,
+    },
+  })
+}
+
+/**
  * 更新情绪热度曲线
  */
 export async function updateEmotionalArc(

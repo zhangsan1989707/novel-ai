@@ -314,7 +314,7 @@ ${content.slice(0, 3000)}
     logError(error instanceof Error ? error : new Error(String(error)), { type: 'ai_validation' })
   }
 
-  return { issues: [], overallAssessment: '未能完成AI深度校验', score: 100 }
+  return { issues: [], overallAssessment: '未能完成AI深度校验', score: 0 }
 }
 
 /**

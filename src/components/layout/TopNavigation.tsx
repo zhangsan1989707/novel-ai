@@ -5,13 +5,17 @@ import { Button } from '@/components/ui'
 import { BookOpen, Settings, DollarSign, Search, TrendingUp } from 'lucide-react'
 import { ThemeToggle } from './ThemeToggle'
 import { HelpModal } from './HelpModal'
+import { NotificationDropdown } from './NotificationDropdown'
 
 interface TopNavigationProps {
   children: React.ReactNode
 }
 
-const navItems = [
+const primaryNavItems = [
   { label: '我的小说', href: '/projects', icon: BookOpen },
+]
+
+const secondaryNavItems = [
   { label: '扫榜选材', href: '/market', icon: TrendingUp },
   { label: 'AI 配置', href: '/settings', icon: Settings },
   { label: '成本管理', href: '/cost', icon: DollarSign },
@@ -39,7 +43,7 @@ export function TopNavigation({ children }: TopNavigationProps) {
             </div>
 
             <nav className="hidden md:flex items-center gap-1">
-              {navItems.map((item) => {
+              {[...primaryNavItems, ...secondaryNavItems].map((item) => {
                 const Icon = item.icon
                 const active = isActive(item.href)
                 return (
@@ -61,12 +65,13 @@ export function TopNavigation({ children }: TopNavigationProps) {
                 <Search className="h-4 w-4 text-muted-foreground" />
                 <input
                   type="text"
-                  placeholder="搜索项目..."
+                  placeholder="搜索小说..."
                   className="bg-transparent border-none outline-none text-sm ml-2 w-32 focus:w-48 transition-all text-foreground placeholder:text-muted-foreground"
                 />
               </div>
 
               <HelpModal />
+              <NotificationDropdown />
               <ThemeToggle />
             </div>
           </div>

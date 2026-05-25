@@ -34,6 +34,11 @@ export function buildEndingPrompt(input: EndingGenerationInput): string {
     parts.push(context.worldSetting)
   }
 
+  if (context.memoryContext) {
+    parts.push(`\n【记忆编排上下文】`)
+    parts.push(context.memoryContext)
+  }
+
   // 【设定 - 主角人设】
   if (context.protagonistProfile) {
     parts.push(`\n【设定 - 主角人设】`)

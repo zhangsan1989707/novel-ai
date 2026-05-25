@@ -60,7 +60,9 @@ const vendorLabels: Record<AIVendor, string> = {
   [AIVendor.ALIBABA]: '阿里云',
   [AIVendor.DEEPSEEK]: 'DeepSeek',
   [AIVendor.MINIMAX]: 'MiniMax',
+  [AIVendor.MIMO]: '小米 MiMo',
   [AIVendor.VOLCENGINE]: '火山引擎',
+  [AIVendor.ZHIPU]: '智谱 AI',
 }
 
 export default function CostPage() {

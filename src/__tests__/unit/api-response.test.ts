@@ -145,8 +145,8 @@ describe('API Response Utilities', () => {
         affectedRows: 1,
       })
 
-      expect(response.data.chapterId).toBe(123)
-      expect(response.data.affectedRows).toBe(1)
+      expect((response.data as { chapterId?: number }).chapterId).toBe(123)
+      expect((response.data as { affectedRows?: number }).affectedRows).toBe(1)
     })
   })
 })

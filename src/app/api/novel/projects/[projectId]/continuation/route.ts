@@ -4,8 +4,11 @@ import { prisma } from '@/lib/prisma'
 import { createProviderFromDefaultConfig } from '@/lib/ai'
 import { buildNovelGenerationPrompt, buildEndingPrompt, buildRevisionPrompt } from '@/lib/ai/prompts'
 import { buildPromptContext } from '@/lib/ai/context-manager'
+import { buildChapterMemoryPack } from '@/lib/memory'
+import { getMinimumChapterWordCount, isChapterWordCountSufficient } from '@/lib/ai/chapter-quality'
 import { logError } from '@/lib/logger'
 import { toProjectDTO, toChapterDTO } from '@/types/dto'
+import { countChapterWords, syncProjectChapterWordCount } from '@/lib/novel/chapter-word-count'
 
 // ============================================
 // Schema 验证
@@ -22,7 +25,7 @@ const continuationSchema = z.object({
   userInput: z.string().optional(),
   // 通用参数
   useContext: z.boolean().default(true),
-  contextChapterCount: z.number().int().min(1).max(10).default(3),
+  contextChapterCount: z.number().int().min(1).max(10).default(2),
   targetWordCount: z.number().int().positive().default(3000),
   temperature: z.number().min(0).max(2).default(0.7),
 })
@@ -56,7 +59,6 @@ export async function POST(
       mode,
       targetChapterCount,
       endingDirection,
-      baseChapterId,
       userInput,
       useContext,
       contextChapterCount,
@@ -156,11 +158,23 @@ export async function POST(
         ? toChapterDTO({ ...lastChapter, chapterNumber, title: chapterTitle })
         : toChapterDTO({ id: 0, projectId: projectIdNum, chapterNumber, title: chapterTitle, content: '', wordCount: 0, status: 'DRAFT' as const, sortOrder: chapterNumber, summary: null, generationPrompt: null, generationParams: null, generationCount: 0, lastGeneratedTime: null, chapterOutline: null, validationReport: null, retryCount: 0, lastAgentType: null, virtualWriterId: null, createdAt: new Date(), updatedAt: new Date(), virtualWriter: null })
 
+      const memoryPack = await buildChapterMemoryPack(projectIdNum, chapterNumber, {
+        recentChapterCount: 5,
+        recentVolumeCount: 2,
+        characterLimit: 8,
+        plotlineLimit: 8,
+        researchLimit: 3,
+      })
       const context = await buildPromptContext(
         project,
         currentChapter,
         [],
-        { useContext: false, contextChapterCount: 3, includeStageOutline: false }
+        {
+          useContext: false,
+          contextChapterCount: 3,
+          includeStageOutline: false,
+          memoryContext: memoryPack.writerContext,
+        }
       )
 
       // 构建结局提示词
@@ -189,11 +203,23 @@ export async function POST(
         ? toChapterDTO({ ...lastChapter, chapterNumber, title: chapterTitle })
         : toChapterDTO({ id: 0, projectId: projectIdNum, chapterNumber, title: chapterTitle, content: '', wordCount: 0, status: 'DRAFT' as const, sortOrder: chapterNumber, summary: null, generationPrompt: null, generationParams: null, generationCount: 0, lastGeneratedTime: null, chapterOutline: null, validationReport: null, retryCount: 0, lastAgentType: null, virtualWriterId: null, createdAt: new Date(), updatedAt: new Date(), virtualWriter: null })
 
+      const memoryPack = await buildChapterMemoryPack(projectIdNum, chapterNumber, {
+        recentChapterCount: Math.max(3, contextChapterCount),
+        recentVolumeCount: 2,
+        characterLimit: 10,
+        plotlineLimit: 10,
+        researchLimit: 3,
+      })
       const context = await buildPromptContext(
         project,
         currentChapterForContinue,
         contextChapters,
-        { useContext, contextChapterCount, includeStageOutline: true }
+        {
+          useContext,
+          contextChapterCount,
+          includeStageOutline: true,
+          memoryContext: memoryPack.writerContext,
+        }
       )
 
       prompt = buildNovelGenerationPrompt(context, {
@@ -209,11 +235,6 @@ export async function POST(
       chapterTitle = `重写版第${chapterNumber}章`
 
       // 获取全书摘要
-      const bookSummary = await prisma.bookSummary.findFirst({
-        where: { projectId: projectIdNum },
-        orderBy: { createdAt: 'desc' },
-      })
-
       // 构建上下文
       const rewriteContextChapters = chapters.slice(-contextChapterCount).map(toChapterDTO)
 
@@ -221,11 +242,23 @@ export async function POST(
         ? toChapterDTO({ ...lastChapter, chapterNumber, title: chapterTitle })
         : toChapterDTO({ id: 0, projectId: projectIdNum, chapterNumber, title: chapterTitle, content: '', wordCount: 0, status: 'DRAFT' as const, sortOrder: chapterNumber, summary: null, generationPrompt: null, generationParams: null, generationCount: 0, lastGeneratedTime: null, chapterOutline: null, validationReport: null, retryCount: 0, lastAgentType: null, virtualWriterId: null, createdAt: new Date(), updatedAt: new Date(), virtualWriter: null })
 
+      const memoryPack = await buildChapterMemoryPack(projectIdNum, chapterNumber, {
+        recentChapterCount: Math.max(3, contextChapterCount),
+        recentVolumeCount: 2,
+        characterLimit: 10,
+        plotlineLimit: 10,
+        researchLimit: 3,
+      })
       const context = await buildPromptContext(
         project,
         currentChapterForRewrite,
         rewriteContextChapters,
-        { useContext: false, contextChapterCount: 3, includeStageOutline: false }
+        {
+          useContext: false,
+          contextChapterCount: 3,
+          includeStageOutline: false,
+          memoryContext: memoryPack.writerContext,
+        }
       )
 
       // 使用 revision continue 类型
@@ -277,22 +310,29 @@ export async function POST(
             extractedContent = contentMatch[1].trim()
           }
 
+          const wordCount = countChapterWords(extractedContent)
+          const chapterReady = isChapterWordCountSufficient(wordCount, targetWordCount, chapterNumber)
+
           // 更新章节内容
           await prisma.novelChapter.update({
             where: { id: newChapter.id },
             data: {
               title: extractedTitle,
               content: extractedContent,
-              wordCount: extractedContent.length,
-              status: 'COMPLETED',
+              wordCount,
+              status: chapterReady ? 'COMPLETED' : 'REVIEWING',
             },
           })
+
+          await syncProjectChapterWordCount(prisma, projectIdNum as number)
 
           // 发送完成事件
           sendEvent('done', {
             chapterId: newChapter.id,
             chapterNumber,
-            wordCount: fullContent.length,
+            wordCount,
+            minimumWordCount: getMinimumChapterWordCount(targetWordCount, chapterNumber),
+            qualityStatus: chapterReady ? 'completed' : 'reviewing',
           })
         } catch (error) {
           // 标记章节为失败

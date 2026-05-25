@@ -2,8 +2,10 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Button, Progress } from '@/components/ui'
-import { Sparkles, Square, RefreshCw } from 'lucide-react'
+import { Sparkles, Square, RefreshCw, Wand2 } from 'lucide-react'
 import { countChineseWords } from '@/lib/utils'
+import { ChapterQualityPanel } from './ChapterQualityPanel'
+import { useChapterGeneration } from '@/hooks/use-chapter-generation'
 
 // ============================================
 // Types
@@ -12,21 +14,13 @@ import { countChineseWords } from '@/lib/utils'
 interface StreamViewerProps {
   projectId: number
   chapterId: number
+  chapterNumber: number
+  chapterTitle: string
   initialContent?: string
   onStart?: () => void
   onComplete?: (content: string, wordCount: number) => void
   onError?: (error: string) => void
-}
-
-type StreamStatus = 'idle' | 'connecting' | 'streaming' | 'complete' | 'error'
-
-interface StreamState {
-  status: StreamStatus
-  content: string
-  wordCount: number
-  progress: number
-  targetWordCount: number
-  error?: string
+  autoOptimize?: boolean
 }
 
 // ============================================
@@ -36,157 +30,68 @@ interface StreamState {
 export function StreamViewer({
   projectId,
   chapterId,
+  chapterNumber,
+  chapterTitle,
   initialContent = '',
   onStart,
   onComplete,
   onError,
+  autoOptimize = false,
 }: StreamViewerProps) {
-  const [state, setState] = useState<StreamState>({
-    status: 'idle',
-    content: initialContent,
-    wordCount: initialContent ? countChineseWords(initialContent) : 0,
-    progress: 0,
-    targetWordCount: 3000,
-  })
   const [settings, setSettings] = useState({
     useContext: true,
-    contextChapterCount: 3,
+    contextChapterCount: 2,
     targetWordCount: 3000,
     temperature: 0.7,
+    autoOptimizeAfterGenerate: autoOptimize,
   })
   const [showSettings, setShowSettings] = useState(true)
-  const eventSourceRef = useRef<EventSource | null>(null)
+  const [showQualityPanel, setShowQualityPanel] = useState(false)
+  const [optimizedContent, setOptimizedContent] = useState<string | null>(null)
   const contentRef = useRef<HTMLTextAreaElement>(null)
+  const { state, start, stop } = useChapterGeneration({
+    projectId,
+    chapterId,
+    initialContent,
+    initialWordCount: initialContent ? countChineseWords(initialContent) : 0,
+    onStart: () => {
+      setOptimizedContent(null)
+      setShowQualityPanel(false)
+      onStart?.()
+    },
+    onComplete: (result) => {
+      if (settings.autoOptimizeAfterGenerate && result.content.length > 100) {
+        setShowQualityPanel(true)
+        setOptimizedContent(result.content)
+      }
 
-  // 自动滚动
+      onComplete?.(result.content, result.wordCount)
+    },
+    onError,
+  })
+
   useEffect(() => {
     if (contentRef.current && state.status === 'streaming') {
       contentRef.current.scrollTop = contentRef.current.scrollHeight
     }
   }, [state.content, state.status])
 
-  // 连接 SSE
   const connectSSE = useCallback(() => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close()
-    }
-
-    setState((prev) => ({
-      ...prev,
-      status: 'connecting',
-      content: initialContent,
-      wordCount: initialContent ? countChineseWords(initialContent) : 0,
-    }))
-
-    onStart?.()
-
-    const params = new URLSearchParams({
-      chapterId: chapterId.toString(),
-      useContext: settings.useContext.toString(),
-      contextChapterCount: settings.contextChapterCount.toString(),
-      targetWordCount: settings.targetWordCount.toString(),
-      temperature: settings.temperature.toString(),
+    void start({
+      useContext: settings.useContext,
+      contextChapterCount: settings.contextChapterCount,
+      targetWordCount: settings.targetWordCount,
+      temperature: settings.temperature,
     })
+  }, [settings, start])
 
-    const eventSource = new EventSource(
-      `/api/novel/projects/${projectId}/generate/stream?${params}`
-    )
-    eventSourceRef.current = eventSource
-
-    eventSource.onopen = () => {
-      setState((prev) => ({ ...prev, status: 'streaming' }))
-    }
-
-    eventSource.addEventListener('start', () => {
-      setState((prev) => ({
-        ...prev,
-        status: 'streaming',
-        content: initialContent,
-        wordCount: initialContent ? countChineseWords(initialContent) : 0,
-      }))
-    })
-
-    eventSource.addEventListener('token', (e: MessageEvent) => {
-      const data = JSON.parse(e.data)
-      setState((prev) => ({
-        ...prev,
-        content: prev.content + data.content,
-        wordCount: countChineseWords(prev.content + data.content),
-        progress: Math.min(100, (countChineseWords(prev.content + data.content) / settings.targetWordCount) * 100),
-      }))
-    })
-
-    eventSource.addEventListener('wordCount', (e: MessageEvent) => {
-      const data = JSON.parse(e.data)
-      setState((prev) => ({
-        ...prev,
-        wordCount: data.count,
-        progress: Math.min(100, (data.count / settings.targetWordCount) * 100),
-      }))
-    })
-
-    eventSource.addEventListener('done', (e: MessageEvent) => {
-      const data = JSON.parse(e.data)
-      setState((prev) => ({
-        ...prev,
-        status: 'complete',
-        wordCount: data.wordCount,
-        progress: 100,
-      }))
-      onComplete?.(state.content + '', data.wordCount)
-      eventSource.close()
-    })
-
-    eventSource.addEventListener('error', (e: MessageEvent) => {
-      let errorMessage = '生成失败'
-      try {
-        const data = JSON.parse(e.data)
-        errorMessage = data.message || errorMessage
-      } catch {
-        // e.data may not be JSON, use it directly if available
-        if (e.data && typeof e.data === 'string') {
-          errorMessage = e.data
-        }
-      }
-      setState((prev) => ({
-        ...prev,
-        status: 'error',
-        error: errorMessage,
-      }))
-      onError?.(errorMessage)
-      eventSource.close()
-    })
-
-    eventSource.onerror = () => {
-      setState((prev) => ({
-        ...prev,
-        status: 'error',
-        error: '连接中断',
-      }))
-      eventSource.close()
-    }
-  }, [projectId, chapterId, settings, initialContent, onStart, onComplete, onError])
-
-  // 停止生成
   const stopGeneration = useCallback(() => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close()
-      eventSourceRef.current = null
-    }
-    setState((prev) => ({
-      ...prev,
-      status: 'idle',
-    }))
-  }, [])
+    stop()
+  }, [stop])
 
-  // 组件卸载时清理
-  useEffect(() => {
-    return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close()
-      }
-    }
-  }, [])
+  const displayedContent =
+    optimizedContent ??
+    (state.status === 'idle' && !state.content ? initialContent : state.content)
 
   return (
     <div className="space-y-4">
@@ -236,6 +141,19 @@ export function StreamViewer({
           >
             {showSettings ? '隐藏设置' : '显示设置'}
           </Button>
+          
+          {/* 去AI味按钮 */}
+          {state.status === 'complete' && state.content.length > 100 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowQualityPanel(!showQualityPanel)}
+              className={showQualityPanel ? 'bg-purple-50 border-purple-500' : ''}
+            >
+              <Wand2 className="h-4 w-4 mr-1" />
+              {showQualityPanel ? '隐藏去AI味' : '去AI味'}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -307,6 +225,19 @@ export function StreamViewer({
               </div>
             )}
           </div>
+          
+          <div className="flex items-center gap-4">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={settings.autoOptimizeAfterGenerate}
+                onChange={(e) =>
+                  setSettings((s) => ({ ...s, autoOptimizeAfterGenerate: e.target.checked }))
+                }
+              />
+              <span className="text-sm">生成后自动去AI味</span>
+            </label>
+          </div>
         </div>
       )}
 
@@ -315,7 +246,7 @@ export function StreamViewer({
         <textarea
           ref={contentRef}
           className="w-full min-h-[400px] p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 font-mono text-sm leading-relaxed resize-none transition-colors"
-          value={state.content || initialContent}
+          value={displayedContent}
           readOnly
           placeholder="生成的内容将显示在这里..."
         />
@@ -334,6 +265,22 @@ export function StreamViewer({
           </div>
         )}
       </div>
+
+      {/* AI质量分析面板 */}
+      {showQualityPanel && optimizedContent && (
+        <div className="mt-4">
+          <ChapterQualityPanel
+            projectId={projectId}
+            chapterId={chapterId}
+            chapterNumber={chapterNumber}
+            chapterTitle={chapterTitle}
+            content={optimizedContent}
+            onOptimizeComplete={(revisedContent) => {
+              setOptimizedContent(revisedContent)
+            }}
+          />
+        </div>
+      )}
 
       {/* 状态信息 */}
       {state.status !== 'idle' && (

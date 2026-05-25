@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { buildSynopsisGenerationPrompt } from '@/lib/ai/prompts'
-import { createProviderFromEnv, getDefaultVendor } from '@/lib/ai'
+import { createProviderFromEnv, createProviderFromDefaultConfig } from '@/lib/ai'
 import { logError } from '@/lib/logger'
+import { countChineseWords } from '@/lib/utils'
 
 /**
  * POST /api/novel/ai/generate-synopsis
@@ -35,9 +36,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 获取 AI Provider - 直接使用环境变量
-    const selectedVendor = vendor || getDefaultVendor()
-    const provider = createProviderFromEnv(selectedVendor)
+    // 获取 AI Provider - 优先使用数据库默认配置，支持指定 vendor 回退环境变量
+    let provider
+    if (vendor) {
+      provider = createProviderFromEnv(vendor)
+    } else {
+      provider = await createProviderFromDefaultConfig()
+    }
 
     // 构建提示词
     const prompt = buildSynopsisGenerationPrompt({
@@ -66,7 +71,7 @@ export async function POST(request: NextRequest) {
       success: true,
       data: {
         synopsis: result.content,
-        wordCount: result.content.length,
+        wordCount: countChineseWords(result.content),
       },
     })
   } catch (error) {

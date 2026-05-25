@@ -1,7 +1,7 @@
 /**
  * 增强版写作 Agent Prompt - 精细化控制版本
  */
-import { CHAPTER_WORD_COUNT, CHAPTER_PACING, AI_WRITE_FORBIDDEN } from '../shared/constants'
+import { CHAPTER_WORD_COUNT, CHAPTER_PACING } from '../shared/constants'
 import type { ChapterOutline } from '@/lib/engine/types'
 import { getKnowledgeForGenre, getAntiAiPromptFragment } from '@/lib/knowledge'
 
@@ -9,6 +9,7 @@ interface WriterPromptInput {
   projectTitle: string
   genre?: string | null
   writingStyle?: string | null
+  memoryContext?: string
   worldSetting?: string | null
   powerSystem?: string | null
   chapterNo: number
@@ -27,6 +28,11 @@ export function buildWriterPrompt(input: WriterPromptInput): string {
   parts.push(`- 章节编号：第${input.chapterNo}章`)
   if (input.genre) parts.push(`- 小说类型：${input.genre}`)
   if (input.writingStyle) parts.push(`- 写作风格：${input.writingStyle}`)
+
+  if (input.memoryContext) {
+    parts.push(`\n## 记忆编排上下文`)
+    parts.push(input.memoryContext)
+  }
 
   if (input.worldSetting) {
     parts.push(`\n## 世界观设定`)
@@ -182,7 +188,7 @@ export function buildWriterPrompt(input: WriterPromptInput): string {
   parts.push(`\n## 字数要求`)
   parts.push(`目标字数：${input.targetWordCount}字`)
   parts.push(`允许范围：${Math.floor(input.targetWordCount * (1 - CHAPTER_WORD_COUNT.TOLERANCE))}-${Math.floor(input.targetWordCount * (1 + CHAPTER_WORD_COUNT.TOLERANCE))}字`)
-  parts.push(`**请确保字数在允许范围内**`)
+  parts.push(`**请优先达到目标字数；如果内容还没写满，不要提前收尾，继续扩写到达要求。**`)
 
   parts.push(`\n## 输出要求`)
   parts.push(`- 仅输出 Markdown 格式的章节正文`)

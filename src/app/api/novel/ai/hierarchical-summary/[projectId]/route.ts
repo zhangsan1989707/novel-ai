@@ -80,6 +80,11 @@ export async function POST(
     const completedChapter = body.completedChapter || 1
 
     const result = await checkAndGenerateLayeredSummary(projectIdNum, completedChapter)
+    const context = await getHierarchicalContext(projectIdNum, completedChapter, {
+      maxTokens: 8000,
+      includeVolumeSummary: true,
+      includeBookSummary: true,
+    })
 
     // 返回当前分层摘要状态
     const [volumeSummaries, bookSummary] = await Promise.all([
@@ -94,6 +99,7 @@ export async function POST(
         bookTriggered: result.bookTriggered,
         volumeSummaries,
         bookSummary,
+        context,
       },
     })
   } catch (error) {

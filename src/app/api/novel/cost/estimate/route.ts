@@ -48,12 +48,30 @@ const DEFAULT_PRICING = {
       'MiniMax-Text-01': { input: 0.5, output: 1.5 }
     }
   },
+  [AIVendor.MIMO]: {
+    input: 1.0,
+    output: 2.0,
+    defaultModel: 'mimo-v2.5-pro',
+    models: {
+      'mimo-v2.5-pro': { input: 1.0, output: 2.0 }
+    }
+  },
   [AIVendor.VOLCENGINE]: { 
     input: 1.5, 
     output: 4.5, 
     defaultModel: 'doubao-pro-32k',
     models: {
       'doubao-pro-32k': { input: 1.5, output: 4.5 }
+    }
+  },
+  [AIVendor.ZHIPU]: { 
+    input: 1.0, 
+    output: 1.0, 
+    defaultModel: 'glm-4-0520',
+    models: {
+      'glm-4-0520': { input: 1.0, output: 1.0 },
+      'glm-4-flash': { input: 0.1, output: 0.1 },
+      'glm-4-airx': { input: 0.6, output: 0.6 }
     }
   },
 }

@@ -7,6 +7,7 @@ import { getCharacterProfiles } from '@/lib/memory/character-memory'
 import { getRecentChapterSummaries } from '@/lib/memory/chapter-summary'
 import { getOpenPlotlines } from '@/lib/memory/plotline-tracker'
 import { getStoryState } from '@/lib/engine/story-state'
+import { buildChapterMemoryPack, buildMemorySnapshotPack } from '@/lib/memory'
 import { logError } from '@/lib/logger'
 
 interface RouteParams {
@@ -38,6 +39,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       getStoryState(projectIdNum),
     ])
 
+    const memoryPack = await buildChapterMemoryPack(projectIdNum, (storyState?.currentChapter || 0) + 1, {
+      recentChapterCount: 10,
+      recentVolumeCount: 3,
+      characterLimit: 10,
+      plotlineLimit: 10,
+      researchLimit: 3,
+    })
+
     return NextResponse.json({
       success: true,
       data: {
@@ -45,6 +54,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         recentSummaries,
         openPlotlines,
         storyState,
+        memoryPack: buildMemorySnapshotPack(memoryPack),
+        contexts: {
+          planner: memoryPack.plannerContext,
+          writer: memoryPack.writerContext,
+          validator: memoryPack.validatorContext,
+          summarizer: memoryPack.summarizerContext,
+        },
       },
     })
   } catch (error) {

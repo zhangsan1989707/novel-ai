@@ -3,10 +3,13 @@ import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { getAIProvider, buildPromptContext, buildNovelGenerationPrompt, createProviderFromDefaultConfig } from '@/lib/ai'
 import { countChineseWords } from '@/lib/utils'
+import { getMinimumChapterWordCount, isChapterWordCountSufficient, buildChapterWordCountWarning } from '@/lib/ai/chapter-quality'
 import { AIVendor } from '@/types'
 import { logError } from '@/lib/logger'
 import { aiGenerationLimiter } from '@/lib/middleware/rate-limit'
 import { toProjectDTO, toChapterDTO } from '@/types/dto'
+import { recordAndApplyChapterCommit } from '@/lib/engine/chapter-commit'
+import { buildChapterMemoryPack } from '@/lib/memory'
 
 // ============================================
 // Schema 验证
@@ -15,7 +18,7 @@ import { toProjectDTO, toChapterDTO } from '@/types/dto'
 const generateSchema = z.object({
   chapterId: z.number().int().positive(),
   useContext: z.boolean().default(true),
-  contextChapterCount: z.number().int().min(1).max(10).default(3),
+  contextChapterCount: z.number().int().min(1).max(10).default(2),
   targetWordCount: z.number().int().positive().default(3000),
   temperature: z.number().min(0).max(2).default(0.7),
   virtualWriterId: z.number().int().positive().optional(),
@@ -34,7 +37,6 @@ interface RouteParams {
  * SSE 流式生成章节内容
  */
 export async function POST(request: NextRequest, { params }: RouteParams) {
-  const startTime = Date.now()
   let projectIdNum: number | null = null
   let chapterId: number | undefined
   try {
@@ -111,6 +113,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     })
 
     // 构建提示词上下文
+    const memoryPack = await buildChapterMemoryPack(projectIdNum, chapter.chapterNumber, {
+      recentChapterCount: contextChapterCount,
+      recentVolumeCount: 2,
+      characterLimit: 10,
+      plotlineLimit: 10,
+      researchLimit: 3,
+    })
     const context = await buildPromptContext(
       project,
       chapter,
@@ -119,6 +128,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         useContext,
         contextChapterCount,
         includeStageOutline: true,
+        memoryContext: memoryPack.writerContext,
       }
     )
 
@@ -222,39 +232,30 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             wordCount = countChineseWords(extractedContent)
           }
 
-          // 保存生成内容
-          const oldWordCount = chapter.content?.length || 0
-          const wordCountDiff = wordCount - oldWordCount
-
-          const updateData: Record<string, unknown> = {
+          const minimumWordCount = getMinimumChapterWordCount(targetWordCount, chapter.chapterNumber)
+          const chapterReady = isChapterWordCountSufficient(wordCount, targetWordCount, chapter.chapterNumber)
+          await recordAndApplyChapterCommit(projectIdNum as number, chapterId as number, {
+            chapterNo: chapter.chapterNumber,
+            chapterTitle: extractedTitle || chapter.title,
             content: extractedContent,
-            wordCount,
-            status: 'COMPLETED',
-          }
-          if (extractedTitle) {
-            updateData.title = extractedTitle
-          }
-
-          await prisma.novelChapter.update({
-            where: { id: chapterId },
-            data: updateData,
-          })
-
-          // 更新项目总字数
-          if (wordCountDiff !== 0) {
-            await prisma.novelProject.update({
-            where: { id: projectIdNum as number },
-            data: {
-              currentWordCount: { increment: wordCountDiff },
-            },
-          })
-          }
+            qualityStatus: chapterReady ? 'completed' : 'reviewing',
+            warning: chapterReady ? undefined : buildChapterWordCountWarning(wordCount, targetWordCount, chapter.chapterNumber),
+            targetWordCount,
+            currentWordCount: wordCount,
+            agentType: 'WRITER',
+            emittedAt: new Date().toISOString(),
+          }, 'generate-stream')
 
           // 发送完成事件
           sendEvent('done', {
             chapterId,
+            content: extractedContent,
+            title: extractedTitle || undefined,
             wordCount,
-            status: 'completed',
+            minimumWordCount,
+            qualityStatus: chapterReady ? 'completed' : 'reviewing',
+            warning: chapterReady ? undefined : buildChapterWordCountWarning(wordCount, targetWordCount, chapter.chapterNumber),
+            status: chapterReady ? 'completed' : 'reviewing',
           })
         } catch (error) {
           logError(error instanceof Error ? error : new Error(String(error)), { type: 'sse_generation', chapterId })

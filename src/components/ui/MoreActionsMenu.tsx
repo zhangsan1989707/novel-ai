@@ -40,13 +40,13 @@ export function MoreActionsMenu({
         {onEdit && (
           <DropdownMenuItem onClick={onEdit}>
             <Edit3 className="w-4 h-4 mr-2" />
-            编辑项目
+            编辑小说
           </DropdownMenuItem>
         )}
         {onSettings && (
           <DropdownMenuItem onClick={onSettings}>
             <Settings className="w-4 h-4 mr-2" />
-            项目设置
+            小说设置
           </DropdownMenuItem>
         )}
         {onExport && (
@@ -62,7 +62,7 @@ export function MoreActionsMenu({
             className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400"
           >
             <Trash2 className="w-4 h-4 mr-2" />
-            删除项目
+            删除小说
           </DropdownMenuItem>
         )}
       </DropdownMenuContent>

@@ -1,10 +1,11 @@
 'use client'
 
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { Button, Textarea, Select, Card, CardContent, CardHeader, CardTitle, Badge } from '@/components/ui'
-import { Sparkles, Square, Play, ArrowRight, BookOpen, MessageSquare, RefreshCw } from 'lucide-react'
+import { Button, Textarea } from '@/components/ui'
+import { Sparkles, Square, Play, ArrowRight, BookOpen, RefreshCw } from 'lucide-react'
 import { toast } from '@/components/ui/Toast'
 import { ContinuationMode, EndingDirection } from '@/types'
+import { countChineseWords } from '@/lib/utils'
 
 // ============================================
 // Types
@@ -21,7 +22,32 @@ interface ContinuationContext {
   unresolvedForeshadowing?: { setup: string; importance: string }[]
   openPlotlines?: { title: string; keyEvents: string[] }[]
   characterArcs?: { name: string; currentStatus: string }[]
-  bookSummary?: string
+  memoryPack?: {
+    sectionCount: number
+    sections: Array<{
+      key: string
+      title: string
+      priority: number
+      budget: number
+      truncated: boolean
+      content: string
+    }>
+    stats: {
+      recentChapterCount: number
+      openPlotlineCount: number
+      characterCount: number
+      researchCount: number
+      hasBookSummary: boolean
+      hasBlueprint: boolean
+      hasStoryState: boolean
+    }
+  }
+  contexts?: {
+    planner: string
+    writer: string
+    validator: string
+    summarizer: string
+  }
   lastChapterNumber?: number
   nextChapterNumber?: number
   recentChapterSummaries?: { chapterNo: number; summary: string }[]
@@ -87,7 +113,7 @@ export function ContinuationPanel({
       } else {
         toast.error(data.error?.message || '加载上下文失败')
       }
-    } catch (err) {
+    } catch {
       toast.error('加载上下文失败')
     } finally {
       setLoading(false)
@@ -152,8 +178,7 @@ export function ContinuationPanel({
 
         for (const line of lines) {
           if (line.startsWith('event: ')) {
-            const eventType = line.slice(7)
-            // 等待 data 行
+            // 等待紧随其后的 data 行
           } else if (line.startsWith('data: ')) {
             try {
               const data = JSON.parse(line.slice(6))
@@ -162,10 +187,11 @@ export function ContinuationPanel({
               }
               if (data.content) {
                 fullContent += data.content
+                const wordCount = countChineseWords(fullContent)
                 setGenerationState(prev => ({
                   ...prev,
                   content: fullContent,
-                  wordCount: fullContent.length,
+                  wordCount,
                 }))
               }
               if (data.error) {
@@ -193,7 +219,7 @@ export function ContinuationPanel({
         ...prev,
         status: 'done',
         content: displayContent,
-        wordCount: displayContent.length,
+        wordCount: countChineseWords(displayContent),
       }))
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
@@ -344,6 +370,37 @@ export function ContinuationPanel({
               </div>
             </div>
           )}
+
+          {context?.memoryPack && (
+            <div className="space-y-2">
+              <label className="text-xs text-gray-500">记忆编排</label>
+              <div className="grid grid-cols-2 gap-2 text-xs text-gray-600 dark:text-gray-300">
+                <div className="rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-2">
+                  <div className="text-gray-500">记忆块</div>
+                  <div className="font-medium">{context.memoryPack.sectionCount} 个</div>
+                </div>
+                <div className="rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-2">
+                  <div className="text-gray-500">角色上下文</div>
+                  <div className="font-medium">
+                    P {context.contexts?.planner?.length || 0} / W {context.contexts?.writer?.length || 0}
+                  </div>
+                </div>
+              </div>
+              <div className="max-h-40 overflow-y-auto space-y-1">
+                {context.memoryPack.sections.slice(0, 3).map(section => (
+                  <div key={section.key} className="text-xs p-2 bg-white dark:bg-gray-800 rounded border">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-medium">{section.title}</span>
+                      {section.truncated && <span className="text-amber-600">截断</span>}
+                    </div>
+                    <div className="text-gray-500 mt-1 line-clamp-2">
+                      {section.content.slice(0, 140)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -354,11 +411,20 @@ export function ContinuationPanel({
             <span className="text-sm font-medium">全文重写</span>
           </div>
 
-          {context?.bookSummary && (
+          {context?.memoryPack && (
             <div className="space-y-2">
-              <label className="text-xs text-gray-500">当前全书摘要</label>
-              <div className="text-sm p-2 bg-white dark:bg-gray-800 rounded max-h-24 overflow-y-auto">
-                {context.bookSummary?.slice(0, 200)}...
+              <label className="text-xs text-gray-500">记忆编排</label>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-2">
+                  <div className="text-gray-500">记忆块</div>
+                  <div className="font-medium">{context.memoryPack.sectionCount} 个</div>
+                </div>
+                <div className="rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-2">
+                  <div className="text-gray-500">角色上下文</div>
+                  <div className="font-medium">
+                    P {context.contexts?.planner?.length || 0} / W {context.contexts?.writer?.length || 0}
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -379,9 +445,9 @@ export function ContinuationPanel({
       {/* 生成按钮和控制 */}
       <div className="flex items-center gap-3">
         {generationState.status === 'idle' && (
-          <Button variant="primary" onClick={handleGenerate}>
+          <Button variant="primary" onClick={handleGenerate} disabled={loading}>
             <Play className="h-4 w-4 mr-2" />
-            开始生成
+            {loading ? '加载上下文中...' : '开始生成'}
           </Button>
         )}
         {generationState.status === 'generating' && (

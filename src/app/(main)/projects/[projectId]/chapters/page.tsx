@@ -1,15 +1,10 @@
-'use client'
+import { redirect } from 'next/navigation'
 
-import { use } from 'react'
-import { ChapterEditor } from '@/components/chapter'
-
-interface PageProps {
+export default async function ChaptersPage({
+  params,
+}: {
   params: Promise<{ projectId: string }>
-}
-
-export default function NewChapterPage({ params }: PageProps) {
-  const { projectId } = use(params)
-  const projectIdNum = parseInt(projectId)
-
-  return <ChapterEditor projectId={projectIdNum} />
+}) {
+  const { projectId } = await params
+  redirect(`/projects/${projectId}`)
 }

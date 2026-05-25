@@ -81,10 +81,9 @@ export function RealtimeAnalysisPanel({
     async function fetchAnalysis() {
       try {
         // 并行获取多维度数据
-        const [characterRes, plotlineRes, chapterRes] = await Promise.all([
+        const [characterRes, plotlineRes] = await Promise.all([
           fetch(`/api/novel/ai/dimension-correlation/${projectId}`),
           fetch(`/api/novel/ai/plotline-table/${projectId}`),
-          fetch(`/api/novel/engine/${projectId}/character-graph`), // 复用角色图 API
         ])
 
         const [correlationData, plotlineData] = await Promise.all([

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { logError } from '@/lib/logger'
+import { buildChapterMemoryPack, buildMemorySnapshotPack } from '@/lib/memory'
 
 /**
  * GET /api/novel/ai/dimension-correlation/[projectId]
@@ -41,6 +42,13 @@ export async function GET(
         select: { chapterNumber: true, title: true },
       }),
     ])
+    const memoryPack = await buildChapterMemoryPack(projectIdNum, Math.max(...chapters.map(ch => ch.chapterNumber), 1), {
+      recentChapterCount: 5,
+      recentVolumeCount: 2,
+      characterLimit: 10,
+      plotlineLimit: 10,
+      researchLimit: 3,
+    })
 
     // 构建关联图
     // 1. 人物 <-> 伏笔: 通过伏笔描述中提到的人物
@@ -141,6 +149,13 @@ export async function GET(
           totalChapters: chapters.length,
           openPlotlines: unresolvedCount,
           resolvedPlotlines: resolvedCount,
+        },
+        memoryPack: buildMemorySnapshotPack(memoryPack),
+        contexts: {
+          planner: memoryPack.plannerContext,
+          writer: memoryPack.writerContext,
+          validator: memoryPack.validatorContext,
+          summarizer: memoryPack.summarizerContext,
         },
       },
     })

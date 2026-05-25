@@ -3,6 +3,7 @@ import type { AIProvider, AIConfig } from './types'
 import { AIVendor } from '@/types'
 import { logger } from '@/lib/logger'
 import { TraceableAIProvider } from './traceable-provider'
+import type { AIModelConfig as DBAIModelConfig } from '@prisma/client'
 
 // 导入所有 Provider
 import {
@@ -11,7 +12,9 @@ import {
   AlibabaProvider,
   DeepSeekProvider,
   MiniMaxProvider,
+  MiMoProvider,
   VolcEngineProvider,
+  ZhipuProvider,
 } from './providers'
 
 // 注册所有 Provider
@@ -20,7 +23,9 @@ AIProviderFactory.register(AIVendor.ANTHROPIC, AnthropicProvider)
 AIProviderFactory.register(AIVendor.ALIBABA, AlibabaProvider)
 AIProviderFactory.register(AIVendor.DEEPSEEK, DeepSeekProvider)
 AIProviderFactory.register(AIVendor.MINIMAX, MiniMaxProvider)
+AIProviderFactory.register(AIVendor.MIMO, MiMoProvider)
 AIProviderFactory.register(AIVendor.VOLCENGINE, VolcEngineProvider)
+AIProviderFactory.register(AIVendor.ZHIPU, ZhipuProvider)
 
 // 导出工厂和 Provider
 export { AIProviderFactory } from './base'
@@ -39,6 +44,11 @@ export function getAIProvider(vendor: AIVendor, config?: AIConfig): AIProvider {
     config?.modelId || 'default-model',
     config?.apiKey || 'default-key',
     config?.apiEndpoint || 'default-endpoint',
+    config?.embeddingVendor || 'default-embedding-vendor',
+    config?.embeddingApiKey || 'default-embedding-key',
+    config?.embeddingApiEndpoint || 'default-embedding-endpoint',
+    config?.embeddingModelId || 'default-embedding-model',
+    config?.embeddingDimensions || 'default-embedding-dimensions',
   ].join('-')
 
   if (!providerCache.has(cacheKey)) {
@@ -77,15 +87,28 @@ export function createProviderFromEnv(vendor: AIVendor): AIProvider {
 }
 
 /**
+ * 获取数据库默认 AI 配置记录
+ */
+export async function getDefaultAIConfigRecord(): Promise<DBAIModelConfig | null> {
+  try {
+    const { prisma } = await import('@/lib/prisma')
+    return prisma.aIModelConfig.findFirst({
+      where: { isDefault: true },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
+    })
+  } catch (error) {
+    logger.warn({ error }, 'Failed to get default config record from database')
+    return null
+  }
+}
+
+/**
  * 从数据库获取默认 AI Provider
  * 优先从数据库中查找 isDefault=true 的配置，如果没有则回退到环境变量
  */
 export async function createProviderFromDefaultConfig(): Promise<AIProvider> {
   try {
-    const { prisma } = await import('@/lib/prisma')
-    const defaultConfig = await prisma.aIModelConfig.findFirst({
-      where: { isDefault: true },
-    })
+    const defaultConfig = await getDefaultAIConfigRecord()
 
     if (defaultConfig) {
       return getAIProvider(defaultConfig.vendor as AIVendor, {
@@ -93,6 +116,11 @@ export async function createProviderFromDefaultConfig(): Promise<AIProvider> {
         modelId: defaultConfig.modelId,
         apiKey: defaultConfig.apiKey || '',
         apiEndpoint: defaultConfig.apiEndpoint || undefined,
+        embeddingVendor: defaultConfig.embeddingVendor as AIVendor | undefined,
+        embeddingApiKey: defaultConfig.embeddingApiKey || undefined,
+        embeddingApiEndpoint: defaultConfig.embeddingApiEndpoint || undefined,
+        embeddingModelId: defaultConfig.embeddingModelId || undefined,
+        embeddingDimensions: defaultConfig.embeddingDimensions || undefined,
       })
     }
   } catch (error) {
@@ -120,6 +148,11 @@ export async function createProviderFromConfigId(configId: number): Promise<AIPr
         modelId: config.modelId,
         apiKey: config.apiKey || '',
         apiEndpoint: config.apiEndpoint || undefined,
+        embeddingVendor: config.embeddingVendor as AIVendor | undefined,
+        embeddingApiKey: config.embeddingApiKey || undefined,
+        embeddingApiEndpoint: config.embeddingApiEndpoint || undefined,
+        embeddingModelId: config.embeddingModelId || undefined,
+        embeddingDimensions: config.embeddingDimensions || undefined,
       })
     }
   } catch (error) {
@@ -132,13 +165,18 @@ export async function createProviderFromConfigId(configId: number): Promise<AIPr
 /**
  * 从环境变量创建配置
  */
-function createConfigFromEnv(vendor: AIVendor): AIConfig {
+export function createConfigFromEnv(vendor: AIVendor): AIConfig {
   switch (vendor) {
     case AIVendor.OPENAI:
       return {
         vendor: AIVendor.OPENAI,
         modelId: process.env.OPENAI_MODEL_ID || 'gpt-4o',
         apiKey: process.env.OPENAI_API_KEY || '',
+        embeddingVendor: AIVendor.OPENAI,
+        embeddingApiKey: process.env.OPENAI_EMBEDDING_API_KEY || process.env.EMBEDDING_API_KEY || process.env.OPENAI_API_KEY || '',
+        embeddingApiEndpoint: process.env.OPENAI_API_ENDPOINT || undefined,
+        embeddingModelId: process.env.OPENAI_EMBEDDING_MODEL_ID || process.env.EMBEDDING_MODEL_ID || 'text-embedding-3-small',
+        embeddingDimensions: Number(process.env.AI_EMBEDDING_DIMENSIONS || 256),
       }
     case AIVendor.ANTHROPIC:
       return {
@@ -151,18 +189,42 @@ function createConfigFromEnv(vendor: AIVendor): AIConfig {
         vendor: AIVendor.ALIBABA,
         modelId: process.env.DASHSCOPE_MODEL_ID || 'qwen-max',
         apiKey: process.env.DASHSCOPE_API_KEY || '',
+        embeddingVendor: AIVendor.ALIBABA,
+        embeddingApiKey: process.env.ALIBABA_EMBEDDING_API_KEY || process.env.DASHSCOPE_EMBEDDING_API_KEY || process.env.EMBEDDING_API_KEY || process.env.DASHSCOPE_API_KEY || '',
+        embeddingApiEndpoint: process.env.ALIBABA_EMBEDDING_API_ENDPOINT || process.env.DASHSCOPE_EMBEDDING_API_ENDPOINT || undefined,
+        embeddingModelId: process.env.ALIBABA_EMBEDDING_MODEL_ID || process.env.EMBEDDING_MODEL_ID,
+        embeddingDimensions: Number(process.env.AI_EMBEDDING_DIMENSIONS || 256),
       }
     case AIVendor.DEEPSEEK:
       return {
         vendor: AIVendor.DEEPSEEK,
         modelId: process.env.DEEPSEEK_MODEL_ID || 'deepseek-chat',
         apiKey: process.env.DEEPSEEK_API_KEY || '',
+        embeddingVendor: AIVendor.DEEPSEEK,
+        embeddingApiKey: process.env.DEEPSEEK_EMBEDDING_API_KEY || process.env.EMBEDDING_API_KEY || process.env.DEEPSEEK_API_KEY || '',
+        embeddingApiEndpoint: process.env.DEEPSEEK_EMBEDDING_API_ENDPOINT || undefined,
+        embeddingModelId: process.env.DEEPSEEK_EMBEDDING_MODEL_ID || process.env.EMBEDDING_MODEL_ID,
+        embeddingDimensions: Number(process.env.AI_EMBEDDING_DIMENSIONS || 256),
       }
     case AIVendor.MINIMAX:
       return {
         vendor: AIVendor.MINIMAX,
         modelId: process.env.MINIMAX_MODEL_ID || 'MiniMax-Text-01',
         apiKey: process.env.MINIMAX_API_KEY || '',
+        embeddingVendor: AIVendor.MINIMAX,
+        embeddingApiKey: process.env.MINIMAX_EMBEDDING_API_KEY || process.env.EMBEDDING_API_KEY || process.env.MINIMAX_API_KEY || '',
+        embeddingApiEndpoint: process.env.MINIMAX_EMBEDDING_API_ENDPOINT || undefined,
+        embeddingModelId: process.env.MINIMAX_EMBEDDING_MODEL_ID || process.env.EMBEDDING_MODEL_ID,
+        embeddingDimensions: Number(process.env.AI_EMBEDDING_DIMENSIONS || 256),
+      }
+    case AIVendor.MIMO:
+      return {
+        vendor: AIVendor.MIMO,
+        modelId: process.env.MIMO_MODEL_ID || 'mimo-v2.5-pro',
+        apiKey: process.env.MIMO_API_KEY || '',
+        apiEndpoint: process.env.MIMO_API_ENDPOINT || 'https://token-plan-cn.xiaomimimo.com/v1',
+        embeddingVendor: AIVendor.OPENAI,
+        embeddingApiKey: process.env.OPENAI_EMBEDDING_API_KEY || process.env.EMBEDDING_API_KEY || process.env.OPENAI_API_KEY || '',
       }
     case AIVendor.VOLCENGINE:
       return {
@@ -170,6 +232,23 @@ function createConfigFromEnv(vendor: AIVendor): AIConfig {
         modelId: process.env.VOLCENGINE_MODEL_ID || 'ark-code-latest',
         apiKey: process.env.VOLCENGINE_API_KEY || '',
         apiEndpoint: process.env.VOLCENGINE_API_ENDPOINT || 'https://ark.cn-beijing.volces.com/api/coding/v3',
+        embeddingVendor: AIVendor.VOLCENGINE,
+        embeddingApiKey: process.env.VOLCENGINE_EMBEDDING_API_KEY || process.env.EMBEDDING_API_KEY || process.env.VOLCENGINE_API_KEY || '',
+        embeddingApiEndpoint: process.env.VOLCENGINE_EMBEDDING_API_ENDPOINT || undefined,
+        embeddingModelId: process.env.VOLCENGINE_EMBEDDING_MODEL_ID || process.env.EMBEDDING_MODEL_ID,
+        embeddingDimensions: Number(process.env.AI_EMBEDDING_DIMENSIONS || 256),
+      }
+    case AIVendor.ZHIPU:
+      return {
+        vendor: AIVendor.ZHIPU,
+        modelId: process.env.ZHIPU_MODEL_ID || 'glm-4-0520',
+        apiKey: process.env.ZHIPU_API_KEY || '',
+        apiEndpoint: process.env.ZHIPU_API_ENDPOINT || 'https://open.bigmodel.cn/api/paas/v4',
+        embeddingVendor: AIVendor.ZHIPU,
+        embeddingApiKey: process.env.ZHIPU_EMBEDDING_API_KEY || process.env.EMBEDDING_API_KEY || process.env.ZHIPU_API_KEY || '',
+        embeddingApiEndpoint: process.env.ZHIPU_EMBEDDING_API_ENDPOINT || undefined,
+        embeddingModelId: process.env.ZHIPU_EMBEDDING_MODEL_ID || process.env.EMBEDDING_MODEL_ID,
+        embeddingDimensions: Number(process.env.AI_EMBEDDING_DIMENSIONS || 256),
       }
     default:
       throw new Error(`Unsupported vendor: ${vendor}`)
@@ -207,7 +286,16 @@ export function getDefaultAIConfig(): AIConfig {
     // 如果提供了独立的 API key，直接返回
     if (apiKey) {
       const config = createConfigFromEnv(vendor)
-      return { vendor, modelId, apiKey, apiEndpoint: config.apiEndpoint }
+      return {
+        vendor,
+        modelId,
+        apiKey,
+        apiEndpoint: config.apiEndpoint,
+        embeddingVendor: config.embeddingVendor,
+        embeddingApiEndpoint: config.embeddingApiEndpoint,
+        embeddingModelId: config.embeddingModelId,
+        embeddingDimensions: config.embeddingDimensions,
+      }
     }
 
     // 否则使用对应 vendor 的默认 API key
@@ -218,7 +306,16 @@ export function getDefaultAIConfig(): AIConfig {
   // 没有指定模型ID，使用 vendor 默认配置
   const vendor = getDefaultVendor()
   const config = createConfigFromEnv(vendor)
-  return { vendor, modelId: config.modelId, apiKey: config.apiKey }
+  return {
+    vendor,
+    modelId: config.modelId,
+    apiKey: config.apiKey,
+    apiEndpoint: config.apiEndpoint,
+    embeddingVendor: config.embeddingVendor,
+    embeddingApiEndpoint: config.embeddingApiEndpoint,
+    embeddingModelId: config.embeddingModelId,
+    embeddingDimensions: config.embeddingDimensions,
+  }
 }
 
 /**
@@ -231,6 +328,8 @@ export function getSupportedAIProviders(): { vendor: AIVendor; name: string }[] 
     { vendor: AIVendor.ALIBABA, name: '阿里云 (通义千问)' },
     { vendor: AIVendor.DEEPSEEK, name: 'DeepSeek' },
     { vendor: AIVendor.MINIMAX, name: 'MiniMax' },
+    { vendor: AIVendor.MIMO, name: '小米 MiMo' },
     { vendor: AIVendor.VOLCENGINE, name: '火山引擎 (字节跳动)' },
+    { vendor: AIVendor.ZHIPU, name: '智谱 AI (GLM)' },
   ]
 }

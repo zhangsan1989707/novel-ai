@@ -1,0 +1,1 @@
+ALTER TYPE "AIVendor" ADD VALUE 'ZHIPU';

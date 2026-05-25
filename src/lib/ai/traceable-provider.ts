@@ -1,7 +1,15 @@
 import { BaseAIProvider, estimateTokens } from '@/lib/ai/base'
 import { recordUsage, canProceedWithGeneration } from '@/lib/cost-tracker'
 import { logger } from '@/lib/logger'
-import type { AIProvider, AIConfig, GenerationParams, GenerationResult, ImageGenerationParams, ImageGenerationResult } from '@/lib/ai/types'
+import type {
+  AIProvider,
+  AIConfig,
+  EmbeddingParams,
+  GenerationParams,
+  GenerationResult,
+  ImageGenerationParams,
+  ImageGenerationResult,
+} from '@/lib/ai/types'
 
 // 临时用户 ID（在完整用户系统之前）
 const DEFAULT_USER_ID = 1
@@ -181,6 +189,48 @@ export class TraceableAIProvider implements AIProvider {
           error,
         },
         'AI image generation failed'
+      )
+      throw error
+    }
+  }
+
+  async embedText(text: string, params?: EmbeddingParams): Promise<number[]> {
+    if (!this.provider.embedText) {
+      throw new Error(`Provider ${this.provider.name} does not support embeddings`)
+    }
+
+    const startTime = Date.now()
+    try {
+      const embedding = await this.provider.embedText(text, params)
+
+      await recordUsage({
+        userId: this.userId,
+        projectId: this.projectId,
+        vendor: this.config.vendor,
+        modelId: params?.modelId || this.config.embeddingModelId || this.config.modelId,
+        usageType: this.usageType,
+        promptTokens: estimateTokens(text),
+        completionTokens: 0,
+      })
+
+      logger.info(
+        {
+          vendor: this.vendor,
+          modelId: params?.modelId || this.config.embeddingModelId || this.config.modelId,
+          duration: Date.now() - startTime,
+        },
+        'AI embedding completed with cost tracking'
+      )
+
+      return embedding
+    } catch (error) {
+      logger.error(
+        {
+          vendor: this.vendor,
+          modelId: params?.modelId || this.config.embeddingModelId || this.config.modelId,
+          error,
+        },
+        'AI embedding failed'
       )
       throw error
     }

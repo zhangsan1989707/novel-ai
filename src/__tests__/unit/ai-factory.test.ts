@@ -33,9 +33,21 @@ vi.mock('@/lib/ai/providers', () => ({
     setConfig: vi.fn(),
     validateConfig: vi.fn().mockReturnValue(true),
   })),
+  MiMoProvider: vi.fn().mockImplementation(() => ({
+    name: 'Xiaomi MiMo',
+    vendor: AIVendor.MIMO,
+    setConfig: vi.fn(),
+    validateConfig: vi.fn().mockReturnValue(true),
+  })),
   VolcEngineProvider: vi.fn().mockImplementation(() => ({
     name: 'VolcEngine',
     vendor: AIVendor.VOLCENGINE,
+    setConfig: vi.fn(),
+    validateConfig: vi.fn().mockReturnValue(true),
+  })),
+  ZhipuProvider: vi.fn().mockImplementation(() => ({
+    name: 'Zhipu AI',
+    vendor: AIVendor.ZHIPU,
     setConfig: vi.fn(),
     validateConfig: vi.fn().mockReturnValue(true),
   })),
@@ -77,7 +89,9 @@ describe('AI Provider Factory', () => {
       expect(vendors).toContain(AIVendor.ANTHROPIC)
       expect(vendors).toContain(AIVendor.ALIBABA)
       expect(vendors).toContain(AIVendor.MINIMAX)
+      expect(vendors).toContain(AIVendor.MIMO)
       expect(vendors).toContain(AIVendor.VOLCENGINE)
+      expect(vendors).toContain(AIVendor.ZHIPU)
     })
   })
 
@@ -111,7 +125,7 @@ describe('AI Provider Factory', () => {
     it('should return list of supported providers', async () => {
       const { getSupportedAIProviders } = await import('@/lib/ai/factory')
       const providers = getSupportedAIProviders()
-      expect(providers.length).toBe(6)
+      expect(providers.length).toBe(8)
       expect(providers.find(p => p.vendor === AIVendor.DEEPSEEK)?.name).toBe('DeepSeek')
     })
   })
@@ -126,11 +140,14 @@ describe('BaseAIProvider', () => {
       readonly vendor = AIVendor.DEEPSEEK
       async generate() { return { content: '' } }
       async *generateStream() { yield '' }
+      public exposeEstimateTargetTokens(targetWordCount: number) {
+        return this.estimateTargetTokens(targetWordCount)
+      }
     }
 
     const provider = new TestProvider()
     // 3000 字 * 1.5 = 4500 tokens
-    expect(provider.estimateTargetTokens(3000)).toBe(4500)
+    expect(provider.exposeEstimateTargetTokens(3000)).toBe(4500)
   })
 
   it('should validate config correctly', async () => {
@@ -141,6 +158,9 @@ describe('BaseAIProvider', () => {
       readonly vendor = AIVendor.DEEPSEEK
       async generate() { return { content: '' } }
       async *generateStream() { yield '' }
+      public exposeIsContentSufficient(wordCount: number, targetWordCount: number) {
+        return this.isContentSufficient(wordCount, targetWordCount)
+      }
     }
 
     const provider = new TestProvider()
@@ -172,13 +192,16 @@ describe('BaseAIProvider', () => {
       readonly vendor = AIVendor.DEEPSEEK
       async generate() { return { content: '' } }
       async *generateStream() { yield '' }
+      public exposeIsContentSufficient(wordCount: number, targetWordCount: number) {
+        return this.isContentSufficient(wordCount, targetWordCount)
+      }
     }
 
     const provider = new TestProvider()
 
     // 3000 * 0.9 = 2700, 所以 2800 应该足够，2000 不够
-    expect(provider.isContentSufficient(2800, 3000)).toBe(true)
-    expect(provider.isContentSufficient(2000, 3000)).toBe(false)
-    expect(provider.isContentSufficient(2700, 3000)).toBe(true)
+    expect(provider.exposeIsContentSufficient(2800, 3000)).toBe(true)
+    expect(provider.exposeIsContentSufficient(2000, 3000)).toBe(false)
+    expect(provider.exposeIsContentSufficient(2700, 3000)).toBe(true)
   })
 })

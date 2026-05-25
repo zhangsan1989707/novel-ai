@@ -3,29 +3,32 @@
  * 核心组件，协调多 Agent 协作
  */
 import { prisma } from '@/lib/prisma'
-import { ChapterStatus } from '@prisma/client'
+import { ChapterStatus, type Prisma } from '@prisma/client'
+import { countChineseWords } from '@/lib/utils'
+import { getMinimumChapterWordCount, buildChapterWordCountWarning } from '@/lib/ai/chapter-quality'
+import { AIService } from '@/lib/ai/service'
 import { plannerAgent } from '../agents/planner'
 import { writerAgent } from '../agents/writer'
 import { polisherAgent } from '../agents/polisher'
-import { validatorAgent } from '../agents/validator'
+import { validatorAgent, type ValidatorValidationReport } from '../agents/validator'
 import { summarizerAgent } from '../agents/summarizer'
-import * as memory from '../memory'
+import { reviewerAgent } from '../agents/reviewer'
+import { buildChapterMemoryPack } from '../memory'
 import * as storyState from './story-state'
 import { hookRegistry } from '../hooks/registry'
+import { directChapter } from '../agents/narrative-director'
+import { chapterDeslopper } from '../agents/deslopper'
+import { recordAndApplyChapterCommit } from './chapter-commit'
+import { buildRevisionPrompt } from '@/lib/ai'
 import type {
   ChapterOutline,
-  CharacterProfile,
-  PlotlineData,
-  ValidationReport,
+  ValidationReport as EngineValidationReport,
+  ChapterSummaryData,
   SSEEvent,
   AgentType,
 } from './types'
 
 const MAX_RETRY_COUNT = 3
-
-type JsonValue = string | number | boolean | null | JsonObject | JsonArray
-interface JsonObject { [key: string]: JsonValue }
-interface JsonArray extends Array<JsonValue> {}
 
 interface GenerationResult {
   success: boolean
@@ -37,16 +40,64 @@ interface GenerationResult {
 
 type SSEEmitter = (event: SSEEvent) => void
 
+function buildReviewSuggestion(review: {
+  consensus: string
+  criticalIssues: string[]
+  improvementPriority: string[]
+  overallScore: number
+}): string {
+  const parts: string[] = []
+
+  if (review.consensus.trim()) {
+    parts.push(`审稿共识：${review.consensus.trim()}`)
+  }
+
+  if (review.criticalIssues.length > 0) {
+    parts.push(`关键问题：${review.criticalIssues.slice(0, 3).join('；')}`)
+  }
+
+  if (review.improvementPriority.length > 0) {
+    parts.push(`优先改进：${review.improvementPriority.slice(0, 5).join('；')}`)
+  }
+
+  if (review.overallScore < 60) {
+    parts.push('请优先重构章节冲突、节奏和钩子，再保留人物与世界观连续性。')
+  } else {
+    parts.push('请保留原有亮点，只修正薄弱表达、节奏拖沓和轻微结构问题。')
+  }
+
+  return parts.join('\n')
+}
+
 /**
  * 章节生成流水线
- * 依次执行：策划 → 写作 → 润色 → 校验 → 摘要
+ * 依次执行：策划 → 写作 → 润色 → 对抗审稿 → 校验 → 去 AI 味 → 摘要
  */
 export async function runChapterGenerationPipeline(
   projectId: number,
   chapterNo: number,
-  emit: SSEEmitter
+  emit: SSEEmitter,
+  options?: {
+    speedMode?: 'fast' | 'balanced' | 'quality'
+  }
 ): Promise<GenerationResult> {
+  const speedMode = options?.speedMode || 'balanced'
   const startTime = Date.now()
+  let lastReportedWordCount = 0
+
+  // 创建共享 AI Provider（避免每个 Agent 重复 DB 查询）
+  const sharedProvider = await AIService.createProvider({
+    projectId,
+    usageType: 'PIPELINE',
+  })
+
+  // Phase 计时辅助函数
+  const runPhase = async (phase: string, fn: () => Promise<void>) => {
+    const phaseStart = Date.now()
+    await fn()
+    const durationMs = Date.now() - phaseStart
+    emit({ type: 'phase_timing', data: { phase, durationMs, speedMode } })
+  }
 
   // 获取项目信息
   const project = await prisma.novelProject.findUnique({
@@ -60,15 +111,26 @@ export async function runChapterGenerationPipeline(
 
   // 初始化故事状态（如果不存在）
   await storyState.initStoryState(projectId, project.totalVolumes * 25)
-
-  // 获取上下文数据（并行查询）
-  const [characterProfiles, openPlotlines, recentSummaries, currentState] = await Promise.all([
-    memory.getCharacterProfilesForChapter(projectId, chapterNo),
-    memory.getOpenPlotlines(projectId),
-    memory.getRecentChapterSummaries(projectId, 3),
-    storyState.getStoryState(projectId),
-  ])
-  const emotionalArc = currentState?.emotionalArc || []
+  const directorContext = await directChapter(chapterNo, projectId).catch(() => null)
+  const directorDirective = directorContext?.fullDirective || ''
+  const memoryPack = await buildChapterMemoryPack(projectId, chapterNo, {
+    recentChapterCount: 3,
+    recentVolumeCount: 2,
+    characterLimit: 10,
+    plotlineLimit: 10,
+    researchLimit: 3,
+  })
+  const emotionalArc = memoryPack.storyState?.emotionalArc || []
+  const plannerMemoryContext = [memoryPack.plannerContext, directorDirective ? `## 导演指令\n${directorDirective}` : '']
+    .filter(Boolean)
+    .join('\n\n')
+  const writerMemoryContext = [memoryPack.writerContext, directorDirective ? `## 导演指令\n${directorDirective}` : '']
+    .filter(Boolean)
+    .join('\n\n')
+  const validatorMemoryContext = [memoryPack.validatorContext, directorDirective ? `## 导演指令\n${directorDirective}` : '']
+    .filter(Boolean)
+    .join('\n\n')
+  const summarizerMemoryContext = memoryPack.summarizerContext
 
   // 更新章节状态
   const chapter = await prisma.novelChapter.upsert({
@@ -102,266 +164,431 @@ export async function runChapterGenerationPipeline(
     }
 
     // ========== Phase 1: 策划 Agent ==========
-    emit({ type: 'start', data: { chapterId: chapter.id, agent: 'planner' } })
+    let outline!: ChapterOutline
 
-    const plannerResult = await plannerAgent({
-      projectId,
-      chapterNo,
-      projectTitle: project.title,
-      genre: project.genre,
-      writingStyle: project.writingStyle,
-      worldSetting: project.worldSetting,
-      powerSystem: project.powerSystem,
-      protagonistProfile: project.protagonistProfile,
-      antagonistSetting: project.antagonistSetting,
-      targetWordCount: project.chapterWordCount || 3000,
-      characterProfiles: characterProfiles.map(c => ({
-        name: c.name,
-        role: c.role,
-        description: `${c.appearance || ''} ${c.personality || ''}`,
-      })),
-      openPlotlines: openPlotlines.map(p => ({ id: p.id, description: p.description })),
-      emotionalArc,
-      recentChapterCount: 3,
-    })
-
-    const outline = plannerResult.outline
-
-    // 保存章节大纲
-    await prisma.novelChapter.update({
-      where: { id: chapter.id },
-      data: {
-        chapterOutline: outline as any,
-        lastAgentType: 'VALIDATOR',
-      },
-    })
-
-    // 记录策划事件
-    await storyState.recordStoryEvent(
-      projectId,
-      'PLANNER_DONE',
-      `第${chapterNo}章大纲生成完成：${outline.chapterTitle}`,
-      chapterNo
-    )
-
-    // ========== Phase 1.5: 研究 Agent (可选) ==========
-    const existingRefs = await prisma.researchRef.findMany({
-      where: { projectId },
-      select: { topic: true, summary: true, keyFacts: true, creativeMaterials: true },
-    })
-
-    if (existingRefs.length > 0) {
-      emit({ type: 'research', data: { refsCount: existingRefs.length } })
-    }
-
-    const researchContext = existingRefs
-      .map(r => `【${r.topic}】${r.summary}\n关键事实: ${r.keyFacts.join('; ')}\n创作素材: ${r.creativeMaterials.join('; ')}`)
-      .join('\n\n')
-
-    // ========== Phase 2: 写作 Agent ==========
-    emit({ type: 'agent_switch', data: { agent: 'writer' } })
-
-    let draftContent = ''
-    await writerAgent(
-      {
-        projectId,
-        chapterNo,
-        projectTitle: project.title,
-        genre: project.genre,
-        writingStyle: project.writingStyle,
-        worldSetting: researchContext
-          ? `${project.worldSetting || ''}\n\n【研究参考资料】\n${researchContext}`
-          : project.worldSetting,
-        powerSystem: project.powerSystem,
-        protagonistProfile: project.protagonistProfile,
-        antagonistSetting: project.antagonistSetting,
-        targetWordCount: project.chapterWordCount || 3000,
-        outline,
-        characterProfiles,
-        recentSummaries,
-      },
-      (token) => {
-        draftContent += token
-        emit({ type: 'token', data: { content: token } })
+    if (speedMode === 'fast') {
+      outline = {
+        chapterTitle: `第${chapterNo}章`,
+        chapterGoal: '继续推进故事发展',
+        mainConflict: '当前核心矛盾',
+        keyScenes: [
+          { scene: '开场：快速进入本章情节', characters: ['主角'], emotion: '推进' },
+          { scene: '发展：推进核心矛盾', characters: ['主角', '关键角色'], emotion: '对抗' },
+          { scene: '收尾：留下悬念', characters: ['主角'], emotion: '悬念' },
+        ],
+        ending: '留下新的悬念，为下一章铺垫',
+        foreshadows: [],
+        resolvedPlotlines: [],
       }
-    )
+    } else {
+      await runPhase('planner', async () => {
+        emit({ type: 'start', data: { chapterId: chapter.id, agent: 'planner' } })
 
-    // ========== Phase 3: 润色 Agent ==========
-    emit({ type: 'agent_switch', data: { agent: 'polisher' } })
+        const plannerResult = await plannerAgent({
+          projectId,
+          chapterNo,
+          projectTitle: project.title,
+          genre: project.genre,
+          writingStyle: project.writingStyle,
+          memoryContext: plannerMemoryContext,
+          worldSetting: project.worldSetting,
+          powerSystem: project.powerSystem,
+          protagonistProfile: project.protagonistProfile,
+          antagonistSetting: project.antagonistSetting,
+          targetWordCount: project.chapterWordCount || 3000,
+          characterProfiles: memoryPack.characterProfiles.map(c => ({
+            name: c.name,
+            role: c.role,
+            description: `${c.appearance || ''} ${c.personality || ''}`,
+          })),
+          openPlotlines: memoryPack.openPlotlines.map(p => ({ id: p.id, description: p.description })),
+          emotionalArc,
+          recentChapterSummaries: memoryPack.recentChapterSummaries,
+          recentChapterCount: memoryPack.recentChapterSummaries.length,
+          provider: sharedProvider,
+        })
 
-    let polishedContent = ''
-    await polisherAgent(
-      {
-        projectId,
-        chapterNo,
-        content: draftContent,
-        styleGuide: project.writingStyle,
-      },
-      (token) => {
-        polishedContent += token
-        emit({ type: 'token', data: { content: token } })
-      }
-    )
+        outline = plannerResult.outline
 
-    // ========== Phase 4: 校验 Agent ==========
-    emit({ type: 'agent_switch', data: { agent: 'validator' } })
-
-    const validationReport = await validatorAgent({
-      projectId,
-      chapterNo,
-      newChapterContent: polishedContent,
-      characterProfiles,
-      recentSummaries,
-      worldSetting: project.worldSetting,
-      openPlotlines,
-    })
-
-    emit({
-      type: 'validation',
-      data: {
-        result: validationReport.result,
-        score: validationReport.score,
-      },
-    })
-
-    // 校验失败处理
-    if (validationReport.result === 'retry') {
-      const currentRetry = await prisma.novelChapter.findUnique({
-        where: { id: chapter.id },
-      })
-      const retryCount = (currentRetry?.retryCount || 0) + 1
-
-      if (retryCount >= MAX_RETRY_COUNT) {
-        // 超限降级输出，标记人工审核
+        // 保存章节大纲
         await prisma.novelChapter.update({
           where: { id: chapter.id },
           data: {
-            content: polishedContent,
-            status: ChapterStatus.REVIEWING,
-            retryCount,
-            validationReport: validationReport as any,
-            wordCount: polishedContent.length,
+            chapterOutline: outline as unknown as Prisma.InputJsonValue,
             lastAgentType: 'VALIDATOR',
           },
         })
 
-        emit({
-          type: 'error',
-          data: {
-            message: `校验失败超过${MAX_RETRY_COUNT}次，已标记人工审核`,
-          },
-        })
+        // 记录策划事件
+        await storyState.recordStoryEvent(
+          projectId,
+          'PLANNER_DONE',
+          `第${chapterNo}章大纲生成完成：${outline.chapterTitle}`,
+          chapterNo
+        )
+      })
+    }
 
-        return {
-          success: true,
-          chapterId: chapter.id,
-          content: polishedContent,
-          error: '校验失败，已标记人工审核',
-        }
-      }
-
-      // 重试写作
+    if (speedMode === 'fast') {
       await prisma.novelChapter.update({
         where: { id: chapter.id },
-        data: { retryCount },
+        data: {
+          chapterOutline: outline as unknown as Prisma.InputJsonValue,
+          lastAgentType: 'WRITER',
+        },
+      })
+    }
+
+    // ========== Phase 1.5: 研究资料 ==========
+    if (memoryPack.researchRefs.length > 0) {
+      emit({ type: 'research', data: { refsCount: memoryPack.researchRefs.length } })
+    }
+
+    // ========== Phase 2: 写作 Agent ==========
+    let draftContent = ''
+
+    await runPhase('writer', async () => {
+      emit({ type: 'agent_switch', data: { agent: 'writer' } })
+
+      await writerAgent(
+        {
+          projectId,
+          chapterNo,
+          projectTitle: project.title,
+          genre: project.genre,
+          writingStyle: project.writingStyle,
+          memoryContext: writerMemoryContext,
+          worldSetting: project.worldSetting,
+          powerSystem: project.powerSystem,
+          protagonistProfile: project.protagonistProfile,
+          antagonistSetting: project.antagonistSetting,
+          targetWordCount: project.chapterWordCount || 3000,
+          outline,
+          characterProfiles: memoryPack.characterProfiles,
+          recentSummaries: memoryPack.recentChapterSummaries,
+          provider: sharedProvider,
+        },
+        (token) => {
+          draftContent += token
+          emit({ type: 'token', data: { content: token } })
+          const currentWordCount = countChineseWords(draftContent)
+          if (currentWordCount >= lastReportedWordCount + 120) {
+            lastReportedWordCount = currentWordCount
+            emit({ type: 'wordCount', data: { count: currentWordCount } })
+          }
+        }
+      )
+    })
+
+    // ========== Phase 3: 润色 Agent ==========
+    let polishedContent = draftContent
+
+    if (speedMode === 'quality') {
+      await runPhase('polisher', async () => {
+        emit({ type: 'agent_switch', data: { agent: 'polisher' } })
+
+        polishedContent = ''
+        await polisherAgent(
+          {
+            projectId,
+            chapterNo,
+            content: draftContent,
+            styleGuide: project.writingStyle,
+            provider: sharedProvider,
+          },
+          (token) => {
+            polishedContent += token
+            emit({ type: 'token', data: { content: token } })
+          }
+        )
+      })
+    }
+
+    // ========== Phase 4: 对抗审稿 Agent ==========
+    let reviewedContent = polishedContent
+
+    if (speedMode === 'quality') {
+      await runPhase('reviewer', async () => {
+        emit({ type: 'agent_switch', data: { agent: 'reviewer' } })
+
+        try {
+          const reviewResult = await reviewerAgent(
+            {
+              projectId,
+              content: polishedContent,
+              genre: project.genre,
+              targetAudience: project.targetAudience,
+              chapterNo,
+              worldSetting: project.worldSetting,
+              provider: sharedProvider,
+            },
+          )
+
+          await prisma.reviewReport.create({
+            data: {
+              projectId,
+              chapterNo,
+              content: polishedContent,
+              reviews: reviewResult.reviews as unknown as object[],
+              overallScore: reviewResult.overallScore,
+              consensus: reviewResult.consensus,
+              criticalIssues: reviewResult.criticalIssues,
+              improvementPriority: reviewResult.improvementPriority,
+            },
+          })
+
+          const shouldApplyRevision = reviewResult.overallScore < 85 || reviewResult.criticalIssues.length > 0
+          if (shouldApplyRevision) {
+            const reviewRevisionType = reviewResult.overallScore < 60 || reviewResult.criticalIssues.length > 0
+              ? 'rewrite'
+              : 'polish'
+
+            await runPhase('review_revision', async () => {
+              emit({ type: 'agent_switch', data: { agent: 'review_revision' } })
+
+              const reviewContext = {
+                projectTitle: project.title,
+                genre: project.genre || undefined,
+                writingStyle: project.writingStyle || undefined,
+                worldSetting: project.worldSetting || undefined,
+                powerSystem: project.powerSystem || undefined,
+                protagonistProfile: project.protagonistProfile || undefined,
+                protagonistGoal: project.protagonistGoal || undefined,
+                antagonistSetting: project.antagonistSetting || undefined,
+                endingPlan: project.endingPlan || undefined,
+                writingPrompt: project.writingPrompt || undefined,
+                currentChapterNumber: chapterNo,
+                currentChapterTitle: outline.chapterTitle,
+                currentChapterSummary: [outline.chapterGoal, outline.mainConflict].filter(Boolean).join('；'),
+                memoryContext: writerMemoryContext,
+              }
+
+              const reviewPrompt = buildRevisionPrompt(
+                reviewContext,
+                polishedContent,
+                reviewRevisionType,
+                buildReviewSuggestion(reviewResult)
+              )
+
+              const revisionResult = await sharedProvider.generate(reviewPrompt, {
+                temperature: reviewRevisionType === 'rewrite' ? 0.72 : 0.55,
+                maxTokens: Math.min(4096, Math.max(2000, Math.ceil(polishedContent.length * 0.75))),
+              })
+
+              reviewedContent = revisionResult.content.trim() || polishedContent
+            })
+          }
+        } catch (reviewError) {
+          emit({
+            type: 'hook_warning',
+            data: {
+              warnings: [
+                `对抗审稿失败，已回退到原润色稿：${reviewError instanceof Error ? reviewError.message : '未知错误'}`,
+              ],
+            },
+          })
+        }
+      })
+    }
+
+    // ========== Phase 5: 校验 Agent ==========
+    let validationReport: ValidatorValidationReport | null = null
+
+    if (speedMode === 'quality') {
+      await runPhase('validator', async () => {
+        emit({ type: 'agent_switch', data: { agent: 'validator' } })
+
+        validationReport = await validatorAgent({
+          projectId,
+          chapterNo,
+          newChapterContent: reviewedContent,
+          memoryContext: validatorMemoryContext,
+          characterProfiles: memoryPack.characterProfiles,
+          recentSummaries: memoryPack.recentChapterSummaries,
+          worldSetting: project.worldSetting,
+          openPlotlines: memoryPack.openPlotlines,
+          provider: sharedProvider,
+        })
+
+        emit({
+          type: 'validation',
+          data: {
+          result: validationReport.result,
+          score: validationReport.score,
+          },
+        })
       })
 
-      // 递归重试（但限制次数）
-      return runChapterGenerationPipeline(projectId, chapterNo, emit)
+      // 校验失败处理
+      const currentValidationReport = validationReport as ValidatorValidationReport | null
+      if (currentValidationReport?.result === 'retry') {
+        const currentRetry = await prisma.novelChapter.findUnique({
+          where: { id: chapter.id },
+        })
+        const retryCount = (currentRetry?.retryCount || 0) + 1
+
+        if (retryCount >= MAX_RETRY_COUNT) {
+          const failedWordCount = countChineseWords(reviewedContent)
+          await prisma.novelChapter.update({
+            where: { id: chapter.id },
+            data: {
+              content: reviewedContent,
+              status: ChapterStatus.REVIEWING,
+              retryCount,
+              validationReport: currentValidationReport as unknown as Prisma.InputJsonValue,
+              wordCount: failedWordCount,
+              lastAgentType: 'VALIDATOR',
+            },
+          })
+
+          emit({
+            type: 'error',
+            data: {
+              message: `校验失败超过${MAX_RETRY_COUNT}次，已标记人工审核`,
+            },
+          })
+
+          return {
+            success: true,
+            chapterId: chapter.id,
+            content: reviewedContent,
+            error: '校验失败，已标记人工审核',
+          }
+        }
+
+        await prisma.novelChapter.update({
+          where: { id: chapter.id },
+          data: { retryCount },
+        })
+
+        return runChapterGenerationPipeline(projectId, chapterNo, emit, { speedMode })
+      }
+    } else {
+      validationReport = {
+        result: 'pass',
+        score: 85,
+        issues: [],
+        characterUpdates: {},
+        newPlotlines: [],
+        resolvedPlotlines: [],
+        qualityMetrics: {
+          logicScore: 85,
+          characterScore: 85,
+          emotionScore: 85,
+          styleScore: 85,
+        },
+      }
+      reviewedContent = polishedContent
     }
 
-    // ========== Phase 5: 摘要 Agent ==========
-    emit({ type: 'agent_switch', data: { agent: 'summarizer' } })
+    // ========== Phase 6: 去 AI 味 Agent ==========
+    let finalContent = reviewedContent
 
-    const summaryData = await summarizerAgent({
-      projectId,
-      chapterNo,
-      chapterTitle: outline.chapterTitle,
-      chapterContent: polishedContent,
-      worldSetting: project.worldSetting,
-      protagonistProfile: project.protagonistProfile,
-    })
+    if (speedMode === 'quality') {
+      await runPhase('deslopper', async () => {
+        emit({ type: 'agent_switch', data: { agent: 'deslopper' } })
 
-    // 保存摘要
-    await memory.saveChapterSummary(projectId, chapterNo, summaryData)
+        try {
+          const deslopResult = await chapterDeslopper({
+            projectId,
+            chapterId: chapter.id,
+            content: reviewedContent,
+            chapterNumber: chapterNo,
+            chapterTitle: outline.chapterTitle,
+            genre: project.genre,
+            writingStyle: project.writingStyle,
+            strictness: 'medium',
+            provider: sharedProvider,
+          })
+          finalContent = deslopResult.revisedContent
+        } catch (deslopError) {
+          emit({
+            type: 'hook_warning',
+            data: {
+              warnings: [
+                `去 AI 味失败，已保留润色稿：${deslopError instanceof Error ? deslopError.message : '未知错误'}`,
+              ],
+            },
+          })
+        }
+      })
+    }
 
-    // 处理伏笔
-    if (summaryData.plantedPlotlines.length > 0) {
-      await memory.batchCreatePlotlines(
+    // ========== Phase 7: 摘要 Agent ==========
+    let summaryData!: ChapterSummaryData
+
+    if (speedMode !== 'fast') {
+      await runPhase('summarizer', async () => {
+        emit({ type: 'agent_switch', data: { agent: 'summarizer' } })
+
+        summaryData = await summarizerAgent({
+          projectId,
+          chapterNo,
+          chapterTitle: outline.chapterTitle,
+          chapterContent: finalContent,
+          memoryContext: summarizerMemoryContext,
+          worldSetting: project.worldSetting,
+          protagonistProfile: project.protagonistProfile,
+          provider: sharedProvider,
+        })
+
+        await storyState.updateChapterProgress(projectId, chapterNo)
+      })
+    } else {
+      summaryData = {
+        summary: `第${chapterNo}章（快速模式生成）`,
+        keyEvents: [],
+        emotionalTone: null,
+        plantedPlotlines: [],
+        resolvedPlotlines: [],
+      }
+
+      await storyState.updateChapterProgress(projectId, chapterNo)
+    }
+
+    const finalWordCount = countChineseWords(finalContent)
+    const polishedWordCount = countChineseWords(polishedContent)
+    const minimumWordCount = getMinimumChapterWordCount(project.chapterWordCount || 3000, chapterNo)
+    const chapterReady = finalWordCount >= minimumWordCount
+    emit({ type: 'wordCount', data: { count: finalWordCount } })
+
+    await runPhase('db_write', async () => {
+      const emotionalValue = summaryData.emotionalTone === '紧张' ? 80 :
+        summaryData.emotionalTone === '温馨' ? 40 :
+          summaryData.emotionalTone === '悲伤' ? 30 :
+            summaryData.emotionalTone === '高潮' ? 95 : 60
+
+      await recordAndApplyChapterCommit(projectId, chapter.id, {
+        chapterNo,
+        chapterTitle: outline.chapterTitle,
+        content: finalContent,
+        summaryData,
+        validationReport: validationReport as unknown as EngineValidationReport | null,
+        outline,
+        qualityStatus: chapterReady ? 'completed' : 'reviewing',
+        warning: chapterReady ? undefined : buildChapterWordCountWarning(finalWordCount, project.chapterWordCount || 3000, chapterNo),
+        targetWordCount: project.chapterWordCount || 3000,
+        currentWordCount: finalWordCount,
+        emotionalValue,
+        agentType: speedMode === 'quality' ? 'POLISHER' : 'WRITER',
+        emittedAt: new Date().toISOString(),
+      }, 'pipeline')
+
+      await hookRegistry.execute('chapter_generate_end', {
         projectId,
-        summaryData.plantedPlotlines.map((desc, i) => ({
-          description: desc,
-          plantedAt: chapterNo,
-          type: 'FORESHADOW',
-        }))
-      )
-    }
-
-    if (summaryData.resolvedPlotlines.length > 0) {
-      await memory.batchResolvePlotlines(summaryData.resolvedPlotlines, chapterNo)
-    }
-
-    // 更新角色档案
-    if (Object.keys(validationReport.characterUpdates).length > 0) {
-      await memory.batchUpdateCharacterProfiles(
-        projectId,
-        validationReport.characterUpdates
-      )
-    }
-
-    // 更新故事状态
-    const emotionalValue = summaryData.emotionalTone === '紧张' ? 80 :
-      summaryData.emotionalTone === '温馨' ? 40 :
-        summaryData.emotionalTone === '悲伤' ? 30 :
-          summaryData.emotionalTone === '高潮' ? 95 : 60
-
-    await storyState.updateEmotionalArc(projectId, chapterNo, emotionalValue)
-    await storyState.updateChapterProgress(projectId, chapterNo)
-
-    // 记录完成事件
-    await storyState.recordStoryEvent(
-      projectId,
-      'CHAPTER_COMPLETED',
-      `第${chapterNo}章生成完成，字数${polishedContent.length}`,
-      chapterNo
-    )
-
-    // ========== 保存最终结果 ==========
-    await prisma.novelChapter.update({
-      where: { id: chapter.id },
-      data: {
-        title: outline.chapterTitle,
-        content: polishedContent,
-        summary: summaryData.summary,
-        status: ChapterStatus.COMPLETED,
-        validationReport: validationReport as any,
-        wordCount: polishedContent.length,
-        lastAgentType: 'VALIDATOR',
-      },
-    })
-
-    // 更新项目总字数
-    const totalWordCount = await prisma.novelChapter.aggregate({
-      where: { projectId, status: ChapterStatus.COMPLETED },
-      _sum: { wordCount: true },
-    })
-
-    await prisma.novelProject.update({
-      where: { id: projectId },
-      data: { currentWordCount: totalWordCount._sum.wordCount || 0 },
-    })
-
-    await hookRegistry.execute('chapter_generate_end', {
-      projectId,
-      chapterNo,
-      content: polishedContent,
+        chapterNo,
+        content: finalContent,
+      })
     })
 
     emit({
       type: 'done',
       data: {
         chapterId: chapter.id,
-        wordCount: polishedContent.length,
+        wordCount: polishedWordCount,
+        minimumWordCount,
+        qualityStatus: chapterReady ? 'completed' : 'reviewing',
+        warning: chapterReady ? undefined : buildChapterWordCountWarning(finalWordCount, project.chapterWordCount || 3000, chapterNo),
         duration: Date.now() - startTime,
       },
     })
@@ -400,7 +627,7 @@ export async function getChapterGenerationStatus(
 ): Promise<{
   status: string
   retryCount: number
-  validationReport?: ValidationReport | null
+  validationReport?: EngineValidationReport | null
   lastAgentType?: AgentType | null
 }> {
   const chapter = await prisma.novelChapter.findUnique({
@@ -414,7 +641,7 @@ export async function getChapterGenerationStatus(
   return {
     status: chapter.status,
     retryCount: chapter.retryCount,
-    validationReport: chapter.validationReport as ValidationReport | null,
+    validationReport: chapter.validationReport as EngineValidationReport | null,
     lastAgentType: chapter.lastAgentType as AgentType | null,
   }
 }

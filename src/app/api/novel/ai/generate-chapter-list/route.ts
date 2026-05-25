@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { createProviderFromEnv, getDefaultVendor } from '@/lib/ai'
+import { createProviderFromEnv, createProviderFromConfigId, createProviderFromDefaultConfig } from '@/lib/ai'
 import { AIVendor } from '@/types'
 import { prisma } from '@/lib/prisma'
 import { buildChapterListPrompt, buildSummaryCompletionPrompt } from '@/lib/ai/prompts'
 import { logError } from '@/lib/logger'
 
-const vendorEnum = z.enum(['OPENAI', 'ANTHROPIC', 'ALIBABA', 'DEEPSEEK', 'MINIMAX', 'VOLCENGINE'])
+const vendorEnum = z.enum(['OPENAI', 'ANTHROPIC', 'ALIBABA', 'DEEPSEEK', 'MINIMAX', 'VOLCENGINE', 'ZHIPU'])
 
 const generateChapterListSchema = z.object({
   projectTitle: z.string().min(1, '请输入小说标题'),
@@ -90,11 +90,24 @@ export async function POST(request: NextRequest) {
       existingChapters: body.existingChapters,
     })
 
-    // 获取 AI Provider - 直接使用环境变量
-    const vendor = (requestedVendor || getDefaultVendor()) as AIVendor
-    const provider = createProviderFromEnv(vendor)
+    let provider
+    if (aiModelId) {
+      const configProvider = await createProviderFromConfigId(aiModelId)
+      if (configProvider) {
+        provider = configProvider
+      } else if (requestedVendor) {
+        provider = createProviderFromEnv(requestedVendor as AIVendor)
+      } else {
+        provider = await createProviderFromDefaultConfig()
+      }
+    } else if (requestedVendor) {
+      provider = createProviderFromEnv(requestedVendor as AIVendor)
+    } else {
+      provider = await createProviderFromDefaultConfig()
+    }
 
-    const result = await provider.generate(prompt, { temperature })
+    const estimatedTokens = Math.min(totalChapters * 300 + 1000, 65536)
+    const result = await provider.generate(prompt, { temperature, maxTokens: estimatedTokens, timeoutMs: 120000 })
 
     let chapterList = null
     let parseError = null

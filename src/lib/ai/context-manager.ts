@@ -64,13 +64,37 @@ interface OutlineStageItem {
   summary: string
 }
 
-type OutlineStages = Record<string, OutlineStageItem[]>
+interface OutlineStageNewItem {
+  name: string
+  description?: string
+  coreEvents?: string[]
+  chapterRatio?: number
+  chapterPlan?: string
+}
+
+type OutlineStages = Record<string, OutlineStageItem[]> & {
+  stages?: OutlineStageNewItem[]
+}
 
 export function extractStageOutline(
   outlineStages: OutlineStages | null | undefined,
   stage: number
 ): string | undefined {
   if (!outlineStages) return undefined
+
+  if (outlineStages.stages && Array.isArray(outlineStages.stages)) {
+    const stageData = outlineStages.stages[stage - 1]
+    if (!stageData) return undefined
+    const parts: string[] = []
+    parts.push(`${stageData.name}：${stageData.description || ''}`)
+    if (stageData.coreEvents && stageData.coreEvents.length > 0) {
+      parts.push(`核心事件：${stageData.coreEvents.join('、')}`)
+    }
+    if (stageData.chapterPlan) {
+      parts.push(`章节规划：${stageData.chapterPlan}`)
+    }
+    return parts.join('\n')
+  }
 
   const stageKey = `stage${stage}`
   const stageData = outlineStages[stageKey]
@@ -94,15 +118,19 @@ export async function buildPromptContext(
     contextChapterCount: number
     includeStageOutline: boolean
     maxCharsPerChapter?: number
+    memoryContext?: string
   }
 ): Promise<PromptContext> {
-  const maxCharsPerChapter = options.maxCharsPerChapter || 1000
+  const maxCharsPerChapter = options.maxCharsPerChapter || 600
+  const contextChapterCount = currentChapter.chapterNumber <= 3
+    ? 1
+    : Math.max(1, Math.min(options.contextChapterCount, 2))
 
   // 处理前文 - 正确地取章节开头部分，确保上下文连贯
   const processedPreviousChapters = options.useContext
     ? previousChapters
         .filter((ch) => ch.content && ch.status === 'COMPLETED')
-        .slice(-options.contextChapterCount) // 取最后 N 章
+        .slice(-contextChapterCount) // 取最后 N 章
         .map((ch) => ({
           chapterNumber: ch.chapterNumber,
           title: ch.title,
@@ -146,6 +174,7 @@ export async function buildPromptContext(
     currentChapterNumber: currentChapter.chapterNumber,
     currentChapterTitle: currentChapter.title,
     currentChapterSummary: currentChapter.summary || undefined,
+    memoryContext: options.memoryContext,
     previousChapters: processedPreviousChapters.length > 0 ? processedPreviousChapters : undefined,
     stageOutline,
     virtualWriterStyle,

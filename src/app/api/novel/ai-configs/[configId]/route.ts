@@ -14,6 +14,11 @@ const updateAIConfigSchema = z.object({
   modelId: z.string().min(1).optional(),
   apiKey: z.string().optional(), // 允许为空，表示不更新
   apiEndpoint: z.string().optional(),
+  embeddingVendor: z.nativeEnum(AIVendor).optional(),
+  embeddingApiKey: z.string().optional(),
+  embeddingApiEndpoint: z.string().optional(),
+  embeddingModelId: z.string().optional(),
+  embeddingDimensions: z.number().int().positive().optional(),
   isDefault: z.boolean().optional(),
   sortOrder: z.number().int().optional(),
 })
@@ -54,6 +59,7 @@ export async function GET(
     const safeConfig = {
       ...config,
       apiKey: config.apiKey ? `${config.apiKey.slice(0, 4)}${'*'.repeat(Math.max(0, config.apiKey.length - 8))}${config.apiKey.slice(-4)}` : null,
+      embeddingApiKey: config.embeddingApiKey ? `${config.embeddingApiKey.slice(0, 4)}${'*'.repeat(Math.max(0, config.embeddingApiKey.length - 8))}${config.embeddingApiKey.slice(-4)}` : null,
     }
 
     return NextResponse.json({ success: true, data: safeConfig })
@@ -90,14 +96,6 @@ export async function PUT(
     const body = await request.json()
     const data = updateAIConfigSchema.parse(body)
 
-    // 如果设置为默认，先取消其他默认
-    if (data.isDefault) {
-      await prisma.aIModelConfig.updateMany({
-        where: { isDefault: true, id: { not: id } },
-        data: { isDefault: false },
-      })
-    }
-
     // 获取现有配置，用于保留 API Key（如果未提供新的）
     const existingConfig = await prisma.aIModelConfig.findUnique({
       where: { id },
@@ -108,6 +106,28 @@ export async function PUT(
         { success: false, error: { code: 'NOT_FOUND', message: '配置不存在' } },
         { status: 404 }
       )
+    }
+
+    // 如果取消默认且当前是唯一默认，阻止操作
+    if (data.isDefault === false && existingConfig.isDefault) {
+      const otherDefaults = await prisma.aIModelConfig.count({
+        where: { isDefault: true, id: { not: id } },
+      })
+
+      if (otherDefaults === 0) {
+        return NextResponse.json(
+          { success: false, error: { code: 'LAST_DEFAULT', message: '无法取消最后一个默认配置，请先将其他配置设为默认' } },
+          { status: 400 }
+        )
+      }
+    }
+
+    // 如果设置为默认，先取消其他默认
+    if (data.isDefault) {
+      await prisma.aIModelConfig.updateMany({
+        where: { isDefault: true, id: { not: id } },
+        data: { isDefault: false },
+      })
     }
 
     // 准备更新数据，如果 apiKey 为空则保留原值
@@ -157,6 +177,32 @@ export async function DELETE(
         { success: false, error: { code: 'INVALID_ID', message: '无效的 ID' } },
         { status: 400 }
       )
+    }
+
+    // 检查是否为当前默认配置
+    const config = await prisma.aIModelConfig.findUnique({
+      where: { id },
+    })
+
+    if (!config) {
+      return NextResponse.json(
+        { success: false, error: { code: 'NOT_FOUND', message: '配置不存在' } },
+        { status: 404 }
+      )
+    }
+
+    if (config.isDefault) {
+      // 检查是否还有其他配置
+      const otherConfigs = await prisma.aIModelConfig.count({
+        where: { id: { not: id } },
+      })
+
+      if (otherConfigs === 0) {
+        return NextResponse.json(
+          { success: false, error: { code: 'LAST_CONFIG', message: '无法删除最后一个配置' } },
+          { status: 400 }
+        )
+      }
     }
 
     await prisma.aIModelConfig.delete({

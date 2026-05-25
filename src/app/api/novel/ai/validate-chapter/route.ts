@@ -4,7 +4,7 @@ import { validateChapter, validateProject } from '@/lib/engine/validation/valida
 import { prisma } from '@/lib/prisma'
 import { logError } from '@/lib/logger'
 
-const vendorEnum = z.enum(['OPENAI', 'ANTHROPIC', 'ALIBABA', 'DEEPSEEK', 'MINIMAX', 'VOLCENGINE'])
+const vendorEnum = z.enum(['OPENAI', 'ANTHROPIC', 'ALIBABA', 'DEEPSEEK', 'MINIMAX', 'VOLCENGINE', 'ZHIPU'])
 
 const validateChapterSchema = z.object({
   chapterId: z.number().int().positive(),
