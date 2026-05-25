@@ -99,10 +99,10 @@ function inferWritingStyle(genre: string, corePitch: string) {
 
 function inferLengthType(genre: string, corePitch: string): ProjectFormData['lengthType'] {
   const text = `${genre} ${corePitch}`
-  if (/(慢热|养成|史诗|群像|家族|经营)/.test(text)) return 'long'
-  if (/(悬疑|规则|都市|轻小说|日常|科幻)/.test(text)) return 'medium'
   if (/(短篇|短文|小故事)/.test(text)) return 'short'
-  return 'long'
+  if (/(超长篇|千万字|史诗|群像|家族|经营|王朝|争霸|种田|慢热|地图扩张|文明|宗门)/.test(text)) return 'ultra_long'
+  if (/(悬疑|规则|都市|轻小说|日常|科幻)/.test(text)) return 'long'
+  return 'ultra_long'
 }
 
 // ============================================
@@ -206,6 +206,7 @@ export function ProjectForm({ defaultValues, onSubmit, onCancel, loading, submit
         body: JSON.stringify({
           inspirationTitle: inspiration.title,
           inspirationDescription: inspiration.description,
+          fallbackTitle: inspiration.sampleTitle,
           genre: inspiration.sampleGenre || undefined,
           writingStyle: inspiration.sampleWritingStyle || undefined,
           targetAudience: inspiration.category === 'male' ? 'MALE' : inspiration.category === 'female' ? 'FEMALE' : undefined,

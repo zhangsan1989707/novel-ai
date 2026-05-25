@@ -16,6 +16,7 @@ export async function POST(request: NextRequest) {
       targetAudience,
       vendor,
       aiModelId,
+      fallbackTitle,
     } = body
 
     if (!inspirationTitle) {
@@ -78,8 +79,10 @@ export async function POST(request: NextRequest) {
 
     if (!title || !isLikelyNovelTitle(title, sourceText)) {
       title = buildFallbackNovelTitle({
-        corePitch: `${inspirationTitle} ${inspirationDescription || ''}`,
+        corePitch: inspirationDescription || inspirationTitle,
+        description: `${inspirationTitle} ${inspirationDescription || ''}`,
         genre,
+        fallbackTitle: typeof fallbackTitle === 'string' ? fallbackTitle : undefined,
       })
     }
 

@@ -35,15 +35,15 @@ function inferPlatformFit(category: InspirationCategory, writingStyle: string) {
 
 function inferRecommendedLength(category: InspirationCategory, writingStyle: string) {
   if (/(慢热|养成|史诗|群像)/.test(writingStyle)) {
-    return '长线连载，适合 150 万字以上'
+    return '超长篇连载，建议 300 万字到 1000 万字，适合 1500-3000+ 章'
   }
   if (/(悬疑|烧脑|轻松|日常)/.test(writingStyle)) {
-    return '中长篇，适合 80-150 万字'
+    return '长篇连载，建议 100 万字起步，适合 1000 章左右'
   }
   if (category === 'female') {
-    return '中篇到长篇，适合 60-120 万字'
+    return '中长篇连载，建议 80-150 万字，适合 600-1200 章'
   }
-  return '中长篇，适合 100 万字左右起步'
+  return '长篇连载，建议 100 万字以上，适合 1000 章起步'
 }
 
 function buildDirectorFields(inspiration: HotInspiration) {

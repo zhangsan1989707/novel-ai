@@ -63,11 +63,13 @@ function inferWritingStyle(genre: string, corePitch: string) {
 
 function inferLengthType(platform: Platform | '', genre: string, corePitch: string): LengthType {
   const text = `${genre} ${corePitch}`
-  if (platform === 'jinjiang') return 'medium'
-  if (platform === 'fanqie') return /(轻松|日常|悬疑|都市)/.test(text) ? 'medium' : 'long'
-  if (platform === 'qimao') return /(科幻|悬疑|都市)/.test(text) ? 'medium' : 'long'
-  if (platform === 'feilu') return /(军事|玄幻|系统|无敌)/.test(text) ? 'long' : 'medium'
-  return /(悬疑|都市|轻小说|日常)/.test(text) ? 'medium' : 'long'
+  if (/(超长篇|千万字|史诗|群像|家族|经营|王朝|争霸|种田|慢热|地图扩张|文明|宗门)/.test(text)) return 'ultra_long'
+  if (/(短篇|短文|短故事|单元短打)/.test(text)) return 'short'
+  if (platform === 'jinjiang') return /(史诗|群像|家族|经营|慢热)/.test(text) ? 'long' : 'medium'
+  if (platform === 'fanqie') return /(轻松|日常|悬疑|都市)/.test(text) ? 'long' : 'ultra_long'
+  if (platform === 'qimao') return /(科幻|悬疑|都市)/.test(text) ? 'long' : 'ultra_long'
+  if (platform === 'feilu') return /(军事|玄幻|系统|无敌)/.test(text) ? 'ultra_long' : 'long'
+  return /(悬疑|都市|轻小说|日常|科幻)/.test(text) ? 'long' : 'ultra_long'
 }
 
 export default function NewProjectPage() {
@@ -119,6 +121,7 @@ export default function NewProjectPage() {
         body: JSON.stringify({
           inspirationTitle: inspiration.title,
           inspirationDescription: inspiration.description,
+          fallbackTitle: inspiration.sampleTitle,
           genre: inspiration.sampleGenre || undefined,
           writingStyle: inspiration.sampleWritingStyle || undefined,
           targetAudience: inspiration.category === 'male' ? 'MALE' : inspiration.category === 'female' ? 'FEMALE' : undefined,
