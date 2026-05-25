@@ -72,7 +72,11 @@ interface Project {
   description?: string | null
   genre?: string | null
   writingStyle?: string | null
+  lengthType?: 'SHORT' | 'MEDIUM' | 'LONG' | 'ULTRA_LONG' | null
   targetWordCount?: number | null
+  effectiveTargetWordCount?: number | null
+  estimatedTotalChapters?: number
+  expectedStageCount?: number
   currentWordCount: number
   chapterWordCount: number
   outline?: string | null
@@ -700,8 +704,12 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
   }
 
   const progress = project.targetWordCount
-    ? Math.round((project.currentWordCount / project.targetWordCount) * 100)
+    ? Math.round((project.currentWordCount / (project.effectiveTargetWordCount || project.targetWordCount)) * 100)
     : null
+  const effectiveTargetWordCount = project.effectiveTargetWordCount || project.targetWordCount || null
+  const estimatedTotalChapters = project.estimatedTotalChapters || (effectiveTargetWordCount
+    ? Math.ceil(effectiveTargetWordCount / Math.max(1, project.chapterWordCount || 3000))
+    : null)
 
   const completedChapters = project.chapters.filter(c => c.status === 'COMPLETED').length
   const reviewingChapters = project.chapters.filter(c => c.status === 'REVIEWING').length
@@ -718,7 +726,7 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
       : !project.arcPlans?.length
         ? '请先生成 ArcPlan'
         : !project.arcPlanConfirmedAt
-          ? 'ArcPlan 未确认前，不允许生成章节目录'
+          ? '故事路线图未确认前，不允许生成章节目录'
           : null
   const steeringValues = {
     pace: project.pace ?? defaultSteeringValues.pace,
@@ -1864,27 +1872,36 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
                   {progress !== null ? `${progress}%` : '-'}
                 </span>
               </div>
-              {project.targetWordCount ? (
-                <Progress value={project.currentWordCount} max={project.targetWordCount} showLabel size="sm" />
+              {effectiveTargetWordCount ? (
+                <Progress value={project.currentWordCount} max={effectiveTargetWordCount} showLabel size="sm" />
               ) : (
                 <div className="w-full h-2 bg-gray-100 dark:bg-gray-800 rounded-full">
                   <div className="h-full w-0 bg-blue-500 rounded-full" />
                 </div>
               )}
-              <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+              <div className="mt-3 grid grid-cols-4 gap-2 text-center">
                 <div>
                   <p className="text-sm font-bold">{project.currentWordCount.toLocaleString()}</p>
                   <p className="text-xs text-gray-500">当前</p>
                 </div>
                 <div>
-                  <p className="text-sm font-bold">{project.targetWordCount?.toLocaleString() || '-'}</p>
+                  <p className="text-sm font-bold">{effectiveTargetWordCount?.toLocaleString() || '-'}</p>
                   <p className="text-xs text-gray-500">目标</p>
                 </div>
                 <div>
+                  <p className="text-sm font-bold">{estimatedTotalChapters?.toLocaleString() || '-'}</p>
+                  <p className="text-xs text-gray-500">预计章数</p>
+                </div>
+                <div>
                   <p className="text-sm font-bold">{project.chapters.length}</p>
-                  <p className="text-xs text-gray-500">章节</p>
+                  <p className="text-xs text-gray-500">已建章节</p>
                 </div>
               </div>
+              {estimatedTotalChapters && project.expectedStageCount ? (
+                <p className="mt-3 text-xs text-gray-500">
+                  当前按 {project.lengthType || 'LONG'} 口径规划，全书预计约 {estimatedTotalChapters} 章，默认拆分为 {project.expectedStageCount} 个阶段。
+                </p>
+              ) : null}
             </CardContent>
           </Card>
 

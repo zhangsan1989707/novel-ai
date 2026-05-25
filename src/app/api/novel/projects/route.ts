@@ -5,6 +5,7 @@ import { logError } from '@/lib/logger'
 import { getCurrentUserId } from '@/lib/auth'
 import { createProviderFromConfigId, createProviderFromDefaultConfig, getDefaultAIConfigRecord } from '@/lib/ai/factory'
 import { queueProjectBootstrap } from '@/lib/engine/auto-maintenance'
+import { resolveProjectPlanningTargets } from '@/lib/engine/project-length'
 import { buildFallbackNovelTitle, isLikelyNovelTitle, normalizeNovelTitle } from '@/lib/novel-title'
 
 // ============================================
@@ -253,6 +254,11 @@ export async function POST(request: NextRequest) {
       })
 
     const aiModelId = validatedData.aiModelId ?? (await getDefaultAIConfigRecord())?.id
+    const planningTargets = resolveProjectPlanningTargets({
+      lengthType: validatedData.lengthType,
+      targetWordCount: validatedData.targetWordCount,
+      chapterWordCount: validatedData.chapterWordCount,
+    })
 
     const project = await prisma.novelProject.create({
       data: {
@@ -260,6 +266,8 @@ export async function POST(request: NextRequest) {
         aiModelId,
         title,
         creatorId,
+        targetWordCount: planningTargets.effectiveTargetWordCount,
+        chapterWordCount: planningTargets.chapterWordCount,
       },
       include: {
         aiModelConfig: true,

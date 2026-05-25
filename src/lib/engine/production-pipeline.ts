@@ -17,6 +17,7 @@ import { syncProjectHealthNotification } from '@/lib/notifications/project-healt
 import type { SSEEvent } from './types'
 import { getPlatformTemplate } from './platform-style'
 import { canStartGeneration, getWorkflowBlockReason } from './project-flow'
+import { normalizeArcPlanOutputs, resolveProjectPlanningTargets } from './project-length'
 import { buildPopularFictionPromptBlock, normalizePopularFictionProfile, type PopularFictionProfile } from './popular-fiction'
 
 type ChapterOutline = {
@@ -358,8 +359,13 @@ export async function ensureArcPlans(projectId: number, provider: AIProvider) {
   })
   if (!project || !project.bookBlueprint) throw new Error('Book Blueprint 不存在')
 
-  const totalChapters = Math.max(1, Math.ceil((project.targetWordCount || 300000) / (project.chapterWordCount || 3000)))
-  const stages = ['OPENING', 'GROWTH', 'EXPANSION', 'MID_CONFLICT', 'PRE_FINALE', 'FINALE']
+  const planningTargets = resolveProjectPlanningTargets({
+    lengthType: project.lengthType,
+    targetWordCount: project.targetWordCount,
+    chapterWordCount: project.chapterWordCount,
+  })
+  const totalChapters = planningTargets.effectiveTotalChapters
+  const stages = planningTargets.stageSequence
   const chaptersPerStage = Math.ceil(totalChapters / stages.length)
   const platform = toInternalPlatform(project.platform)
   const blueprintStrategies = buildBlueprintStrategies(project, project.bookBlueprint)
@@ -397,7 +403,7 @@ Book Blueprint：
 - 爆款四因子：${buildPopularFictionPromptBlock(popularFictionProfile)}
 - 硬约束：${blueprintStrategies.guardrails.join('；')}
 
-输出 JSON 数组，不要 markdown。stage 只能是 OPENING, GROWTH, EXPANSION, MID_CONFLICT, PRE_FINALE, FINALE：
+输出 JSON 数组，不要 markdown。你必须严格输出 ${stages.length} 个阶段，stage 只能按这个顺序出现：${stages.join(', ')}：
 [
   {
     "arcNumber": 1,
@@ -416,8 +422,8 @@ Book Blueprint：
     }))},
     "goals": ["阶段目标"],
     "keyEvents": ["关键事件"]
-  }
-]`
+    }
+  ]`
 
   const result = await provider.generate(prompt, {
     temperature: 0.2,
@@ -442,15 +448,16 @@ Book Blueprint：
       throw new Error(`ArcPlan 生成失败：${error instanceof Error ? error.message : 'JSON 解析失败'}`)
     }
   }
+  const normalizedArcPlans = normalizeArcPlanOutputs(arcPlans, totalChapters, stages)
   const created = []
 
-  for (let index = 0; index < arcPlans.length; index++) {
-    const item = arcPlans[index]
+  for (let index = 0; index < normalizedArcPlans.length; index++) {
+    const item = normalizedArcPlans[index]
     const arcNumber = item.arcNumber || index + 1
     const stage = toInternalArcStage(item.stage || stages[index] || 'OPENING')
     const defaultBatchSize = toConservativeBatchSize(stage, calculateBatchSize(platform, stage, 0.5, 0.5, {
-      progressRatio: clamp(index / Math.max(arcPlans.length, 1), 0, 0.95),
-      stageRemainingChapters: Math.max(1, (item.endChapter || Math.min(totalChapters, (index + 1) * chaptersPerStage)) - (item.startChapter || (index * chaptersPerStage + 1)) + 1),
+      progressRatio: clamp(index / Math.max(normalizedArcPlans.length, 1), 0, 0.95),
+      stageRemainingChapters: Math.max(1, item.endChapter - item.startChapter + 1),
       blueprintConstraints: blueprintStrategies.guardrails,
       genre: project.genre,
       writingStyle: project.writingStyle,
@@ -463,8 +470,8 @@ Book Blueprint：
         name: item.name || `第${arcNumber}阶段`,
         stage: toPrismaArcStage(stage) as PrismaArcStage,
         description: item.description || '',
-        startChapter: item.startChapter || (index * chaptersPerStage + 1),
-        endChapter: item.endChapter || Math.min(totalChapters, (index + 1) * chaptersPerStage),
+        startChapter: item.startChapter,
+        endChapter: item.endChapter,
         batchSize: toConservativeBatchSize(stage, item.batchSize || defaultBatchSize),
         goals: Array.isArray(item.goals) ? item.goals : [],
         keyEvents: Array.isArray(item.keyEvents) ? item.keyEvents : [],
@@ -526,7 +533,12 @@ async function planChapterBatch(
   const endLimit = currentArc.endChapter || startChapter + currentArc.batchSize - 1
   if (startChapter > endLimit) return []
 
-  const totalChapters = Math.max(1, Math.ceil((project.targetWordCount || 300000) / (project.chapterWordCount || 3000)))
+  const planningTargets = resolveProjectPlanningTargets({
+    lengthType: project.lengthType,
+    targetWordCount: project.targetWordCount,
+    chapterWordCount: project.chapterWordCount,
+  })
+  const totalChapters = planningTargets.effectiveTotalChapters
   const progressRatio = startChapter / totalChapters
   const arcStage = toInternalArcStage(currentArc.stage)
   const stageRemainingChapters = Math.max(1, endLimit - startChapter + 1)

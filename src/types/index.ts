@@ -384,9 +384,9 @@ export type LengthType = 'short' | 'medium' | 'long' | 'ultra_long'
 
 export const LENGTH_TYPE_LABELS: Record<LengthType, string> = {
   short: '短篇 (30-50章)',
-  medium: '中篇 (100-300章)',
-  long: '长篇 (500-1000章)',
-  ultra_long: '超长篇 (1000+章)',
+  medium: '中篇 (60-100章)',
+  long: '长篇 (120-180章)',
+  ultra_long: '超长篇 (180章以上)',
 }
 
 export type ArcStage = 'opening' | 'growth' | 'expansion' | 'mid_conflict' | 'pre_finale' | 'finale'

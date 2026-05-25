@@ -1,8 +1,10 @@
+import { ArcStage as PrismaArcStage } from '@prisma/client'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { createProviderFromConfigId, createProviderFromDefaultConfig } from '@/lib/ai/factory'
 import { calculateBatchSize } from '@/lib/engine/batch-planner'
 import { parseAiJsonArray } from '@/lib/engine/ai-json'
+import { normalizeArcPlanOutputs, resolveProjectPlanningTargets } from '@/lib/engine/project-length'
 import { toInternalPlatform, toPrismaArcStage } from '@/lib/engine/production-mapping'
 
 export async function GET(
@@ -80,12 +82,17 @@ export async function POST(
       )
     }
 
-    const targetWordCount = project.targetWordCount || 300000
-    const chapterWordCount = project.chapterWordCount || 3000
-    const totalChapters = Math.ceil(targetWordCount / chapterWordCount)
+    const planningTargets = resolveProjectPlanningTargets({
+      lengthType: project.lengthType,
+      targetWordCount: project.targetWordCount,
+      chapterWordCount: project.chapterWordCount,
+    })
+    const targetWordCount = planningTargets.effectiveTargetWordCount
+    const chapterWordCount = planningTargets.chapterWordCount
+    const totalChapters = planningTargets.effectiveTotalChapters
     const platform = toInternalPlatform(project.platform)
 
-    const stages = ['OPENING', 'GROWTH', 'EXPANSION', 'MID_CONFLICT', 'PRE_FINALE', 'FINALE']
+    const stages = planningTargets.stageSequence
     const chaptersPerStage = Math.ceil(totalChapters / stages.length)
 
     const batchSize = calculateBatchSize(platform, 'opening', 1, 1)
@@ -95,6 +102,7 @@ export async function POST(
 平台：${project.platform || '起点'}
 题材：${project.genre || '未知'}
 一句话卖点：${project.corePitch || project.description || '暂无'}
+目标字数：约${targetWordCount}字
 总章数：约${totalChapters}章
 每章字数：约${chapterWordCount}字
 
@@ -106,7 +114,7 @@ Book Blueprint：
 - 终局方向：${blueprint.endingDirection || ''}
 - 约束条件：${JSON.stringify(blueprint.constraints || [])}
 
-请将全书分为6个阶段（Arc），每个阶段包含约${chaptersPerStage}章。以JSON数组格式输出（不要包含markdown代码块标记）：
+请将全书分为${stages.length}个阶段（Arc），每个阶段包含约${chaptersPerStage}章。必须按这个顺序输出阶段：${stages.join(', ')}。以JSON数组格式输出（不要包含markdown代码块标记）：
 [
   {
     "arcNumber": 1,
@@ -121,7 +129,7 @@ Book Blueprint：
   }
 ]
 
-阶段枚举值只能是：OPENING, GROWTH, EXPANSION, MID_CONFLICT, PRE_FINALE, FINALE
+阶段枚举值只能是：${stages.join(', ')}
 batchSize必须保守控制在 5-15 之间：开局5-8，成长8-12，扩张10-15，中段冲突8-12，前置高潮5-8，终局3-6。`
 
     let result = ''
@@ -156,20 +164,21 @@ batchSize必须保守控制在 5-15 之间：开局5-8，成长8-12，扩张10-1
 
     await prisma.arcPlan.deleteMany({ where: { projectId } })
 
+    const normalizedArcPlans = normalizeArcPlanOutputs(arcPlansData, totalChapters, stages)
     const created = []
-    for (const ap of arcPlansData) {
+    for (const ap of normalizedArcPlans) {
       const plan = await prisma.arcPlan.create({
         data: {
           projectId,
-          arcNumber: (ap.arcNumber as number) || 1,
-          name: (ap.name as string) || `第${ap.arcNumber}阶段`,
-          stage: toPrismaArcStage(ap.stage) as any,
-          description: (ap.description as string) || '',
-          startChapter: (ap.startChapter as number) || 1,
-          endChapter: (ap.endChapter as number) || null,
-          batchSize: Math.max(3, Math.min(15, (ap.batchSize as number) || batchSize)),
-          goals: Array.isArray(ap.goals) ? (ap.goals as string[]) : [],
-          keyEvents: Array.isArray(ap.keyEvents) ? (ap.keyEvents as string[]) : [],
+          arcNumber: ap.arcNumber,
+          name: ap.name || `第${ap.arcNumber}阶段`,
+          stage: toPrismaArcStage(ap.stage) as PrismaArcStage,
+          description: ap.description || '',
+          startChapter: ap.startChapter,
+          endChapter: ap.endChapter,
+          batchSize: Math.max(3, Math.min(15, ap.batchSize || batchSize)),
+          goals: ap.goals,
+          keyEvents: ap.keyEvents,
           isCompleted: false,
         },
       })
