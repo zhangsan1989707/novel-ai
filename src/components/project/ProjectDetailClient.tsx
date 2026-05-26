@@ -13,6 +13,7 @@ import { formatDisplayDate, formatDisplayDateTime } from '@/lib/helpers'
 import type { ProjectStatus } from '@/types'
 import type { PipelineRuntimeState } from '@/lib/engine/pipeline-runtime'
 import type { BlueprintConsoleSnapshot } from '@/lib/engine/blueprint-console'
+import { getMinimumChapterWordCount } from '@/lib/ai/chapter-quality'
 
 const INITIAL_VISIBLE_PROJECT_CHAPTERS_PER_GROUP = 10
 
@@ -639,6 +640,27 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
     setPreviewChapter(chapter)
     setShowChapterPreview(true)
   }
+
+  const findChapterByNumber = useCallback((chapterNumber: number) => (
+    project?.chapters.find(chapter => chapter.chapterNumber === chapterNumber) || null
+  ), [project?.chapters])
+
+  const openChapterEditor = useCallback((chapterId: number) => {
+    router.push(`/projects/${projectId}/chapters/${chapterId}`)
+  }, [projectId, router])
+
+  const openChapterGenerate = useCallback((chapterId: number) => {
+    router.push(`/projects/${projectId}/chapters/${chapterId}/generate`)
+  }, [projectId, router])
+
+  const getReviewingReason = useCallback((chapter: Chapter) => {
+    const minimumWordCount = getMinimumChapterWordCount(project?.chapterWordCount || 3000, chapter.chapterNumber)
+    if ((chapter.wordCount || 0) < minimumWordCount) {
+      return `当前仅 ${(chapter.wordCount || 0).toLocaleString()} 字，低于最低要求 ${minimumWordCount.toLocaleString()} 字，需要补写或重写后再保存。`
+    }
+
+    return '这章已被标记为待审稿，说明 AI 结果没有被系统直接视为稳定成稿。建议打开章节检查正文后，再决定是手工修订还是重新生成。'
+  }, [project?.chapterWordCount])
 
   const toolboxItems = [
     {
@@ -1466,6 +1488,73 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
                               <div>Summarizer：{formatDuration(chapterRun.phaseTimings.summarizer)}</div>
                               <div>DB 回写：{formatDuration(chapterRun.phaseTimings.db_write)}</div>
                             </div>
+                            {(chapterRun.status === 'FAILED' || chapterRun.qualityStatus === 'reviewing' || chapterRun.lastMessage) && (
+                              <div
+                                className={`mt-2 rounded-md px-3 py-2 leading-5 ${
+                                  chapterRun.status === 'FAILED'
+                                    ? 'border border-red-200 bg-red-50 text-red-700 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300'
+                                    : chapterRun.qualityStatus === 'reviewing'
+                                      ? 'border border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-200'
+                                      : 'border border-gray-200 bg-gray-50 text-gray-600 dark:border-gray-800 dark:bg-slate-900/40 dark:text-gray-300'
+                                }`}
+                              >
+                                {chapterRun.status === 'FAILED'
+                                  ? chapterRun.error || chapterRun.lastMessage || '生成流程中断，Writer 之后的某一步没有完成，请重试本章或查看正文是否已落库。'
+                                  : chapterRun.qualityStatus === 'reviewing'
+                                    ? chapterRun.warning || chapterRun.lastMessage || '该章已进入待审稿状态，需要打开章节做人工处理。'
+                                    : chapterRun.lastMessage}
+                              </div>
+                            )}
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {(() => {
+                                const chapter = findChapterByNumber(chapterRun.chapterNumber)
+                                if (chapterRun.status === 'FAILED') {
+                                  return (
+                                    <>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => handleRecoverPipeline('retry_chapter', chapterRun.chapterNumber)}
+                                      >
+                                        重试本章
+                                      </Button>
+                                      {chapter ? (
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => openChapterEditor(chapter.id)}
+                                        >
+                                          查看章节
+                                        </Button>
+                                      ) : null}
+                                    </>
+                                  )
+                                }
+
+                                if (chapterRun.qualityStatus === 'reviewing' && chapter) {
+                                  return (
+                                    <>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => openChapterEditor(chapter.id)}
+                                      >
+                                        去审稿
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => openChapterGenerate(chapter.id)}
+                                      >
+                                        重新生成
+                                      </Button>
+                                    </>
+                                  )
+                                }
+
+                                return null
+                              })()}
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -2036,6 +2125,12 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
               </span>
             </div>
 
+            {previewChapter.status === 'REVIEWING' && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-200">
+                {getReviewingReason(previewChapter)}
+              </div>
+            )}
+
             {previewChapter.summary && (
               <div className="rounded-lg bg-blue-50 dark:bg-blue-900/20 p-4">
                 <h4 className="text-xs font-semibold text-blue-600 dark:text-blue-400 mb-2 uppercase tracking-wide">
@@ -2060,7 +2155,25 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
               </div>
             )}
 
-            <div className="flex justify-end">
+            <div className="flex flex-wrap justify-end gap-2">
+              {previewChapter.id ? (
+                <>
+                  {previewChapter.status === 'REVIEWING' ? (
+                    <>
+                      <Button variant="outline" onClick={() => openChapterGenerate(previewChapter.id)}>
+                        重新生成
+                      </Button>
+                      <Button variant="primary" onClick={() => openChapterEditor(previewChapter.id)}>
+                        去审稿
+                      </Button>
+                    </>
+                  ) : (
+                    <Button variant="outline" onClick={() => openChapterEditor(previewChapter.id)}>
+                      打开章节
+                    </Button>
+                  )}
+                </>
+              ) : null}
               <Button variant="outline" onClick={() => {
                 setShowChapterPreview(false)
                 setPreviewChapter(null)
