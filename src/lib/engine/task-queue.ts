@@ -359,10 +359,6 @@ export class TaskQueue {
   }
 
   private async executeTask(task: Task): Promise<void> {
-    // 这里是任务执行的入口
-    // 在实际应用中，我们会根据 task.type 分发到不同的执行器
-    // 目前我们只预留接口，后续可以扩展
-
     switch (task.type) {
       case 'GENERATE_CHAPTER':
         await this.executeChapterGeneration(task)
@@ -377,54 +373,30 @@ export class TaskQueue {
         await this.executeChapterExport(task)
         break
       default:
-        // 模拟执行
-        for (let i = 10; i <= 100; i += 10) {
-          if (!this.running) {
-            throw new Error('Queue stopped')
-          }
-          this.updateProgress(task.id, i, `Processing ${i}%`)
-          await new Promise(resolve => setTimeout(resolve, 200))
-        }
-        task.result = { success: true }
+        await this.failUnsupportedTask(task, `未知任务类型: ${task.type}`)
     }
   }
 
   private async executeChapterGeneration(task: Task): Promise<void> {
-    // 这是真实的章节生成逻辑
-    // 实际应用中，会调用 orchestrator 来执行
-    // 这里只是占位
-    this.updateProgress(task.id, 20, 'Planning...')
-    await new Promise(r => setTimeout(r, 500))
-
-    this.updateProgress(task.id, 40, 'Writing...')
-    await new Promise(r => setTimeout(r, 500))
-
-    this.updateProgress(task.id, 70, 'Polishing...')
-    await new Promise(r => setTimeout(r, 500))
-
-    this.updateProgress(task.id, 90, 'Validating...')
-    await new Promise(r => setTimeout(r, 500))
-
-    this.updateProgress(task.id, 100, 'Done!')
-    task.result = { success: true }
+    await this.failUnsupportedTask(task, 'TaskQueue 章节生成执行器尚未接入真实 production pipeline，请改用 /pipeline/start 或章节专用生成接口。')
   }
 
   private async executeSummaryGeneration(task: Task): Promise<void> {
-    // 占位实现
-    this.updateProgress(task.id, 100, 'Done!')
-    task.result = { success: true }
+    await this.failUnsupportedTask(task, 'TaskQueue 摘要生成执行器尚未接入真实摘要流程。')
   }
 
   private async executeBookAnalysis(task: Task): Promise<void> {
-    // 占位实现
-    this.updateProgress(task.id, 100, 'Done!')
-    task.result = { success: true }
+    await this.failUnsupportedTask(task, 'TaskQueue 拆书分析执行器尚未接入真实分析任务管理器。')
   }
 
   private async executeChapterExport(task: Task): Promise<void> {
-    // 占位实现
-    this.updateProgress(task.id, 100, 'Done!')
-    task.result = { success: true }
+    await this.failUnsupportedTask(task, 'TaskQueue 导出执行器尚未接入真实导出服务。')
+  }
+
+  private async failUnsupportedTask(task: Task, message: string): Promise<never> {
+    this.updateProgress(task.id, task.progress || 5, message)
+    logger.warn({ taskId: task.id, type: task.type }, message)
+    throw new Error(message)
   }
 
   private generateTaskId(): string {

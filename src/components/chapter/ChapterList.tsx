@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core'
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Button, Badge, Input, Modal, ChaptersEmptyState } from '@/components/ui'
+import { Button, Badge, Input, Modal, ChaptersEmptyState, ExpandableList } from '@/components/ui'
 import { GripVertical, Plus, Pencil, Trash2, Sparkles } from 'lucide-react'
 import type { ChapterStatus } from '@/types'
 
@@ -18,6 +18,8 @@ interface Chapter {
   summary?: string
   sortOrder: number
 }
+
+const INITIAL_VISIBLE_CHAPTERS = 12
 
 interface ChapterListProps {
   projectId: number
@@ -257,10 +259,16 @@ export function ChapterList({ projectId, chapters: initialChapters, onChaptersCh
             items={chapters.map((c) => c.id)}
             strategy={verticalListSortingStrategy}
           >
-            <div className="space-y-2">
-              {chapters.map((chapter) => (
+            <ExpandableList
+              items={chapters}
+              initialVisibleCount={INITIAL_VISIBLE_CHAPTERS}
+              className="space-y-2"
+              buttonClassName="gap-1.5"
+              collapsedLabel={(hiddenCount) => `展开剩余 ${hiddenCount} 章`}
+              expandedLabel="收起目录"
+              getKey={(chapter) => chapter.id}
+              renderItem={(chapter) => (
                 <SortableItem
-                  key={chapter.id}
                   id={chapter.id}
                   chapter={chapter}
                   onEdit={() => router.push(`/projects/${projectId}/chapters/${chapter.id}`)}
@@ -270,8 +278,8 @@ export function ChapterList({ projectId, chapters: initialChapters, onChaptersCh
                   }}
                   onGenerate={() => router.push(`/projects/${projectId}/chapters/${chapter.id}/generate`)}
                 />
-              ))}
-            </div>
+              )}
+            />
           </SortableContext>
         </DndContext>
       )}

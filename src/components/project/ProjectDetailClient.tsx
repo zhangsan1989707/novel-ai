@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
-import { Button, Card, CardContent, CardHeader, CardTitle, Badge, Progress, Modal, toast, MoreActionsMenu } from '@/components/ui'
+import { Button, Card, CardContent, CardHeader, CardTitle, Badge, Progress, Modal, toast, MoreActionsMenu, ExpandableList } from '@/components/ui'
 import { BlueprintConsole, ProjectBaseInfoForm, ProjectBaseInfoFormData } from '@/components/project'
 import { WorkflowBlueprintCard } from '@/components/project/WorkflowBlueprintCard'
 import { WorkflowArcPlanCard } from '@/components/project/WorkflowArcPlanCard'
@@ -13,6 +13,8 @@ import { formatDisplayDate, formatDisplayDateTime } from '@/lib/helpers'
 import type { ProjectStatus } from '@/types'
 import type { PipelineRuntimeState } from '@/lib/engine/pipeline-runtime'
 import type { BlueprintConsoleSnapshot } from '@/lib/engine/blueprint-console'
+
+const INITIAL_VISIBLE_PROJECT_CHAPTERS_PER_GROUP = 10
 
 interface Chapter {
   id: number
@@ -1232,21 +1234,44 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
                   <CardTitle className="text-base">主流程</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="grid gap-3 md:grid-cols-3">
-                    <div className={`rounded-xl border p-4 ${workflowStage === 'BLUEPRINT_CONFIRM' ? 'border-blue-300 bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/20' : 'border-gray-200 dark:border-gray-800'}`}>
-                      <div className="text-xs text-gray-500">步骤 1</div>
-                      <div className="mt-1 font-medium text-gray-900 dark:text-gray-100">蓝图确认</div>
-                      <div className="mt-2 text-xs text-gray-500">{project.blueprintConfirmedAt ? '已确认，可进入故事路线图。' : '编辑并确认 BookBlueprint。'}</div>
-                    </div>
-                    <div className={`rounded-xl border p-4 ${workflowStage === 'ARC_PLAN_CONFIRM' ? 'border-amber-300 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/20' : 'border-gray-200 dark:border-gray-800'}`}>
-                      <div className="text-xs text-gray-500">步骤 2</div>
-                      <div className="mt-1 font-medium text-gray-900 dark:text-gray-100">故事路线图</div>
-                      <div className="mt-2 text-xs text-gray-500">{project.arcPlanConfirmedAt ? '已确认，可开始批次生成。' : '查看 AI 规划的全书发展路线，并做轻量确认。'}</div>
-                    </div>
-                    <div className={`rounded-xl border p-4 ${workflowStage === 'GENERATE' ? 'border-green-300 bg-green-50 dark:border-green-900/50 dark:bg-green-950/20' : 'border-gray-200 dark:border-gray-800'}`}>
-                      <div className="text-xs text-gray-500">步骤 3</div>
-                      <div className="mt-1 font-medium text-gray-900 dark:text-gray-100">开始生成</div>
-                      <div className="mt-2 text-xs text-gray-500">{flowBlockedReason || '主链路已经解锁，可以开始批次章节生成。'}</div>
+                  <div className="rounded-2xl border border-gray-200 bg-gray-50/80 p-4 dark:border-gray-800 dark:bg-slate-950/30">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Badge
+                            variant={
+                              workflowStage === 'BLUEPRINT_CONFIRM'
+                                ? 'warning'
+                                : workflowStage === 'ARC_PLAN_CONFIRM'
+                                  ? 'primary'
+                                  : 'success'
+                            }
+                          >
+                            {workflowStage === 'BLUEPRINT_CONFIRM'
+                              ? '当前阶段：蓝图确认'
+                              : workflowStage === 'ARC_PLAN_CONFIRM'
+                                ? '当前阶段：路线确认'
+                                : '当前阶段：开始生成'}
+                          </Badge>
+                          <span className="text-xs text-gray-500">
+                            {project.blueprintConfirmedAt && project.arcPlanConfirmedAt ? '前置确认已完成' : '先完成前置确认，再交给 AI 连续生产'}
+                          </span>
+                        </div>
+                        <div className="text-sm text-gray-700 dark:text-gray-300">
+                          {flowBlockedReason || '当前没有前置阻断，主链路已经解锁。'}
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Badge variant={project.blueprintConfirmedAt ? 'success' : 'warning'}>
+                          蓝图{project.blueprintConfirmedAt ? '已确认' : '待确认'}
+                        </Badge>
+                        <Badge variant={project.arcPlanConfirmedAt ? 'success' : project.blueprintConfirmedAt ? 'warning' : 'secondary'}>
+                          路线{project.arcPlanConfirmedAt ? '已确认' : '待确认'}
+                        </Badge>
+                        <Badge variant={flowBlockedReason ? 'secondary' : 'success'}>
+                          生成{flowBlockedReason ? '未解锁' : '已解锁'}
+                        </Badge>
+                      </div>
                     </div>
                   </div>
                   <WorkflowBlueprintCard
@@ -1254,6 +1279,7 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
                     projectId={projectId}
                     blueprint={project.bookBlueprint}
                     confirmed={Boolean(project.blueprintConfirmedAt)}
+                    confirmedAt={project.blueprintConfirmedAt}
                     onUpdated={fetchProject}
                   />
                   <WorkflowArcPlanCard
@@ -1264,12 +1290,14 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
                     disabled={!project.blueprintConfirmedAt}
                     onUpdated={fetchProject}
                   />
-                  <Card className="border-green-200 bg-green-50/60 dark:border-green-900/40 dark:bg-green-950/20">
+                  <Card className={`border-green-200 bg-green-50/60 dark:border-green-900/40 dark:bg-green-950/20 ${project.blueprintConfirmedAt && project.arcPlanConfirmedAt ? 'ring-1 ring-green-200 dark:ring-green-800/60' : ''}`}>
                     <CardContent className="flex flex-col gap-3 p-5 lg:flex-row lg:items-center lg:justify-between">
                       <div>
                         <div className="text-sm font-medium text-green-800 dark:text-green-200">3. 开始生成</div>
                         <div className="mt-1 text-sm text-green-700 dark:text-green-300">
-                          只有当 Blueprint 和 ArcPlan 都确认后，系统才允许生成章节目录和正文。
+                          {project.blueprintConfirmedAt && project.arcPlanConfirmedAt
+                            ? '主链路已经解锁，可以直接开始生成章节目录和正文。'
+                            : '只有当 Blueprint 和 ArcPlan 都确认后，系统才允许生成章节目录和正文。'}
                         </div>
                         {flowBlockedReason && (
                           <div className="mt-2 text-xs text-green-700/80 dark:text-green-300/80">{flowBlockedReason}</div>
@@ -1328,47 +1356,57 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
                     </div>
                   ) : (
                     <div className="space-y-6">
-                      {arcGroups.map((group, groupIdx) => (
-                        <div key={groupIdx}>
-                          {group.arcName && (
-                            <div className="flex items-center gap-2 mb-2 px-1">
-                              <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wide">
-                                {group.arcName}
-                              </span>
-                              <span className="text-xs text-gray-400">
-                                {group.chapters.length} 章
-                              </span>
-                            </div>
-                          )}
-                          <div className="space-y-1">
-                            {group.chapters.map((chapter) => (
-                              <div
-                                key={chapter.id}
-                                onClick={() => openChapterPreview(chapter)}
-                                className="flex items-center justify-between px-3 py-2.5 rounded-lg border border-gray-100 dark:border-gray-800 hover:border-blue-200 dark:hover:border-blue-800 hover:bg-blue-50/50 dark:hover:bg-blue-900/10 cursor-pointer transition-all group"
-                              >
-                                <div className="flex items-center gap-3 flex-1 min-w-0">
-                                  <span className="text-gray-400 text-sm shrink-0">
-                                    第{chapter.chapterNumber}章
-                                  </span>
-                                  <span className="font-medium text-sm truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                                    {chapter.title || '无标题'}
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-3 shrink-0">
-                                  <span className="text-xs text-gray-500">
-                                    {(chapter.wordCount || 0).toLocaleString()} 字
-                                  </span>
-                                  <Badge variant={chapterStatusMap[chapter.status].variant} className="text-xs">
-                                    {chapterStatusMap[chapter.status].label}
-                                  </Badge>
-                                  <Eye className="h-3.5 w-3.5 text-gray-300 group-hover:text-blue-500 transition-colors" />
-                                </div>
+                      {arcGroups.map((group, groupIdx) => {
+                        const groupKey = `${group.arcNumber || 0}-${group.arcName || 'chapters'}-${groupIdx}`
+
+                        return (
+                          <div key={groupKey}>
+                            {group.arcName && (
+                              <div className="flex items-center gap-2 mb-2 px-1">
+                                <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wide">
+                                  {group.arcName}
+                                </span>
+                                <span className="text-xs text-gray-400">
+                                  {group.chapters.length} 章
+                                </span>
                               </div>
-                            ))}
+                            )}
+                            <ExpandableList
+                              items={group.chapters}
+                              initialVisibleCount={INITIAL_VISIBLE_PROJECT_CHAPTERS_PER_GROUP}
+                              className="space-y-1"
+                              buttonClassName="gap-1.5"
+                              collapsedLabel={(hiddenCount) => `展开剩余 ${hiddenCount} 章`}
+                              expandedLabel="收起目录"
+                              getKey={(chapter) => chapter.id}
+                              renderItem={(chapter) => (
+                                <div
+                                  onClick={() => openChapterPreview(chapter)}
+                                  className="flex items-center justify-between px-3 py-2.5 rounded-lg border border-gray-100 dark:border-gray-800 hover:border-blue-200 dark:hover:border-blue-800 hover:bg-blue-50/50 dark:hover:bg-blue-900/10 cursor-pointer transition-all group"
+                                >
+                                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                                    <span className="text-gray-400 text-sm shrink-0">
+                                      第{chapter.chapterNumber}章
+                                    </span>
+                                    <span className="font-medium text-sm truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                                      {chapter.title || '无标题'}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-3 shrink-0">
+                                    <span className="text-xs text-gray-500">
+                                      {(chapter.wordCount || 0).toLocaleString()} 字
+                                    </span>
+                                    <Badge variant={chapterStatusMap[chapter.status].variant} className="text-xs">
+                                      {chapterStatusMap[chapter.status].label}
+                                    </Badge>
+                                    <Eye className="h-3.5 w-3.5 text-gray-300 group-hover:text-blue-500 transition-colors" />
+                                  </div>
+                                </div>
+                              )}
+                            />
                           </div>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   )}
                 </CardContent>

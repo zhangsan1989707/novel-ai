@@ -31,6 +31,8 @@ interface ChapterListGeneratorProps {
 
 type TitleStyle = 'webnovel' | 'traditional' | 'poetry'
 
+const INITIAL_VISIBLE_GENERATED_CHAPTERS = 15
+
 const titleStyleOptions = [
   {
     value: 'webnovel',
@@ -83,6 +85,7 @@ export function ChapterListGenerator({
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [editTitle, setEditTitle] = useState('')
   const [error, setError] = useState('')
+  const [showAllChapters, setShowAllChapters] = useState(false)
   const abortControllerRef = useRef<AbortController | null>(null)
 
   // 当模态框打开时，使用外部传入的章节初始化内部状态
@@ -255,6 +258,12 @@ export function ChapterListGenerator({
     setGenerating(false)
   }
 
+  const visibleChapters = showAllChapters
+    ? chapters
+    : chapters.slice(0, INITIAL_VISIBLE_GENERATED_CHAPTERS)
+
+  const hiddenChapterCount = Math.max(0, chapters.length - visibleChapters.length)
+
   return (
     <>
       <Button variant="outline" size="sm" onClick={() => setIsOpen(true)}>
@@ -366,13 +375,25 @@ export function ChapterListGenerator({
                     点击标题可直接编辑 · 鼠标悬停显示操作按钮
                   </span>
                 </div>
+                {chapters.length > INITIAL_VISIBLE_GENERATED_CHAPTERS && (
+                  <div className="mt-3 flex justify-end">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setShowAllChapters((prev) => !prev)}
+                      className="gap-1.5"
+                    >
+                      {showAllChapters ? '收起目录' : `展开剩余 ${hiddenChapterCount} 章`}
+                    </Button>
+                  </div>
+                )}
               </div>
               <div className="max-h-80 overflow-y-auto">
                 <table className="w-full text-sm">
                   <tbody>
-                    {chapters.map((chapter, index) => (
+                    {visibleChapters.map((chapter, index) => (
                       <tr
-                        key={index}
+                        key={`${chapter.chapterNumber}-${index}`}
                         className="group border-t border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
                       >
                         <td className="px-4 py-3 text-gray-400 w-12">

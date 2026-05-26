@@ -8,6 +8,7 @@ import { ArrowLeft, Save, Trash2, FileText, Wand2, Edit3, X, BookOpen, RefreshCw
 import { ChapterStatus } from '@/types'
 import { ChapterQualityPanel } from '@/components/ai/ChapterQualityPanel'
 import { AntiDetectPanel } from '@/components/ai/AntiDetectPanel'
+import { RevisionPanel, type RevisionType } from '@/components/ai'
 import { formatDisplayDateTime } from '@/lib/helpers'
 import { countChineseWords } from '@/lib/utils'
 
@@ -34,6 +35,8 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [showQualityPanel, setShowQualityPanel] = useState(false)
   const [showAntiDetectPanel, setShowAntiDetectPanel] = useState(false)
+  const [showRevisionModal, setShowRevisionModal] = useState(false)
+  const [revisionMode, setRevisionMode] = useState<RevisionType>('rewrite')
   const [wordCount, setWordCount] = useState(0)
   const [nextChapterNumber, setNextChapterNumber] = useState(1)
 
@@ -166,6 +169,39 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
     setWordCount(countChineseWords(revisedContent))
   }, [])
 
+  const openRevisionModal = useCallback((mode: RevisionType) => {
+    if (mode === 'continue' && !chapter.content?.trim() && chapterId) {
+      router.push(`/projects/${projectId}/chapters/${chapterId}/generate`)
+      return
+    }
+
+    if (mode === 'rewrite' && !chapter.content?.trim()) {
+      toast.error('当前没有可重写的正文内容')
+      return
+    }
+
+    setRevisionMode(mode)
+    setShowRevisionModal(true)
+  }, [chapter.content, chapterId, projectId, router])
+
+  const closeRevisionModal = useCallback(() => {
+    setShowRevisionModal(false)
+  }, [])
+
+  const handleRevisionApply = useCallback((newContent: string) => {
+    const mergedContent =
+      revisionMode === 'continue' && chapter.content
+        ? `${chapter.content.trimEnd()}\n\n${newContent.trimStart()}`
+        : newContent
+
+    setChapter(prev => ({ ...prev, content: mergedContent }))
+    setWordCount(countChineseWords(mergedContent))
+    setShowRevisionModal(false)
+    setIsEditing(false)
+    setEditContent('')
+    toast.success(revisionMode === 'continue' ? 'AI 续写结果已载入，请保存草稿' : 'AI 重写结果已载入，请保存草稿')
+  }, [chapter.content, revisionMode])
+
   const statusLabelMap: Record<string, { label: string; className: string }> = {
     DRAFT: { label: '草稿', className: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400' },
     GENERATING: { label: '生成中', className: 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' },
@@ -225,9 +261,8 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
                   <Button
                     variant="outline"
                     size="sm"
-                    disabled
+                    onClick={() => openRevisionModal('continue')}
                     className="gap-1.5 whitespace-nowrap"
-                    title="AI续写功能即将上线"
                   >
                     <BookOpen className="h-4 w-4" />
                     AI 续写
@@ -235,9 +270,8 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
                   <Button
                     variant="outline"
                     size="sm"
-                    disabled
+                    onClick={() => openRevisionModal('rewrite')}
                     className="gap-1.5 whitespace-nowrap"
-                    title="AI重写功能即将上线"
                   >
                     <RefreshCw className="h-4 w-4" />
                     AI 重写
@@ -470,6 +504,30 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
           </aside>
         </div>
       </main>
+
+      <Modal
+        open={showRevisionModal && Boolean(chapterId)}
+        onClose={closeRevisionModal}
+        title={revisionMode === 'continue' ? 'AI 续写' : 'AI 重写'}
+        description={
+          revisionMode === 'continue'
+            ? '基于当前正文继续生成内容。应用后会先载入编辑区，确认无误后再保存。'
+            : '基于当前正文生成重写版本。应用后会先载入编辑区，确认无误后再保存。'
+        }
+        className="max-w-5xl"
+      >
+        {chapterId && (
+          <RevisionPanel
+            key={`${chapterId}-${revisionMode}`}
+            projectId={projectId}
+            chapterId={chapterId}
+            currentContent={chapter.content || ''}
+            initialRevisionType={revisionMode}
+            onApply={handleRevisionApply}
+            onCancel={closeRevisionModal}
+          />
+        )}
+      </Modal>
 
       <Modal
         open={showDeleteModal}
