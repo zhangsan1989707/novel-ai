@@ -277,7 +277,7 @@ const speedModeOptions: Array<{
   {
     value: 'fast',
     label: '快速验收',
-    description: '跳过重型审稿链，适合验证主链路是否跑通。',
+    description: '跳过重型审稿链，适合批量出草稿和验证主链路。',
   },
   {
     value: 'balanced',
@@ -389,6 +389,8 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
   const [showToolbox, setShowToolbox] = useState(false)
   const [showChapterPreview, setShowChapterPreview] = useState(false)
   const [previewChapter, setPreviewChapter] = useState<Chapter | null>(null)
+  const [selectedChapterNumber, setSelectedChapterNumber] = useState<number | null>(null)
+  const [chapterDirectoryTouched, setChapterDirectoryTouched] = useState(false)
   const [showResearchModal, setShowResearchModal] = useState(false)
   const [showCoverModal, setShowCoverModal] = useState(false)
   const [showPlotAnalysisModal, setShowPlotAnalysisModal] = useState(false)
@@ -398,7 +400,7 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [pipelineStarting, setPipelineStarting] = useState(false)
-  const [selectedSpeedMode, setSelectedSpeedMode] = useState<GenerationSpeedMode>('balanced')
+  const [selectedSpeedMode, setSelectedSpeedMode] = useState<GenerationSpeedMode>('fast')
   const [maintenanceRetrying, setMaintenanceRetrying] = useState(false)
   const [activeTab, setActiveTab] = useState<DashboardTab>('dashboard')
 
@@ -443,6 +445,11 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
     setPipeline(nextPipeline)
     lastPipelineStatusRef.current = nextStatus
 
+    const nextLiveChapterNumber = nextPipeline.runtime?.currentChapter?.chapterNumber || null
+    if (nextStatus === 'RUNNING' && !chapterDirectoryTouched && nextLiveChapterNumber) {
+      setSelectedChapterNumber(nextLiveChapterNumber)
+    }
+
     if (nextStatus === 'COMPLETED' && prevStatus !== 'COMPLETED') {
       toast.success(`AI 生成完成，共生成 ${nextPipeline.totalChapters} 章`)
       fetchProject()
@@ -450,7 +457,7 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
       toast.error(nextPipeline.error || 'AI 生成失败')
       fetchProject()
     }
-  }, [fetchProject])
+  }, [chapterDirectoryTouched, fetchProject])
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -1454,6 +1461,9 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
                     </div>
                   ) : (
                     <div className="space-y-6">
+                      <div className="rounded-lg border border-blue-100 bg-blue-50/50 px-4 py-3 text-xs text-blue-700 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-300">
+                        点击任意章节可展开实时正文，正在生成的章节会显示流式写作内容。再次点击或按“隐藏”可收起。
+                      </div>
                       {arcGroups.map((group, groupIdx) => {
                         const groupKey = `${group.arcNumber || 0}-${group.arcName || 'chapters'}-${groupIdx}`
 
@@ -1478,28 +1488,122 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
                               expandedLabel="收起目录"
                               getKey={(chapter) => chapter.id}
                               renderItem={(chapter) => (
-                                <div
-                                  onClick={() => openChapterPreview(chapter)}
-                                  className="flex items-center justify-between px-3 py-2.5 rounded-lg border border-gray-100 dark:border-gray-800 hover:border-blue-200 dark:hover:border-blue-800 hover:bg-blue-50/50 dark:hover:bg-blue-900/10 cursor-pointer transition-all group"
-                                >
-                                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                                    <span className="text-gray-400 text-sm shrink-0">
-                                      第{chapter.chapterNumber}章
-                                    </span>
-                                    <span className="font-medium text-sm truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                                      {chapter.title || '无标题'}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-3 shrink-0">
-                                    <span className="text-xs text-gray-500">
-                                      {(chapter.wordCount || 0).toLocaleString()} 字
-                                    </span>
-                                    <Badge variant={chapterStatusMap[chapter.status].variant} className="text-xs">
-                                      {chapterStatusMap[chapter.status].label}
-                                    </Badge>
-                                    <Eye className="h-3.5 w-3.5 text-gray-300 group-hover:text-blue-500 transition-colors" />
-                                  </div>
-                                </div>
+                                (() => {
+                                  const isSelected = selectedChapterNumber === chapter.chapterNumber
+                                  const currentLiveChapter = liveChapter?.chapterNumber === chapter.chapterNumber ? liveChapter : null
+                                  const chapterPreviewText = currentLiveChapter?.liveContent?.trim()
+                                    || chapter.content
+                                    || chapter.summary
+                                    || ''
+                                  const chapterBadgeVariant = currentLiveChapter ? 'primary' : chapterStatusMap[chapter.status].variant
+                                  const chapterBadgeLabel = currentLiveChapter
+                                    ? '实时写作中'
+                                    : chapterStatusMap[chapter.status].label
+
+                                  return (
+                                    <div className="space-y-2">
+                                      <div
+                                        onClick={() => {
+                                          setChapterDirectoryTouched(true)
+                                          setSelectedChapterNumber(prev => prev === chapter.chapterNumber ? null : chapter.chapterNumber)
+                                        }}
+                                        className={`flex cursor-pointer items-center justify-between rounded-lg border px-3 py-2.5 transition-all group ${
+                                          isSelected
+                                            ? 'border-blue-200 bg-blue-50/70 dark:border-blue-800 dark:bg-blue-950/20'
+                                            : 'border-gray-100 dark:border-gray-800 hover:border-blue-200 dark:hover:border-blue-800 hover:bg-blue-50/50 dark:hover:bg-blue-900/10'
+                                        }`}
+                                        aria-expanded={isSelected}
+                                      >
+                                        <div className="flex min-w-0 flex-1 items-center gap-3">
+                                          <span className="shrink-0 text-sm text-gray-400">
+                                            第{chapter.chapterNumber}章
+                                          </span>
+                                          <span className="truncate text-sm font-medium transition-colors group-hover:text-blue-600 dark:group-hover:text-blue-400">
+                                            {chapter.title || '无标题'}
+                                          </span>
+                                        </div>
+                                        <div className="flex shrink-0 items-center gap-2">
+                                          <span className="text-xs text-gray-500">
+                                            {(chapter.wordCount || 0).toLocaleString()} 字
+                                          </span>
+                                          <Badge variant={chapterBadgeVariant} className="text-xs">
+                                            {chapterBadgeLabel}
+                                          </Badge>
+                                          <button
+                                            type="button"
+                                            onClick={(event) => {
+                                              event.stopPropagation()
+                                              openChapterPreview(chapter)
+                                            }}
+                                            className="rounded-full p-1 text-gray-300 transition-colors hover:bg-white hover:text-blue-500 dark:hover:bg-slate-900"
+                                            aria-label={`打开第${chapter.chapterNumber}章详情`}
+                                          >
+                                            <Eye className="h-3.5 w-3.5" />
+                                          </button>
+                                          <ChevronDown
+                                            className={`h-4 w-4 text-gray-300 transition-transform group-hover:text-blue-500 ${isSelected ? 'rotate-180 text-blue-500' : ''}`}
+                                          />
+                                        </div>
+                                      </div>
+
+                                      {isSelected && (
+                                        <div
+                                          className="rounded-lg border border-blue-100 bg-blue-50/70 px-4 py-3 dark:border-blue-900/40 dark:bg-blue-950/20"
+                                          onClick={(event) => event.stopPropagation()}
+                                        >
+                                          <div className="flex items-center justify-between gap-3">
+                                            <div className="flex items-center gap-2 text-xs text-blue-700 dark:text-blue-300">
+                                              <Badge variant={currentLiveChapter ? 'primary' : 'secondary'}>
+                                                {currentLiveChapter ? '实时正文' : chapter.content ? '已完成正文' : '章节概要'}
+                                              </Badge>
+                                              {currentLiveChapter ? (
+                                                <span>
+                                                  已写 {currentLiveChapter.currentWordCount} / {currentLiveChapter.targetWordCount} 字
+                                                </span>
+                                              ) : (
+                                                <span>
+                                                  {(chapter.wordCount || 0).toLocaleString()} 字
+                                                </span>
+                                              )}
+                                            </div>
+                                            <Button
+                                              variant="outline"
+                                              size="sm"
+                                              onClick={() => {
+                                                setChapterDirectoryTouched(true)
+                                                setSelectedChapterNumber(null)
+                                              }}
+                                            >
+                                              隐藏
+                                            </Button>
+                                          </div>
+
+                                          {currentLiveChapter?.lastMessage && (
+                                            <p className="mt-2 text-xs text-blue-700/80 dark:text-blue-300/80">
+                                              {currentLiveChapter.lastMessage}
+                                            </p>
+                                          )}
+
+                                          <div className="mt-3 rounded-md border border-blue-100 bg-white/90 px-4 py-3 dark:border-blue-900/30 dark:bg-slate-950/40">
+                                            <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">
+                                              {currentLiveChapter ? '实时写作内容' : '章节内容'}
+                                            </div>
+                                            {chapterPreviewText ? (
+                                              <div className="max-h-64 overflow-y-auto whitespace-pre-wrap text-sm leading-[2] text-gray-800 dark:text-gray-200">
+                                                {chapterPreviewText}
+                                              </div>
+                                            ) : (
+                                              <div className="flex items-center gap-2 py-4 text-sm text-gray-400">
+                                                <BookOpen className="h-4 w-4 opacity-50" />
+                                                暂无可显示内容
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )
+                                })()
                               )}
                             />
                           </div>

@@ -20,6 +20,7 @@ import { directChapter } from '../agents/narrative-director'
 import { chapterDeslopper } from '../agents/deslopper'
 import { recordAndApplyChapterCommit } from './chapter-commit'
 import { buildRevisionPrompt } from '@/lib/ai'
+import { estimateMaxTokensForTargetWordCount, resolveEffectiveChapterWordCount } from '@/lib/ai/speed-mode'
 import type { GenerationRole, GenerationSpeedMode } from '@/lib/ai/speed-mode'
 import type {
   ChapterOutline,
@@ -118,6 +119,7 @@ export async function runChapterGenerationPipeline(
   if (!project) {
     return { success: false, chapterId: 0, error: '项目不存在' }
   }
+  const chapterTargetWordCount = resolveEffectiveChapterWordCount(project.chapterWordCount || 3000, speedMode)
   const popularFictionProfile = normalizePopularFictionProfile(
     (project.bookBlueprint as unknown as { popularFictionProfile?: unknown } | null)?.popularFictionProfile
   )
@@ -208,7 +210,7 @@ export async function runChapterGenerationPipeline(
           powerSystem: project.powerSystem,
           protagonistProfile: project.protagonistProfile,
           antagonistSetting: project.antagonistSetting,
-          targetWordCount: project.chapterWordCount || 3000,
+          targetWordCount: chapterTargetWordCount,
           characterProfiles: memoryPack.characterProfiles.map(c => ({
             name: c.name,
             role: c.role,
@@ -276,11 +278,12 @@ export async function runChapterGenerationPipeline(
           powerSystem: project.powerSystem,
           protagonistProfile: project.protagonistProfile,
           antagonistSetting: project.antagonistSetting,
-          targetWordCount: project.chapterWordCount || 3000,
+          targetWordCount: chapterTargetWordCount,
           outline,
           characterProfiles: memoryPack.characterProfiles,
           recentSummaries: memoryPack.recentChapterSummaries,
           provider: await getRoleProvider('writer'),
+          maxTokens: estimateMaxTokensForTargetWordCount(chapterTargetWordCount),
           popularFictionProfile,
         },
         (token) => {

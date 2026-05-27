@@ -87,3 +87,17 @@ export function resolveModelIdForRole(input: {
 export function estimateMaxTokensForTargetWordCount(targetWordCount: number): number {
   return Math.ceil(Math.max(1, targetWordCount) * 1.5)
 }
+
+export function resolveEffectiveChapterWordCount(
+  targetWordCount: number,
+  speedMode: GenerationSpeedMode = 'balanced'
+): number {
+  const safeTarget = Math.max(1000, Math.floor(targetWordCount || 0))
+  const multiplierByMode: Record<GenerationSpeedMode, number> = {
+    fast: 0.8,
+    balanced: 0.9,
+    quality: 1,
+  }
+
+  return Math.max(1000, Math.floor(safeTarget * multiplierByMode[speedMode]))
+}

@@ -40,5 +40,5 @@ export default async function ProjectDetailPage({
     notFound()
   }
 
-  return <ProjectDetailClient initialProject={project} />
+  return <ProjectDetailClient key={projectId} initialProject={project} />
 }

@@ -6,12 +6,15 @@ import type { AIProvider } from '@/lib/ai/types'
 import { buildWriterPrompt as buildWriterPromptV2 } from '../prompts/chapter/writing-v2'
 import type { ChapterOutline, CharacterProfile, AgentContext } from '../engine/types'
 import type { PopularFictionProfile } from '../engine/popular-fiction'
+import type { GenerationSpeedMode } from '@/lib/ai/speed-mode'
 
 interface WriterInput extends AgentContext {
   outline: ChapterOutline
   characterProfiles: CharacterProfile[]
   recentSummaries: { chapterNo: number; summary: string }[]
   targetWordCount: number
+  maxTokens?: number
+  speedMode?: GenerationSpeedMode
   memoryContext?: string
   useEnhancedPrompt?: boolean
   provider?: AIProvider
@@ -56,7 +59,10 @@ export async function writerAgent(
 
   // 流式生成
   const tokens: string[] = []
-  for await (const token of provider.generateStream(prompt, { temperature: 0.7 })) {
+  for await (const token of provider.generateStream(prompt, {
+    temperature: 0.7,
+    maxTokens: input.maxTokens,
+  })) {
     tokens.push(token)
     onChunk?.(token)
   }
