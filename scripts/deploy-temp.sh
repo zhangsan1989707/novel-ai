@@ -52,7 +52,13 @@ docker compose build app 2>&1 | tail -3
 
 echo " 重启服务..."
 docker compose up -d --force-recreate app
-sleep 20
+sleep 10
+
+echo "  执行数据库迁移..."
+docker compose exec -T app npx prisma migrate deploy
+echo "✅ 迁移完成"
+
+sleep 10
 
 echo " 服务状态："
 docker compose ps

@@ -1,3 +1,5 @@
+import type { GenerationSpeedMode } from '@/lib/ai/speed-mode'
+
 export type PipelineAgentPhase =
   | 'planner'
   | 'writer'
@@ -34,6 +36,7 @@ export interface PipelineChapterRuntime {
 export interface PipelineRuntimeState {
   currentChapter: PipelineChapterRuntime | null
   recentChapters: PipelineChapterRuntime[]
+  speedMode?: GenerationSpeedMode
   lastEventAt?: string
   lastPhase?: string
   lastPhaseDurationMs?: number
@@ -42,10 +45,11 @@ export interface PipelineRuntimeState {
 
 const MAX_RECENT_CHAPTERS = 8
 
-export function createPipelineRuntimeState(): PipelineRuntimeState {
+export function createPipelineRuntimeState(speedMode?: GenerationSpeedMode): PipelineRuntimeState {
   return {
     currentChapter: null,
     recentChapters: [],
+    speedMode,
     streamRevision: 0,
   }
 }
@@ -57,11 +61,16 @@ export function sanitizePipelineRuntime(value: unknown): PipelineRuntimeState {
     recentChapters: Array.isArray(candidate.recentChapters)
       ? candidate.recentChapters.filter(isChapterRuntime).slice(0, MAX_RECENT_CHAPTERS)
       : [],
+    speedMode: isSpeedMode(candidate.speedMode) ? candidate.speedMode : undefined,
     lastEventAt: typeof candidate.lastEventAt === 'string' ? candidate.lastEventAt : undefined,
     lastPhase: typeof candidate.lastPhase === 'string' ? candidate.lastPhase : undefined,
     lastPhaseDurationMs: typeof candidate.lastPhaseDurationMs === 'number' ? candidate.lastPhaseDurationMs : undefined,
     streamRevision: typeof candidate.streamRevision === 'number' ? candidate.streamRevision : 0,
   }
+}
+
+function isSpeedMode(value: unknown): value is GenerationSpeedMode {
+  return value === 'fast' || value === 'balanced' || value === 'quality'
 }
 
 export function archiveChapterRuntime(

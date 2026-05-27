@@ -27,6 +27,11 @@ interface ValidationResult {
   violations: string[]
 }
 
+interface FinaleGuardResult {
+  violations: string[]
+  warnings: string[]
+}
+
 const FORBIDDEN_KEYWORDS = [
   '终局',
   '大结局',
@@ -128,24 +133,22 @@ function matchDescription(text: string, description: string): boolean {
   return chunks.some(chunk => text.includes(chunk))
 }
 
-export function validateOutline(
+export function finaleGuardValidator(
   chapters: ChapterOutline[],
-  progress: number | OutlineValidationOptions
-): ValidationResult {
-  const options = normalizeOptions(progress)
+  options: OutlineValidationOptions
+): FinaleGuardResult {
+  const violations: string[] = []
+  const warnings: string[] = []
   const progressRatio = options.progressRatio
-  const result: ValidationResult = { passed: true, warnings: [], violations: [] }
-  const maxChapterNumber = chapters.reduce((max, chapter) => Math.max(max, chapter.chapterNumber), 0)
-  const finalBossNames = (options.finalBossNames || []).map(item => item.toLowerCase()).filter(Boolean)
-  const protectedVillains = (options.protectedVillainNames || []).map(item => item.toLowerCase()).filter(Boolean)
-  const blueprintConstraints = (options.blueprintConstraints || []).filter(Boolean)
-  const openPlotlines = options.openPlotlines || []
-  const strictMainlineGuard = progressRatio < 0.92
   const strictVillainGuard = progressRatio < 0.9
   const strictForeshadowGuard = progressRatio < 0.88
+  const strictMainlineGuard = progressRatio < 0.92
+  const finalBossNames = (options.finalBossNames || []).map(item => item.toLowerCase()).filter(Boolean)
+  const protectedVillains = (options.protectedVillainNames || []).map(item => item.toLowerCase()).filter(Boolean)
+  const openPlotlines = options.openPlotlines || []
 
   if (progressRatio >= 0.85) {
-    result.warnings.push(
+    warnings.push(
       `当前进度 ${Math.round(progressRatio * 100)}%，目录已进入后段，可逐步增强收束感，但仍需避免一次性终结全部主线。`
     )
   }
@@ -155,55 +158,53 @@ export function validateOutline(
 
     if (progressRatio < 0.85) {
       for (const keyword of FORBIDDEN_KEYWORDS) {
-        if (!text.includes(keyword.toLowerCase())) continue
-        result.violations.push(
-          `第${chapter.chapterNumber}章"${chapter.title}"包含禁止关键词："${keyword}"（当前进度${Math.round(progressRatio * 100)}%，禁止终局内容）`
-        )
-        result.passed = false
+        if (text.includes(keyword.toLowerCase())) {
+          violations.push(
+            `第${chapter.chapterNumber}章"${chapter.title}"包含禁止关键词："${keyword}"（当前进度${Math.round(progressRatio * 100)}%，禁止终局内容）`
+          )
+        }
       }
 
       for (const pattern of FORBIDDEN_PATTERNS) {
-        if (!pattern.test(text)) continue
-        result.violations.push(
-          `第${chapter.chapterNumber}章"${chapter.title}"匹配禁止模式（当前进度${Math.round(progressRatio * 100)}%，禁止终局内容）`
-        )
-        result.passed = false
+        if (pattern.test(text)) {
+          violations.push(
+            `第${chapter.chapterNumber}章"${chapter.title}"匹配禁止模式（当前进度${Math.round(progressRatio * 100)}%，禁止终局内容）`
+          )
+        }
       }
     }
 
     if (strictMainlineGuard) {
       const keyword = containsAny(text, MAINLINE_TERMINATION_KEYWORDS)
       if (keyword) {
-        result.violations.push(
+        violations.push(
           `第${chapter.chapterNumber}章"${chapter.title}"出现主线终结信号："${keyword}"（当前阶段 ${options.currentArcStage || '未知'}，禁止主线提前收束）`
         )
-        result.passed = false
       }
 
       for (const pattern of MAINLINE_TERMINATION_PATTERNS) {
-        if (!pattern.test(text)) continue
-        result.violations.push(
-          `第${chapter.chapterNumber}章"${chapter.title}"出现主线收官模式（当前阶段 ${options.currentArcStage || '未知'}，禁止主线提前收束）`
-        )
-        result.passed = false
+        if (pattern.test(text)) {
+          violations.push(
+            `第${chapter.chapterNumber}章"${chapter.title}"出现主线收官模式（当前阶段 ${options.currentArcStage || '未知'}，禁止主线提前收束）`
+          )
+        }
       }
     }
 
     if (strictForeshadowGuard) {
       const keyword = containsAny(text, FORESHADOW_RESOLUTION_KEYWORDS)
       if (keyword) {
-        result.violations.push(
+        violations.push(
           `第${chapter.chapterNumber}章"${chapter.title}"出现伏笔/谜团提前回收信号："${keyword}"（当前进度 ${Math.round(progressRatio * 100)}%）`
         )
-        result.passed = false
       }
 
       for (const pattern of FORESHADOW_RESOLUTION_PATTERNS) {
-        if (!pattern.test(text)) continue
-        result.violations.push(
-          `第${chapter.chapterNumber}章"${chapter.title}"出现伏笔/谜团集中揭晓模式（当前进度 ${Math.round(progressRatio * 100)}%）`
-        )
-        result.passed = false
+        if (pattern.test(text)) {
+          violations.push(
+            `第${chapter.chapterNumber}章"${chapter.title}"出现伏笔/谜团集中揭晓模式（当前进度 ${Math.round(progressRatio * 100)}%）`
+          )
+        }
       }
     }
 
@@ -211,19 +212,19 @@ export function validateOutline(
       const defeated = containsAny(text, VILLAIN_DEFEAT_TERMS)
       if (defeated) {
         for (const name of finalBossNames) {
-          if (!name || !text.includes(name)) continue
-          result.violations.push(
-            `第${chapter.chapterNumber}章"${chapter.title}"让终极反派"${name}"出现"${defeated}"语义（当前进度 ${Math.round(progressRatio * 100)}%，禁止最大反派提前死亡或退场）`
-          )
-          result.passed = false
+          if (text.includes(name)) {
+            violations.push(
+              `第${chapter.chapterNumber}章"${chapter.title}"让终极反派"${name}"出现"${defeated}"语义（当前进度 ${Math.round(progressRatio * 100)}%，禁止最大反派提前死亡或退场）`
+            )
+          }
         }
 
         for (const name of protectedVillains) {
-          if (!name || !text.includes(name)) continue
-          result.violations.push(
-            `第${chapter.chapterNumber}章"${chapter.title}"让关键反派"${name}"出现"${defeated}"语义（当前 Arc ${options.currentArcName || '未知'}，禁止关键反派过早清场）`
-          )
-          result.passed = false
+          if (text.includes(name)) {
+            violations.push(
+              `第${chapter.chapterNumber}章"${chapter.title}"让关键反派"${name}"出现"${defeated}"语义（当前 Arc ${options.currentArcName || '未知'}，禁止关键反派过早清场）`
+            )
+          }
         }
       }
     }
@@ -234,20 +235,37 @@ export function validateOutline(
 
       const plannedAt = typeof plotline.plannedAt === 'number' ? plotline.plannedAt : null
       if (plannedAt && chapter.chapterNumber < plannedAt) {
-        result.violations.push(
+        violations.push(
           `第${chapter.chapterNumber}章"${chapter.title}"疑似提前回收伏笔"${plotline.description}"（计划回收章节 ${plannedAt}）`
         )
-        result.passed = false
         continue
       }
 
       if (!plannedAt && strictForeshadowGuard) {
-        result.violations.push(
+        violations.push(
           `第${chapter.chapterNumber}章"${chapter.title}"疑似提前收束未解决伏笔"${plotline.description}"（当前进度 ${Math.round(progressRatio * 100)}%）`
         )
-        result.passed = false
       }
     }
+  }
+
+  return { violations, warnings }
+}
+
+export function validateOutline(
+  chapters: ChapterOutline[],
+  progress: number | OutlineValidationOptions
+): ValidationResult {
+  const options = normalizeOptions(progress)
+  const result: ValidationResult = { passed: true, warnings: [], violations: [] }
+  const maxChapterNumber = chapters.reduce((max, chapter) => Math.max(max, chapter.chapterNumber), 0)
+  const blueprintConstraints = (options.blueprintConstraints || []).filter(Boolean)
+  const openPlotlines = options.openPlotlines || []
+  const finaleGuard = finaleGuardValidator(chapters, options)
+  result.warnings.push(...finaleGuard.warnings)
+  if (finaleGuard.violations.length > 0) {
+    result.violations.push(...finaleGuard.violations)
+    result.passed = false
   }
 
   const lastChapterNumbers = chapters.slice(-Math.ceil(chapters.length * 0.3)).map(c => c.chapterNumber)

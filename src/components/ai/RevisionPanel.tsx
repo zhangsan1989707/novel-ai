@@ -25,6 +25,7 @@ interface RevisionPanelProps {
   currentContent: string
   onApply: (newContent: string) => void
   onCancel?: () => void
+  initialRevisionType?: RevisionType
 }
 
 interface Message {
@@ -70,8 +71,9 @@ export function RevisionPanel({
   currentContent,
   onApply,
   onCancel,
+  initialRevisionType = 'rewrite',
 }: RevisionPanelProps) {
-  const [revisionType, setRevisionType] = useState<RevisionType>('rewrite')
+  const [revisionType, setRevisionType] = useState<RevisionType>(initialRevisionType)
   const [customSuggestion, setCustomSuggestion] = useState('')
   const [selectedQuickSuggestions, setSelectedQuickSuggestions] = useState<QuickSuggestion[]>([])
   const [loading, setLoading] = useState(false)
@@ -82,6 +84,10 @@ export function RevisionPanel({
   const [showHistory, setShowHistory] = useState(false)
   const contentRef = useRef<HTMLDivElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
+
+  useEffect(() => {
+    setRevisionType(initialRevisionType)
+  }, [initialRevisionType])
 
   const handleQuickSuggestionToggle = (key: QuickSuggestion) => {
     setSelectedQuickSuggestions((prev) =>

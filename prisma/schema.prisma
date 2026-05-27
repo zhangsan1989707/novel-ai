@@ -124,6 +124,9 @@ model NovelProject {
   mysteryDensity     Float                    @default(0.3)
   pace               Float                    @default(0.5)
   pipelineJobId      Int?
+  workflowStage      String                   @default("BLUEPRINT_CONFIRM")
+  blueprintConfirmedAt DateTime?
+  arcPlanConfirmedAt DateTime?
   platform           Platform?
   powerGrowth        Float                    @default(0.5)
   romance            Float                    @default(0.2)
@@ -767,6 +770,7 @@ model BookBlueprint {
   platformStrategy  String?
   genreStrategy     String?
   styleStrategy     String?
+  popularFictionProfile Json?
   constraints       String[]     @default([])
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt

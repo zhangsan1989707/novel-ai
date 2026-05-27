@@ -3,9 +3,9 @@
  */
 import { AIService } from '@/lib/ai/service'
 import type { AIProvider } from '@/lib/ai/types'
-import { buildWriterPrompt as buildWriterPromptV1 } from '../prompts/chapter/writing'
 import { buildWriterPrompt as buildWriterPromptV2 } from '../prompts/chapter/writing-v2'
 import type { ChapterOutline, CharacterProfile, AgentContext } from '../engine/types'
+import type { PopularFictionProfile } from '../engine/popular-fiction'
 
 interface WriterInput extends AgentContext {
   outline: ChapterOutline
@@ -15,6 +15,7 @@ interface WriterInput extends AgentContext {
   memoryContext?: string
   useEnhancedPrompt?: boolean
   provider?: AIProvider
+  popularFictionProfile?: PopularFictionProfile | null
 }
 
 // 默认使用增强版提示词
@@ -50,6 +51,7 @@ export async function writerAgent(
     characterProfiles: characterProfilesStr,
     recentSummaries: recentSummaries.map(s => `第${s.chapterNo}章：${s.summary}`).join('\n'),
     targetWordCount: input.targetWordCount,
+    popularFictionProfile: input.popularFictionProfile,
   })
 
   // 流式生成

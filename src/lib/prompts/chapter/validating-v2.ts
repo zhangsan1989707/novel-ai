@@ -12,6 +12,12 @@ interface ValidatorPromptInput {
   openPlotlines: string
   chapterTitle?: string
   chapterGoal?: string
+  popularFictionProfile?: {
+    emotionEngine?: { primaryEmotion?: string; readerPayoff?: string } | null
+    cheatAbility?: { name?: string; oneLineRule?: string } | null
+    conflictEngine?: { conflictTypes?: string[]; hookStrategy?: string } | null
+    characterTagEngine?: { protagonistTags?: string[] } | null
+  } | null
 }
 
 interface ValidationIssue {
@@ -35,6 +41,18 @@ interface ValidationReport {
     characterScore: number
     emotionScore: number
     styleScore: number
+  }
+  popularFiction?: {
+    readability: number
+    emotion: number
+    cheatPayoff: number
+    conflict: number
+    hook: number
+    character: number
+    pacing: number
+    total: number
+    issues: string[]
+    suggestions: string[]
   }
 }
 
@@ -73,6 +91,16 @@ export function buildValidatorPrompt(input: ValidatorPromptInput): string {
     parts.push(`\n**重要**：检查本章是否推进、提及、或回收了这些伏笔`)
   }
 
+  if (input.popularFictionProfile) {
+    parts.push(`\n## 爆款四因子基线`)
+    parts.push(`- 主情绪：${input.popularFictionProfile.emotionEngine?.primaryEmotion || '爽'}`)
+    parts.push(`- 读者回报：${input.popularFictionProfile.emotionEngine?.readerPayoff || '明确情绪回报'}`)
+    parts.push(`- 金手指：${input.popularFictionProfile.cheatAbility?.name || '主角优势'} / ${input.popularFictionProfile.cheatAbility?.oneLineRule || '一句话讲清'}`)
+    parts.push(`- 冲突类型：${input.popularFictionProfile.conflictEngine?.conflictTypes?.join('、') || '强冲突'}`)
+    parts.push(`- 钩子策略：${input.popularFictionProfile.conflictEngine?.hookStrategy || '结尾留追读钩子'}`)
+    parts.push(`- 主角标签：${input.popularFictionProfile.characterTagEngine?.protagonistTags?.join('、') || '鲜明标签'}`)
+  }
+
   parts.push(`\n## 校验标准`)
   
   parts.push(`\n### 1. 逻辑连贯性检查（权重：30%）`)
@@ -102,6 +130,14 @@ export function buildValidatorPrompt(input: ValidatorPromptInput): string {
   parts.push(`- 检查伏笔是否有足够的铺垫（至少3章前埋下）`)
   parts.push(`- 检查回收的伏笔是否合理`)
 
+  parts.push(`\n### 6. 爆款追读感检查（强制项）`)
+  parts.push(`- 是否低门槛易懂，避免大段设定堆砌`)
+  parts.push(`- 是否有明确情绪价值`)
+  parts.push(`- 是否让金手指或主角优势推动爽点`)
+  parts.push(`- 是否有清晰冲突`)
+  parts.push(`- 章节结尾是否有钩子`)
+  parts.push(`- 主角标签是否通过行为得到证明`)
+
   parts.push(`\n## 输出要求`)
   parts.push(`请以严格 JSON 格式输出：`)
   parts.push(`\`\`\`json`)
@@ -113,6 +149,18 @@ export function buildValidatorPrompt(input: ValidatorPromptInput): string {
   parts.push(`    "characterScore": 0-100,`)
   parts.push(`    "emotionScore": 0-100,`)
   parts.push(`    "styleScore": 0-100`)
+  parts.push(`  },`)
+  parts.push(`  "popularFiction": {`)
+  parts.push(`    "readability": 0-10,`)
+  parts.push(`    "emotion": 0-10,`)
+  parts.push(`    "cheatPayoff": 0-10,`)
+  parts.push(`    "conflict": 0-10,`)
+  parts.push(`    "hook": 0-10,`)
+  parts.push(`    "character": 0-10,`)
+  parts.push(`    "pacing": 0-10,`)
+  parts.push(`    "total": 0-10,`)
+  parts.push(`    "issues": ["问题1"],`)
+  parts.push(`    "suggestions": ["建议1"]`)
   parts.push(`  },`)
   parts.push(`  "issues": [`)
   parts.push(`    {`)

@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { sanitizePipelineRuntime } from '@/lib/engine/pipeline-runtime'
+import { normalizeGenerationSpeedMode } from '@/lib/ai/speed-mode'
 
 interface RouteParams {
   params: Promise<{ projectId: string }>
@@ -44,6 +45,10 @@ async function readPipelineSnapshot(projectId: number) {
 
     jobId = latestJob.id
     const totalSteps = 8
+    const payload = latestJob.payload && typeof latestJob.payload === 'object'
+      ? latestJob.payload as Record<string, unknown>
+      : {}
+    const runtime = sanitizePipelineRuntime(payload.runtime)
     return {
       status: latestJob.status,
       currentStep: latestJob.currentStep || '',
@@ -52,11 +57,8 @@ async function readPipelineSnapshot(projectId: number) {
       totalChapters: latestJob.totalChapters,
       error: latestJob.errorMessage || undefined,
       pipelineJobId: latestJob.id,
-      runtime: sanitizePipelineRuntime(
-        latestJob.payload && typeof latestJob.payload === 'object'
-          ? (latestJob.payload as Record<string, unknown>).runtime
-          : undefined
-      ),
+      speedMode: normalizeGenerationSpeedMode(payload.speedMode || runtime.speedMode),
+      runtime,
       updatedAt: latestJob.updatedAt.toISOString(),
     }
   }
@@ -89,6 +91,10 @@ async function readPipelineSnapshot(projectId: number) {
   }
 
   const totalSteps = 8
+  const payload = job.payload && typeof job.payload === 'object'
+    ? job.payload as Record<string, unknown>
+    : {}
+  const runtime = sanitizePipelineRuntime(payload.runtime)
   return {
     status: job.status,
     currentStep: job.currentStep || '',
@@ -97,11 +103,8 @@ async function readPipelineSnapshot(projectId: number) {
     totalChapters: job.totalChapters,
     error: job.errorMessage || undefined,
     pipelineJobId: job.id,
-    runtime: sanitizePipelineRuntime(
-      job.payload && typeof job.payload === 'object'
-        ? (job.payload as Record<string, unknown>).runtime
-        : undefined
-    ),
+    speedMode: normalizeGenerationSpeedMode(payload.speedMode || runtime.speedMode),
+    runtime,
     updatedAt: job.updatedAt.toISOString(),
   }
 }

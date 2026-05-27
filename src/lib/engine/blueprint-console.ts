@@ -1,6 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { parseAiJsonObject } from '@/lib/engine/ai-json'
+import { resolveProjectPlanningTargets } from '@/lib/engine/project-length'
 import { createProjectProvider, ensureArcPlans, ensureBlueprint } from '@/lib/engine/production-pipeline'
 import { initStoryState, initWorldState } from '@/lib/engine/story-state'
 
@@ -297,9 +298,14 @@ export async function refreshBlueprintConsole(
   }
   await onProgress?.({ phase: 'init_world_state', message: '正在初始化世界状态', stepIndex: 4, stepTotal: 7 })
   if (!project.storyState) {
+    const planningTargets = resolveProjectPlanningTargets({
+      lengthType: project.lengthType,
+      targetWordCount: project.targetWordCount,
+      chapterWordCount: project.chapterWordCount,
+    })
     const totalPlanned = Math.max(
       25,
-      Math.ceil((project.targetWordCount || 300000) / (project.chapterWordCount || 3000)),
+      planningTargets.effectiveTotalChapters,
       (project.totalVolumes || 4) * 25
     )
     await initStoryState(projectId, totalPlanned)

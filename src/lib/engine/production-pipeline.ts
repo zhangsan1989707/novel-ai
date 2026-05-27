@@ -1,11 +1,15 @@
-import { ArcStage as PrismaArcStage } from '@prisma/client'
-import type { Prisma } from '@prisma/client'
+import { ArcStage as PrismaArcStage, Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { createProviderFromConfigId, createProviderFromDefaultConfig } from '@/lib/ai/factory'
+import { AIService } from '@/lib/ai/service'
 import type { AIProvider } from '@/lib/ai/types'
+import {
+  normalizeGenerationSpeedMode,
+  type GenerationRole,
+  type GenerationSpeedMode,
+} from '@/lib/ai/speed-mode'
 import type { PipelineStep, StorySteering } from '@/types'
 import { calculateBatchSize } from './batch-planner'
-import { completeJob, failJob, saveCheckpoint, updateJobRuntime, updateJobStep } from './generation-job'
+import { clearJobRecoveryTarget, completeJob, failJob, getJobRecoveryTarget, saveCheckpoint, updateJobRuntime, updateJobStep } from './generation-job'
 import { validateOutline } from './outline-validator'
 import { toInternalArcStage, toInternalPlatform, toPrismaArcStage } from './production-mapping'
 import { runChapterGenerationPipeline } from './orchestrator'
@@ -17,6 +21,9 @@ import { loadProjectHealthReport } from './project-health'
 import { syncProjectHealthNotification } from '@/lib/notifications/project-health'
 import type { SSEEvent } from './types'
 import { getPlatformTemplate } from './platform-style'
+import { canStartGeneration, getWorkflowBlockReason } from './project-flow'
+import { normalizeArcPlanOutputs, resolveProjectPlanningTargets } from './project-length'
+import { buildPopularFictionPromptBlock, normalizePopularFictionProfile, type PopularFictionProfile } from './popular-fiction'
 
 type ChapterOutline = {
   chapterNumber: number
@@ -33,6 +40,7 @@ type BlueprintOutput = {
   platformStrategy?: string
   genreStrategy?: string
   styleStrategy?: string
+  popularFictionProfile?: PopularFictionProfile
   constraints?: string[]
 }
 
@@ -61,8 +69,35 @@ const STRATEGY_PREFIXES = {
   style: '策略-风格',
 } as const
 
+const STAGE_BATCH_RANGES: Record<ReturnType<typeof toInternalArcStage>, { min: number; max: number }> = {
+  opening: { min: 5, max: 8 },
+  growth: { min: 8, max: 12 },
+  expansion: { min: 10, max: 15 },
+  mid_conflict: { min: 8, max: 12 },
+  pre_finale: { min: 5, max: 8 },
+  finale: { min: 3, max: 6 },
+}
+
+type ResumePlan = {
+  startFrom: 'blueprint' | 'arc_plan' | 'chapter_list' | 'write'
+  resumeFromChapterNumber?: number
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
+}
+
+function toPopularFictionJson(value: PopularFictionProfile | null | undefined) {
+  return value ? (value as unknown as Prisma.InputJsonValue) : Prisma.JsonNull
+}
+
+function getConservativeBatchRange(stage: ReturnType<typeof toInternalArcStage>) {
+  return STAGE_BATCH_RANGES[stage] || { min: 5, max: 12 }
+}
+
+function toConservativeBatchSize(stage: ReturnType<typeof toInternalArcStage>, raw: number): number {
+  const range = getConservativeBatchRange(stage)
+  return clamp(raw, range.min, range.max)
 }
 
 function buildProjectSteering(project: {
@@ -186,18 +221,19 @@ async function isJobPaused(jobId: number): Promise<boolean> {
   return job?.status === 'PAUSED'
 }
 
-export async function createProjectProvider(projectId: number): Promise<AIProvider> {
-  const project = await prisma.novelProject.findUnique({
-    where: { id: projectId },
-    select: { aiModelId: true },
-  })
-
-  if (project?.aiModelId) {
-    const provider = await createProviderFromConfigId(project.aiModelId)
-    if (provider) return provider
+export async function createProjectProvider(
+  projectId: number,
+  options?: {
+    speedMode?: GenerationSpeedMode
+    generationRole?: GenerationRole
   }
-
-  return createProviderFromDefaultConfig()
+): Promise<AIProvider> {
+  return AIService.createProvider({
+    projectId,
+    usageType: options?.generationRole ? `PIPELINE_${options.generationRole.toUpperCase()}` : 'PIPELINE',
+    speedMode: options?.speedMode,
+    generationRole: options?.generationRole,
+  })
 }
 
 export async function ensureBlueprint(projectId: number, provider: AIProvider) {
@@ -237,6 +273,35 @@ export async function ensureBlueprint(projectId: number, provider: AIProvider) {
   "platformStrategy": "平台策略，说明章节长度、钩子密度、高潮频率如何控制",
   "genreStrategy": "题材策略，说明世界扩张、冲突形态和读者期待管理",
   "styleStrategy": "风格策略，说明叙事口吻、爽点组织、去AI味方向",
+  "popularFictionProfile": {
+    "emotionEngine": {
+      "primaryEmotion": "爽",
+      "openingBomb": "第一章的情绪炸弹",
+      "readerPayoff": "读者最先期待得到的回报",
+      "forbiddenSlowStart": true
+    },
+    "cheatAbility": {
+      "name": "金手指名称",
+      "oneLineRule": "一句话规则",
+      "firstRevealChapter": 1,
+      "firstPayoffChapter": 3,
+      "growthMechanism": "如何升级",
+      "limitation": "限制条件",
+      "readerFantasy": "读者代入点"
+    },
+    "conflictEngine": {
+      "conflictTypes": ["羞辱", "利益争夺"],
+      "conflictFrequency": "每1-2章至少一次明确压迫或反击",
+      "payoffInterval": "1-3章内必须有一次阶段回报",
+      "hookStrategy": "每章结尾留下下一章承诺或新威胁"
+    },
+    "characterTagEngine": {
+      "protagonistTags": ["护短", "记仇", "稳健"],
+      "behaviorProofs": [
+        { "tag": "护短", "requiredScene": "同伴受辱时主角会设局反击", "forbiddenBehavior": "关键时刻装看不见" }
+      ]
+    }
+  },
   "constraints": ["禁止提前大结局", "当前阶段只解决阶段矛盾"]
 }`
 
@@ -272,6 +337,7 @@ export async function ensureBlueprint(projectId: number, provider: AIProvider) {
     platformStrategy: blueprint.platformStrategy || fallbackStrategies.platformStrategy,
     genreStrategy: blueprint.genreStrategy || fallbackStrategies.genreStrategy,
     styleStrategy: blueprint.styleStrategy || fallbackStrategies.styleStrategy,
+    popularFictionProfile: toPopularFictionJson(normalizePopularFictionProfile(blueprint.popularFictionProfile)),
     constraints: Array.from(new Set([
       ...(Array.isArray(blueprint.constraints) ? blueprint.constraints : []),
       serializeStrategy(STRATEGY_PREFIXES.platform, blueprint.platformStrategy || fallbackStrategies.platformStrategy),
@@ -299,11 +365,19 @@ export async function ensureArcPlans(projectId: number, provider: AIProvider) {
   })
   if (!project || !project.bookBlueprint) throw new Error('Book Blueprint 不存在')
 
-  const totalChapters = Math.max(1, Math.ceil((project.targetWordCount || 300000) / (project.chapterWordCount || 3000)))
-  const stages = ['OPENING', 'GROWTH', 'EXPANSION', 'MID_CONFLICT', 'PRE_FINALE', 'FINALE']
+  const planningTargets = resolveProjectPlanningTargets({
+    lengthType: project.lengthType,
+    targetWordCount: project.targetWordCount,
+    chapterWordCount: project.chapterWordCount,
+  })
+  const totalChapters = planningTargets.effectiveTotalChapters
+  const stages = planningTargets.stageSequence
   const chaptersPerStage = Math.ceil(totalChapters / stages.length)
   const platform = toInternalPlatform(project.platform)
   const blueprintStrategies = buildBlueprintStrategies(project, project.bookBlueprint)
+  const popularFictionProfile = normalizePopularFictionProfile(
+    (project.bookBlueprint as unknown as { popularFictionProfile?: unknown }).popularFictionProfile
+  )
 
   const prompt = `你是 AI 网文导演系统的阶段规划 Agent。请基于 Book Blueprint 生成 Arc Plan。
 
@@ -313,7 +387,8 @@ export async function ensureArcPlans(projectId: number, provider: AIProvider) {
 - 不得让主线在中前期收束，不得让最大反派提前死亡
 - 未到计划节点的伏笔不能集中回收
 - 每个 Arc 都要保留后续扩张空间
-- batchSize 范围 8-28，且要结合阶段复杂度动态变化
+- batchSize 必须保守，默认范围控制在 5-15 章之间
+- 开局 5-8 章，成长 8-12 章，扩张 10-15 章，中段冲突 8-12 章，前置高潮 5-8 章，终局 3-6 章
 
 项目信息：
 - 标题：${project.title}
@@ -331,9 +406,10 @@ Book Blueprint：
 - 平台策略：${blueprintStrategies.platformStrategy}
 - 题材策略：${blueprintStrategies.genreStrategy}
 - 风格策略：${blueprintStrategies.styleStrategy}
+- 爆款四因子：${buildPopularFictionPromptBlock(popularFictionProfile)}
 - 硬约束：${blueprintStrategies.guardrails.join('；')}
 
-输出 JSON 数组，不要 markdown。stage 只能是 OPENING, GROWTH, EXPANSION, MID_CONFLICT, PRE_FINALE, FINALE：
+输出 JSON 数组，不要 markdown。你必须严格输出 ${stages.length} 个阶段，stage 只能按这个顺序出现：${stages.join(', ')}：
 [
   {
     "arcNumber": 1,
@@ -342,18 +418,18 @@ Book Blueprint：
     "description": "阶段描述",
     "startChapter": 1,
     "endChapter": ${chaptersPerStage},
-    "batchSize": ${calculateBatchSize(platform, 'opening', 0.5, 0.5, {
+        "batchSize": ${toConservativeBatchSize('opening', calculateBatchSize(platform, 'opening', 0.5, 0.5, {
       progressRatio: 0.05,
       stageRemainingChapters: chaptersPerStage,
       blueprintConstraints: blueprintStrategies.guardrails,
       genre: project.genre,
       writingStyle: project.writingStyle,
       steering: buildProjectSteering(project),
-    })},
+    }))},
     "goals": ["阶段目标"],
     "keyEvents": ["关键事件"]
-  }
-]`
+    }
+  ]`
 
   const result = await provider.generate(prompt, {
     temperature: 0.2,
@@ -378,20 +454,21 @@ Book Blueprint：
       throw new Error(`ArcPlan 生成失败：${error instanceof Error ? error.message : 'JSON 解析失败'}`)
     }
   }
+  const normalizedArcPlans = normalizeArcPlanOutputs(arcPlans, totalChapters, stages)
   const created = []
 
-  for (let index = 0; index < arcPlans.length; index++) {
-    const item = arcPlans[index]
+  for (let index = 0; index < normalizedArcPlans.length; index++) {
+    const item = normalizedArcPlans[index]
     const arcNumber = item.arcNumber || index + 1
     const stage = toInternalArcStage(item.stage || stages[index] || 'OPENING')
-    const defaultBatchSize = calculateBatchSize(platform, stage, 0.5, 0.5, {
-      progressRatio: clamp(index / Math.max(arcPlans.length, 1), 0, 0.95),
-      stageRemainingChapters: Math.max(1, (item.endChapter || Math.min(totalChapters, (index + 1) * chaptersPerStage)) - (item.startChapter || (index * chaptersPerStage + 1)) + 1),
+    const defaultBatchSize = toConservativeBatchSize(stage, calculateBatchSize(platform, stage, 0.5, 0.5, {
+      progressRatio: clamp(index / Math.max(normalizedArcPlans.length, 1), 0, 0.95),
+      stageRemainingChapters: Math.max(1, item.endChapter - item.startChapter + 1),
       blueprintConstraints: blueprintStrategies.guardrails,
       genre: project.genre,
       writingStyle: project.writingStyle,
       steering: buildProjectSteering(project),
-    })
+    }))
     created.push(await prisma.arcPlan.create({
       data: {
         projectId,
@@ -399,9 +476,9 @@ Book Blueprint：
         name: item.name || `第${arcNumber}阶段`,
         stage: toPrismaArcStage(stage) as PrismaArcStage,
         description: item.description || '',
-        startChapter: item.startChapter || (index * chaptersPerStage + 1),
-        endChapter: item.endChapter || Math.min(totalChapters, (index + 1) * chaptersPerStage),
-        batchSize: clamp(item.batchSize || defaultBatchSize, 8, 28),
+        startChapter: item.startChapter,
+        endChapter: item.endChapter,
+        batchSize: toConservativeBatchSize(stage, item.batchSize || defaultBatchSize),
         goals: Array.isArray(item.goals) ? item.goals : [],
         keyEvents: Array.isArray(item.keyEvents) ? item.keyEvents : [],
       },
@@ -411,7 +488,25 @@ Book Blueprint：
   return created
 }
 
-async function planChapterBatch(projectId: number, provider: AIProvider): Promise<ChapterOutline[]> {
+function resolveResumeChapter(
+  chapters: Array<{ chapterNumber: number; status: string }>,
+  resumeFromChapterNumber?: number
+) {
+  if (resumeFromChapterNumber) return resumeFromChapterNumber
+
+  const sorted = [...chapters].sort((a, b) => a.chapterNumber - b.chapterNumber)
+  const firstIncomplete = sorted.find(chapter => chapter.status !== 'COMPLETED')
+  if (firstIncomplete) return firstIncomplete.chapterNumber
+
+  const maxChapterNumber = sorted.reduce((max, chapter) => Math.max(max, chapter.chapterNumber), 0)
+  return maxChapterNumber + 1
+}
+
+async function planChapterBatch(
+  projectId: number,
+  provider: AIProvider,
+  options: { resumeFromChapterNumber?: number } = {}
+): Promise<ChapterOutline[]> {
   const project = await prisma.novelProject.findUnique({
     where: { id: projectId },
     include: {
@@ -430,7 +525,7 @@ async function planChapterBatch(projectId: number, provider: AIProvider): Promis
   if (!project || !project.bookBlueprint) throw new Error('项目 Blueprint 不完整')
 
   const existingMaxChapter = project.chapters.reduce((max, chapter) => Math.max(max, chapter.chapterNumber), 0)
-  const nextChapterNumber = existingMaxChapter + 1
+  const nextChapterNumber = resolveResumeChapter(project.chapters, options.resumeFromChapterNumber)
   const currentArc =
     project.arcPlans.find(arc => {
       const arcEnd = arc.endChapter || Number.MAX_SAFE_INTEGER
@@ -444,19 +539,27 @@ async function planChapterBatch(projectId: number, provider: AIProvider): Promis
   const endLimit = currentArc.endChapter || startChapter + currentArc.batchSize - 1
   if (startChapter > endLimit) return []
 
-  const totalChapters = Math.max(1, Math.ceil((project.targetWordCount || 300000) / (project.chapterWordCount || 3000)))
+  const planningTargets = resolveProjectPlanningTargets({
+    lengthType: project.lengthType,
+    targetWordCount: project.targetWordCount,
+    chapterWordCount: project.chapterWordCount,
+  })
+  const totalChapters = planningTargets.effectiveTotalChapters
   const progressRatio = startChapter / totalChapters
   const arcStage = toInternalArcStage(currentArc.stage)
   const stageRemainingChapters = Math.max(1, endLimit - startChapter + 1)
   const steering = buildProjectSteering(project)
   const blueprintStrategies = buildBlueprintStrategies(project, project.bookBlueprint)
+  const popularFictionProfile = normalizePopularFictionProfile(
+    (project.bookBlueprint as unknown as { popularFictionProfile?: unknown }).popularFictionProfile
+  )
   const activePlotlines: PlotlineGuard[] = project.plotlines.map(plotline => ({
     description: plotline.description,
     plannedAt: plotline.plannedAt,
     plantedAt: plotline.plantedAt,
     status: plotline.status,
   }))
-  const dynamicBatchSize = calculateBatchSize(
+  const dynamicBatchSize = toConservativeBatchSize(arcStage, calculateBatchSize(
     toInternalPlatform(project.platform),
     arcStage,
     project.worldState
@@ -473,7 +576,7 @@ async function planChapterBatch(projectId: number, provider: AIProvider): Promis
       genre: project.genre,
       writingStyle: project.writingStyle,
     }
-  )
+  ))
   const endChapter = Math.min(endLimit, startChapter + dynamicBatchSize - 1)
 
   if (currentArc.batchSize !== dynamicBatchSize) {
@@ -520,6 +623,7 @@ async function planChapterBatch(projectId: number, provider: AIProvider): Promis
       `【世界状态】${worldState}`,
       `【当前全书进度】${Math.round(progressRatio * 100)}%`,
       `【Book Blueprint】核心卖点：${project.bookBlueprint.corePitch}\n世界方向：${project.bookBlueprint.worldDirection || ''}\n主线方向：${project.bookBlueprint.mainlineDirection || ''}\n成长方向：${project.bookBlueprint.growthDirection || ''}\n远景终局：${project.bookBlueprint.endingDirection || ''}`,
+      `【爆款四因子】\n${buildPopularFictionPromptBlock(popularFictionProfile)}`,
       promptGuardrails,
     ].filter(Boolean).join('\n\n'),
     protagonistProfile: project.protagonistProfile || undefined,
@@ -533,32 +637,8 @@ async function planChapterBatch(projectId: number, provider: AIProvider): Promis
     existingChapters,
   })
 
-  const result = await provider.generate(prompt, {
-    temperature: 0.2,
-    maxTokens: 8000,
-    timeoutMs: 120000,
-    responseFormat: { type: 'json_object' },
-  })
-  let outlines: ChapterOutline[]
-  try {
-    const chapterList = parseAiJsonObject<{ chapters?: ChapterOutline[] }>(result.content)
-    outlines = Array.isArray(chapterList.chapters) ? chapterList.chapters : []
-  } catch (error) {
-    const retryPrompt = `${prompt}\n\n上一次输出未严格符合 JSON 结构。请只输出一个合法 JSON 对象，且其中的 chapters 数组必须严格包含 ${endChapter - startChapter + 1} 章，从第 ${startChapter} 章到第 ${endChapter} 章连续编号，不要解释，不要代码块，不要多余文本。`
-    const retry = await provider.generate(retryPrompt, {
-      temperature: 0.1,
-      maxTokens: 8000,
-      timeoutMs: 120000,
-      responseFormat: { type: 'json_object' },
-    })
-    try {
-      const chapterList = parseAiJsonObject<{ chapters?: ChapterOutline[] }>(retry.content)
-      outlines = Array.isArray(chapterList.chapters) ? chapterList.chapters : []
-    } catch {
-      throw new Error(`章节目录生成失败：${error instanceof Error ? error.message : 'JSON 解析失败'}`)
-    }
-  }
-  outlines = outlines
+  const expectedCount = endChapter - startChapter + 1
+  const normalizeOutlines = (items: ChapterOutline[]) => items
     .filter(item => item.chapterNumber >= startChapter && item.chapterNumber <= endChapter)
     .map(item => ({
       chapterNumber: item.chapterNumber,
@@ -566,47 +646,55 @@ async function planChapterBatch(projectId: number, provider: AIProvider): Promis
       summary: item.summary || item.title || `第${item.chapterNumber}章剧情推进`,
     }))
 
-  const expectedCount = endChapter - startChapter + 1
-  if (outlines.length !== expectedCount) {
-    const retryPrompt = `${prompt}\n\n上一次输出章数不匹配。你必须严格输出从第 ${startChapter} 章到第 ${endChapter} 章的连续章节，共 ${expectedCount} 章，且每章都必须有 title 和 summary。`
-    const retry = await provider.generate(retryPrompt, {
-      temperature: 0.1,
+  let lastError: Error | null = null
+  let outlines: ChapterOutline[] = []
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const promptWithRetry = attempt === 0
+      ? prompt
+      : `${prompt}\n\n第 ${attempt} 次自动重试：上一次目录不合格。你必须严格输出从第 ${startChapter} 章到第 ${endChapter} 章的连续章节，共 ${expectedCount} 章；当前进度不到 85% 时禁止出现终局语义，禁止最大反派提前死亡，禁止伏笔集中回收。`
+    const result = await provider.generate(promptWithRetry, {
+      temperature: attempt === 0 ? 0.2 : 0.1,
       maxTokens: 8000,
       timeoutMs: 120000,
       responseFormat: { type: 'json_object' },
     })
+
     try {
-      const chapterList = parseAiJsonObject<{ chapters?: ChapterOutline[] }>(retry.content)
-      const repaired = Array.isArray(chapterList.chapters) ? chapterList.chapters : []
-      const normalized = repaired
-        .filter(item => item.chapterNumber >= startChapter && item.chapterNumber <= endChapter)
-        .map(item => ({
-          chapterNumber: item.chapterNumber,
-          title: item.title || `第${item.chapterNumber}章`,
-          summary: item.summary || item.title || `第${item.chapterNumber}章剧情推进`,
-        }))
-      if (normalized.length === expectedCount) {
-        outlines = normalized
-      }
-    } catch {
-      // 保留第一次结果，交由后续校验兜底
+      const chapterList = parseAiJsonObject<{ chapters?: ChapterOutline[] }>(result.content)
+      outlines = normalizeOutlines(Array.isArray(chapterList.chapters) ? chapterList.chapters : [])
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error('JSON 解析失败')
+      continue
     }
+
+    if (outlines.length !== expectedCount) {
+      lastError = new Error(`章节目录章数不匹配，期望 ${expectedCount} 章，实际 ${outlines.length} 章`)
+      continue
+    }
+
+    const protectedVillains = project.villains
+      .filter(v => v.lifecycle === 'active' && (v.isFinalBoss || v.tier === 'final' || v.tier === 'arc'))
+      .map(v => v.name)
+    const validation = validateOutline(outlines, {
+      progressRatio,
+      currentArcName: currentArc.name,
+      currentArcStage: currentArc.stage,
+      finalBossNames: project.villains.filter(v => v.isFinalBoss).map(v => v.name),
+      protectedVillainNames: protectedVillains,
+      openPlotlines: activePlotlines,
+      blueprintConstraints: blueprintStrategies.guardrails,
+    })
+    if (validation.passed) {
+      lastError = null
+      break
+    }
+
+    lastError = new Error(`当前批次目录触发防提前结局规则：${validation.violations.join('；')}`)
   }
 
-  const protectedVillains = project.villains
-    .filter(v => v.lifecycle === 'active' && (v.isFinalBoss || v.tier === 'final' || v.tier === 'arc'))
-    .map(v => v.name)
-  const validation = validateOutline(outlines, {
-    progressRatio,
-    currentArcName: currentArc.name,
-    currentArcStage: currentArc.stage,
-    finalBossNames: project.villains.filter(v => v.isFinalBoss).map(v => v.name),
-    protectedVillainNames: protectedVillains,
-    openPlotlines: activePlotlines,
-    blueprintConstraints: blueprintStrategies.guardrails,
-  })
-  if (!validation.passed) {
-    throw new Error(`当前批次目录触发防提前结局规则：${validation.violations.join('；')}`)
+  if (lastError) {
+    throw lastError
   }
 
   for (const outline of outlines) {
@@ -650,29 +738,99 @@ async function markCompletedArcIfNeeded(projectId: number) {
   }
 }
 
+async function resolveResumePlan(jobId: number): Promise<ResumePlan> {
+  const [job, target] = await Promise.all([
+    prisma.generationJob.findUnique({
+      where: { id: jobId },
+      include: {
+        checkpoints: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
+      },
+    }),
+    getJobRecoveryTarget(jobId),
+  ])
+
+  if (target?.mode === 'retry_batch') {
+    return { startFrom: 'chapter_list' }
+  }
+  if (target?.mode === 'retry_chapter') {
+    return { startFrom: 'write', resumeFromChapterNumber: target.chapterNumber }
+  }
+
+  if (!job) return { startFrom: 'blueprint' }
+
+  if (job.currentStep === 'CHAPTER_LIST') {
+    return { startFrom: 'chapter_list' }
+  }
+  if (job.currentStep === 'WRITE' && job.currentChapter > 0) {
+    return { startFrom: 'write', resumeFromChapterNumber: job.currentChapter }
+  }
+
+  const lastCheckpoint = job.checkpoints[0]
+  if (lastCheckpoint?.step === 'CHAPTER_LIST') {
+    return { startFrom: 'write', resumeFromChapterNumber: job.currentChapter || undefined }
+  }
+  if (lastCheckpoint?.step === 'ARC_PLAN') {
+    return { startFrom: 'chapter_list' }
+  }
+
+  return { startFrom: 'blueprint' }
+}
+
 export async function runProductionPipeline(
   jobId: number,
   options?: {
-    speedMode?: 'fast' | 'balanced' | 'quality'
+    speedMode?: GenerationSpeedMode
   }
 ): Promise<void> {
   const job = await prisma.generationJob.findUnique({ where: { id: jobId } })
   if (!job) return
 
   const projectId = job.projectId
-  const speedMode = options?.speedMode || 'quality'
+  const jobPayload = job.payload && typeof job.payload === 'object'
+    ? job.payload as Record<string, unknown>
+    : {}
+  const speedMode = normalizeGenerationSpeedMode(options?.speedMode || jobPayload.speedMode)
   const project = await prisma.novelProject.findUnique({
     where: { id: projectId },
-    select: { chapterWordCount: true },
+    select: {
+      chapterWordCount: true,
+      workflowStage: true,
+      blueprintConfirmedAt: true,
+      arcPlanConfirmedAt: true,
+      bookBlueprint: { select: { id: true } },
+      arcPlans: { select: { id: true } },
+    },
   })
   const targetWordCount = project?.chapterWordCount || 3000
+  const flowBlockReason = getWorkflowBlockReason({
+    workflowStage: project?.workflowStage,
+    blueprintConfirmedAt: project?.blueprintConfirmedAt,
+    arcPlanConfirmedAt: project?.arcPlanConfirmedAt,
+    hasBlueprint: Boolean(project?.bookBlueprint),
+    hasArcPlans: Boolean(project?.arcPlans.length),
+  })
+  if (flowBlockReason && !canStartGeneration({
+    workflowStage: project?.workflowStage,
+    blueprintConfirmedAt: project?.blueprintConfirmedAt,
+    arcPlanConfirmedAt: project?.arcPlanConfirmedAt,
+    hasBlueprint: Boolean(project?.bookBlueprint),
+    hasArcPlans: Boolean(project?.arcPlans.length),
+  })) {
+    await failJob(jobId, flowBlockReason)
+    return
+  }
   let runtime = sanitizePipelineRuntime(
     job.payload && typeof job.payload === 'object'
       ? (job.payload as Record<string, unknown>).runtime
       : undefined
   )
   if (runtime.streamRevision === 0 && runtime.currentChapter === null && runtime.recentChapters.length === 0) {
-    runtime = createPipelineRuntimeState()
+    runtime = createPipelineRuntimeState(speedMode)
+  } else {
+    runtime = { ...runtime, speedMode }
   }
   let lastPersistAt = 0
   let persistChain = Promise.resolve()
@@ -802,7 +960,9 @@ export async function runProductionPipeline(
   }
 
   try {
-    const provider = await createProjectProvider(projectId)
+    const provider = await createProjectProvider(projectId, { speedMode, generationRole: 'blueprint' })
+    const resumePlan = await resolveResumePlan(jobId)
+    await clearJobRecoveryTarget(jobId)
 
     const project = await prisma.novelProject.findUnique({
       where: { id: projectId },
@@ -813,21 +973,37 @@ export async function runProductionPipeline(
       await initStoryState(projectId, project.totalVolumes * 25)
     }
 
-    await updateJobStep(jobId, 'blueprint' as PipelineStep, 1)
-    const blueprint = await ensureBlueprint(projectId, provider)
-    await saveCheckpoint(jobId, 'blueprint' as PipelineStep, { projectId }, { blueprintId: blueprint.id })
+    if (resumePlan.startFrom === 'blueprint') {
+      await updateJobStep(jobId, 'blueprint' as PipelineStep, 1)
+      const blueprint = await ensureBlueprint(projectId, provider)
+      await saveCheckpoint(jobId, 'blueprint' as PipelineStep, { projectId }, { blueprintId: blueprint.id })
+    }
 
-    await updateJobStep(jobId, 'arc_plan' as PipelineStep, 2)
-    const arcPlans = await ensureArcPlans(projectId, provider)
-    await saveCheckpoint(jobId, 'arc_plan' as PipelineStep, { projectId }, { arcCount: arcPlans.length })
+    if (resumePlan.startFrom === 'blueprint' || resumePlan.startFrom === 'arc_plan') {
+      await updateJobStep(jobId, 'arc_plan' as PipelineStep, 2)
+      const arcPlanProvider = await createProjectProvider(projectId, { speedMode, generationRole: 'arc_plan' })
+      const arcPlans = await ensureArcPlans(projectId, arcPlanProvider)
+      await saveCheckpoint(jobId, 'arc_plan' as PipelineStep, { projectId }, { arcCount: arcPlans.length })
+    }
 
     await updateJobStep(jobId, 'chapter_list' as PipelineStep, 3)
-    const outlines = await planChapterBatch(projectId, provider)
+    const chapterListProvider = await createProjectProvider(projectId, { speedMode, generationRole: 'planner' })
+    const outlines = await planChapterBatch(projectId, chapterListProvider, {
+      resumeFromChapterNumber: resumePlan.resumeFromChapterNumber,
+    })
     await prisma.generationJob.update({
       where: { id: jobId },
       data: { totalChapters: outlines.length },
     })
-    await saveCheckpoint(jobId, 'chapter_list' as PipelineStep, { projectId }, { chapters: outlines })
+    await saveCheckpoint(
+      jobId,
+      'chapter_list' as PipelineStep,
+      {
+        projectId,
+        resumeFromChapterNumber: resumePlan.resumeFromChapterNumber,
+      },
+      { chapters: outlines }
+    )
 
     if (await isJobPaused(jobId)) {
       await updateJobRuntime(jobId, runtime)
@@ -862,7 +1038,7 @@ export async function runProductionPipeline(
         jobId,
         'write' as PipelineStep,
         { chapterNumber: outline.chapterNumber },
-        { chapterId: result.chapterId, completed }
+        { chapterId: result.chapterId, completed, recoveredFrom: resumePlan.resumeFromChapterNumber }
       )
     }
 

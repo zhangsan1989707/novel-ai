@@ -84,6 +84,16 @@ const MODEL_CAPABILITIES: Record<string, ModelCapability[]> = {
     { type: 'SUMMARIZER', strengths: ['压缩摘要能力稳定'], weaknesses: [], recommendedFor: ['章节摘要', '全书摘要'] },
     { type: 'ANALYZER', strengths: ['分析能力强'], weaknesses: [], recommendedFor: ['拆解分析'] },
   ],
+  'mimo-v2.5': [
+    { type: 'WRITER', strengths: ['长文速度与质量均衡'], weaknesses: ['复杂审稿不如 pro'], recommendedFor: ['日常正文生成'] },
+    { type: 'PLANNER', strengths: ['规划稳定'], weaknesses: [], recommendedFor: ['蓝图与阶段规划'] },
+    { type: 'SUMMARIZER', strengths: ['摘要稳定'], weaknesses: [], recommendedFor: ['章节摘要'] },
+  ],
+  'mimo-v2-flash': [
+    { type: 'PLANNER', strengths: ['响应快'], weaknesses: ['深度有限'], recommendedFor: ['快速规划小样'] },
+    { type: 'VALIDATOR', strengths: ['检查快'], weaknesses: ['细节有限'], recommendedFor: ['轻量质量门'] },
+    { type: 'SUMMARIZER', strengths: ['压缩快'], weaknesses: ['表达一般'], recommendedFor: ['批量摘要'] },
+  ],
 }
 
 const DEFAULT_CONFIG: RouteConfig = {
@@ -295,12 +305,12 @@ function getRecommendedModels(
       ANALYZER: ['abab6-chat'],
     },
     [AIVendor.MIMO]: {
-      WRITER: ['mimo-v2.5-pro'],
-      PLANNER: ['mimo-v2.5-pro'],
-      POLISHER: ['mimo-v2.5-pro'],
-      VALIDATOR: ['mimo-v2.5-pro'],
-      SUMMARIZER: ['mimo-v2.5-pro'],
-      ANALYZER: ['mimo-v2.5-pro'],
+      WRITER: ['mimo-v2.5', 'mimo-v2.5-pro'],
+      PLANNER: ['mimo-v2.5', 'mimo-v2-flash'],
+      POLISHER: ['mimo-v2.5-pro', 'mimo-v2.5'],
+      VALIDATOR: ['mimo-v2-flash', 'mimo-v2.5-pro'],
+      SUMMARIZER: ['mimo-v2-flash', 'mimo-v2.5'],
+      ANALYZER: ['mimo-v2.5', 'mimo-v2.5-pro'],
     },
     [AIVendor.VOLCENGINE]: {
       WRITER: ['doubao-pro-32k'],

@@ -51,7 +51,7 @@ const defaultModelIds: Record<AIVendor, string> = {
   [AIVendor.ALIBABA]: 'qwen-max',
   [AIVendor.DEEPSEEK]: 'deepseek-v4-flash',
   [AIVendor.MINIMAX]: 'MiniMax-Text-01',
-  [AIVendor.MIMO]: 'mimo-v2.5-pro',
+  [AIVendor.MIMO]: 'mimo-v2.5',
   [AIVendor.VOLCENGINE]: 'ark-code-latest',
   [AIVendor.ZHIPU]: 'GLM-4.5-Air',
 }

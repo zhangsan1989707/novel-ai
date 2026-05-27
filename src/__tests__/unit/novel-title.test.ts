@@ -22,4 +22,18 @@ describe('novel title helpers', () => {
   it('builds fallback title from pitch seed instead of reusing source verbatim', () => {
     expect(buildFallbackNovelTitle({ corePitch: '规则怪谈 × 智斗反转：主角在规则世界求生' })).toBe('规则怪谈录')
   })
+
+  it('rejects generic platform based titles', () => {
+    expect(isLikelyNovelTitle('番茄录')).toBe(false)
+    expect(isLikelyNovelTitle('起点纪事')).toBe(false)
+  })
+
+  it('prefers explicit fallback title over generic platform seed', () => {
+    expect(buildFallbackNovelTitle({
+      corePitch: '番茄 都市 · 爆点开写',
+      description: '外卖员能看见恶意值，并靠这个能力翻盘逆袭。',
+      genre: '都市',
+      fallbackTitle: '恶意值透视：我在都市反杀全场',
+    })).toBe('恶意值透视：我在都市反杀全场')
+  })
 })

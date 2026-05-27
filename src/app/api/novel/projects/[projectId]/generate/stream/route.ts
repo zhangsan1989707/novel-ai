@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
-import { getAIProvider, buildPromptContext, buildNovelGenerationPrompt, createProviderFromDefaultConfig } from '@/lib/ai'
+import { buildPromptContext, buildNovelGenerationPrompt } from '@/lib/ai'
+import { AIService } from '@/lib/ai/service'
 import { countChineseWords } from '@/lib/utils'
 import { getMinimumChapterWordCount, isChapterWordCountSufficient, buildChapterWordCountWarning } from '@/lib/ai/chapter-quality'
-import { AIVendor } from '@/types'
 import { logError } from '@/lib/logger'
 import { aiGenerationLimiter } from '@/lib/middleware/rate-limit'
 import { toProjectDTO, toChapterDTO } from '@/types/dto'
 import { recordAndApplyChapterCommit } from '@/lib/engine/chapter-commit'
 import { buildChapterMemoryPack } from '@/lib/memory'
+import { estimateMaxTokensForTargetWordCount } from '@/lib/ai/speed-mode'
 
 // ============================================
 // Schema 验证
@@ -175,25 +176,21 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           // 发送开始事件
           sendEvent('start', { chapterId, status: 'generating' })
 
-          // 获取 AI Provider
-          let provider
-          if (project.aiModelConfig) {
-            provider = getAIProvider(project.aiModelConfig.vendor as AIVendor, {
-              vendor: project.aiModelConfig.vendor as AIVendor,
-              modelId: project.aiModelConfig.modelId,
-              apiKey: project.aiModelConfig.apiKey || '',
-              apiEndpoint: project.aiModelConfig.apiEndpoint || undefined,
-            })
-          } else {
-            // 使用默认配置（从数据库）
-            provider = await createProviderFromDefaultConfig()
-          }
+          const provider = await AIService.createProvider({
+            projectId: projectIdNum,
+            usageType: 'CHAPTER_STREAM',
+            speedMode: 'balanced',
+            generationRole: 'stream',
+          })
 
           let fullContent = ''
           let wordCount = 0
 
           // 流式生成
-          for await (const token of provider.generateStream(prompt, { temperature })) {
+          for await (const token of provider.generateStream(prompt, {
+            temperature,
+            maxTokens: estimateMaxTokensForTargetWordCount(targetWordCount),
+          })) {
             fullContent += token
 
             // 实时计算字数

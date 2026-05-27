@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { sanitizePipelineRuntime } from '@/lib/engine/pipeline-runtime'
+import { normalizeGenerationSpeedMode } from '@/lib/ai/speed-mode'
+import { failStaleRunningJobs } from '@/lib/engine/generation-job'
 
 export async function GET(
   request: NextRequest,
@@ -24,6 +26,8 @@ export async function GET(
         { status: 404 }
       )
     }
+
+    await failStaleRunningJobs({ projectId })
 
     let jobId = project.pipelineJobId
     if (!jobId) {
@@ -68,6 +72,10 @@ export async function GET(
 
     const totalSteps = 8
     const stepProgress = totalSteps > 0 ? (job.stepIndex / totalSteps) * 100 : 0
+    const payload = job.payload && typeof job.payload === 'object'
+      ? job.payload as Record<string, unknown>
+      : {}
+    const runtime = sanitizePipelineRuntime(payload.runtime)
 
     return NextResponse.json({
       success: true,
@@ -79,11 +87,8 @@ export async function GET(
         totalChapters: job.totalChapters,
         error: job.errorMessage || undefined,
         pipelineJobId: job.id,
-        runtime: sanitizePipelineRuntime(
-          job.payload && typeof job.payload === 'object'
-            ? (job.payload as Record<string, unknown>).runtime
-            : undefined
-        ),
+        speedMode: normalizeGenerationSpeedMode(payload.speedMode || runtime.speedMode),
+        runtime,
         updatedAt: job.updatedAt.toISOString(),
       },
     })

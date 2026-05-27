@@ -8,6 +8,8 @@ import { buildProjectHealthReport } from '@/lib/engine/project-health'
 import { buildBlueprintConsoleSnapshot } from '@/lib/engine/blueprint-console'
 import { getDefaultAIConfigRecord } from '@/lib/ai/factory'
 import { ensureProjectMaintenanceQueued, getProjectMaintenanceSummary } from '@/lib/engine/auto-maintenance'
+import { buildStoryRoadmap } from '@/lib/engine/story-roadmap'
+import { resolveProjectPlanningTargets } from '@/lib/engine/project-length'
 
 function buildProjectPreflight(project: {
   aiModelConfig: unknown
@@ -272,6 +274,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     })
 
     const maintenanceSummary = await getProjectMaintenanceSummary(id)
+    const planningTargets = resolveProjectPlanningTargets({
+      lengthType: project.lengthType,
+      targetWordCount: project.targetWordCount,
+      chapterWordCount: project.chapterWordCount,
+    })
 
     const preflight = buildProjectPreflight({
       aiModelConfig: project.aiModelConfig,
@@ -300,6 +307,23 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       },
     })
     const blueprintConsole = await buildBlueprintConsoleSnapshot(id)
+    const storyRoadmap = buildStoryRoadmap(
+      project.arcPlans.map(plan => ({
+        id: plan.id,
+        arcNumber: plan.arcNumber,
+        name: plan.name,
+        stage: plan.stage,
+        description: plan.description,
+        startChapter: plan.startChapter,
+        endChapter: plan.endChapter,
+        goals: plan.goals,
+        keyEvents: plan.keyEvents,
+        popularFictionProfile: (project.bookBlueprint as unknown as { popularFictionProfile?: unknown } | null)?.popularFictionProfile as {
+          emotionEngine?: { primaryEmotion?: string; readerPayoff?: string } | null
+          conflictEngine?: { conflictTypes?: string[]; hookStrategy?: string } | null
+        } | null,
+      }))
+    )
 
     // 返回带计算后字数的项目数据
     return NextResponse.json({
@@ -307,9 +331,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       data: {
         ...project,
         currentWordCount: totalWordCount, // 实时计算替换数据库字段
+        effectiveTargetWordCount: planningTargets.effectiveTargetWordCount,
         recentCommits,
         preflight,
         blueprintConsole,
+        storyRoadmap,
+        estimatedTotalChapters: planningTargets.effectiveTotalChapters,
+        expectedStageCount: planningTargets.stageSequence.length,
         maintenanceSummary,
       }
     })

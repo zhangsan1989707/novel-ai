@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { createProjectProvider, ensureArcPlans, ensureBlueprint } from '@/lib/engine/production-pipeline'
+import { resolveProjectPlanningTargets } from '@/lib/engine/project-length'
 import { initStoryState, initWorldState } from '@/lib/engine/story-state'
 import { loadProjectHealthReport } from '@/lib/engine/project-health'
 import { syncProjectHealthNotification } from '@/lib/notifications/project-health'
@@ -28,6 +29,7 @@ export async function POST(
         id: true,
         title: true,
         aiModelId: true,
+        lengthType: true,
         targetWordCount: true,
         chapterWordCount: true,
         totalVolumes: true,
@@ -59,9 +61,14 @@ export async function POST(
     const provider = await createProjectProvider(projectId)
     const blueprint = await ensureBlueprint(projectId, provider)
     const arcPlans = await ensureArcPlans(projectId, provider)
+    const planningTargets = resolveProjectPlanningTargets({
+      lengthType: project.lengthType,
+      targetWordCount: project.targetWordCount,
+      chapterWordCount: project.chapterWordCount,
+    })
     const totalPlanned = Math.max(
       25,
-      Math.ceil((project.targetWordCount || 300000) / (project.chapterWordCount || 3000)),
+      planningTargets.effectiveTotalChapters,
       (project.totalVolumes || 4) * 25
     )
 

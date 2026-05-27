@@ -383,10 +383,10 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
 export type LengthType = 'short' | 'medium' | 'long' | 'ultra_long'
 
 export const LENGTH_TYPE_LABELS: Record<LengthType, string> = {
-  short: '短篇 (30-50章)',
-  medium: '中篇 (100-300章)',
-  long: '长篇 (500-1000章)',
-  ultra_long: '超长篇 (1000+章)',
+  short: '短篇 (12万字 / 120章起)',
+  medium: '中篇 (50万字 / 500章起)',
+  long: '长篇 (100万字 / 1000章起)',
+  ultra_long: '超长篇 (1000万字 / 3000章起)',
 }
 
 export type ArcStage = 'opening' | 'growth' | 'expansion' | 'mid_conflict' | 'pre_finale' | 'finale'
@@ -538,6 +538,7 @@ export interface BookBlueprintInfo {
   platformStrategy?: string
   genreStrategy?: string
   styleStrategy?: string
+  popularFictionProfile?: Record<string, unknown> | null
   constraints: string[]
 }
 

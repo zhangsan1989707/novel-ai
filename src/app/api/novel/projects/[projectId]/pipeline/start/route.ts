@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { createJob } from '@/lib/engine/generation-job'
+import { createJob, failStaleRunningJobs } from '@/lib/engine/generation-job'
 import { runProductionPipeline } from '@/lib/engine/production-pipeline'
 import { getProjectMaintenanceSummary } from '@/lib/engine/auto-maintenance'
+import { getWorkflowBlockReason } from '@/lib/engine/project-flow'
+import { normalizeGenerationSpeedMode, generationSpeedModes } from '@/lib/ai/speed-mode'
+import { z } from 'zod'
+
+const startPipelineSchema = z.object({
+  speedMode: z.enum(generationSpeedModes).optional(),
+})
 
 export async function POST(
   request: NextRequest,
@@ -19,11 +26,29 @@ export async function POST(
       )
     }
 
+    let speedMode = normalizeGenerationSpeedMode(undefined)
+    try {
+      const body = await request.json()
+      const parsed = startPipelineSchema.safeParse(body)
+      if (!parsed.success) {
+        return NextResponse.json(
+          { success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.issues[0]?.message || '请求参数无效' } },
+          { status: 400 }
+        )
+      }
+      speedMode = normalizeGenerationSpeedMode(parsed.data.speedMode)
+    } catch {
+      speedMode = normalizeGenerationSpeedMode(undefined)
+    }
+
     const project = await prisma.novelProject.findUnique({
       where: { id: projectId },
       select: {
         id: true,
         aiModelId: true,
+        workflowStage: true,
+        blueprintConfirmedAt: true,
+        arcPlanConfirmedAt: true,
         bookBlueprint: { select: { id: true } },
         arcPlans: { select: { id: true } },
         storyState: { select: { id: true } },
@@ -35,6 +60,26 @@ export async function POST(
       return NextResponse.json(
         { success: false, error: { code: 'NOT_FOUND', message: '项目不存在' } },
         { status: 404 }
+      )
+    }
+
+    const flowBlockReason = getWorkflowBlockReason({
+      workflowStage: project.workflowStage,
+      blueprintConfirmedAt: project.blueprintConfirmedAt,
+      arcPlanConfirmedAt: project.arcPlanConfirmedAt,
+      hasBlueprint: Boolean(project.bookBlueprint),
+      hasArcPlans: project.arcPlans.length > 0,
+    })
+    if (flowBlockReason) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: 'FLOW_BLOCKED',
+            message: flowBlockReason,
+          },
+        },
+        { status: 409 }
       )
     }
 
@@ -54,6 +99,8 @@ export async function POST(
       )
     }
 
+    await failStaleRunningJobs({ projectId })
+
     const activeJob = await prisma.generationJob.findFirst({
       where: {
         projectId,
@@ -63,18 +110,34 @@ export async function POST(
     })
 
     if (activeJob) {
+      const payload = activeJob.payload && typeof activeJob.payload === 'object'
+        ? activeJob.payload as Record<string, unknown>
+        : {}
       return NextResponse.json({
         success: true,
-        data: { jobId: activeJob.id, projectId, status: activeJob.status },
+        data: {
+          jobId: activeJob.id,
+          projectId,
+          status: activeJob.status,
+          speedMode: normalizeGenerationSpeedMode(payload.speedMode),
+        },
       })
     }
 
-    const jobId = await createJob(projectId)
-    void runProductionPipeline(jobId)
+    const jobId = await createJob(projectId, 'FULL_PIPELINE', speedMode)
+    if (process.env.NOVEL_AI_PIPELINE_INLINE !== 'false') {
+      void runProductionPipeline(jobId, { speedMode })
+    }
 
     return NextResponse.json({
       success: true,
-      data: { jobId, projectId, status: 'pending' },
+      data: {
+        jobId,
+        projectId,
+        status: 'pending',
+        speedMode,
+        runner: process.env.NOVEL_AI_PIPELINE_INLINE === 'false' ? 'external' : 'inline',
+      },
     })
   } catch (error) {
     console.error('Pipeline start error:', error)

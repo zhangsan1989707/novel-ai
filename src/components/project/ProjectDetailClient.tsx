@@ -2,8 +2,10 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
-import { Button, Card, CardContent, CardHeader, CardTitle, Badge, Progress, Modal, toast, MoreActionsMenu } from '@/components/ui'
+import { Button, Card, CardContent, CardHeader, CardTitle, Badge, Progress, Modal, toast, MoreActionsMenu, ExpandableList } from '@/components/ui'
 import { BlueprintConsole, ProjectBaseInfoForm, ProjectBaseInfoFormData } from '@/components/project'
+import { WorkflowBlueprintCard } from '@/components/project/WorkflowBlueprintCard'
+import { WorkflowArcPlanCard } from '@/components/project/WorkflowArcPlanCard'
 import { Toolbox, CharacterPanel } from '@/components/ai'
 import { CoverGenerator, ResearchPanel, ReviewPanel, DeslopPanel, ExportPanel, AnalysisWorkbench } from '@/components/ai'
 import { BookOpen, Clock, Target, Users, Layers, Search, ClipboardList, Rocket, Shield, Sparkles, ChevronRight, ChevronDown, Wrench, Eye, Play, Pause, AlertCircle, CheckCircle2, Loader2, Download } from 'lucide-react'
@@ -11,6 +13,10 @@ import { formatDisplayDate, formatDisplayDateTime } from '@/lib/helpers'
 import type { ProjectStatus } from '@/types'
 import type { PipelineRuntimeState } from '@/lib/engine/pipeline-runtime'
 import type { BlueprintConsoleSnapshot } from '@/lib/engine/blueprint-console'
+import { getMinimumChapterWordCount } from '@/lib/ai/chapter-quality'
+import type { GenerationSpeedMode } from '@/lib/ai/speed-mode'
+
+const INITIAL_VISIBLE_PROJECT_CHAPTERS_PER_GROUP = 10
 
 interface Chapter {
   id: number
@@ -24,15 +30,44 @@ interface Chapter {
 }
 
 interface ArcPlan {
-  id: number
+  id: string
   arcNumber: number
   name: string
   stage: string
+  startChapter: number
+  endChapter?: number | null
   goals: string[]
   keyEvents: string[]
   batchSize: number
   isCompleted: boolean
   chapters?: Chapter[]
+}
+
+interface BookBlueprint {
+  corePitch: string
+  worldDirection?: string | null
+  mainlineDirection?: string | null
+  growthDirection?: string | null
+  endingDirection?: string | null
+  platformStrategy?: string | null
+  genreStrategy?: string | null
+  styleStrategy?: string | null
+  popularFictionProfile?: Record<string, unknown> | null
+  constraints: string[]
+}
+
+interface StoryRoadmapItem {
+  arcId?: string
+  arcNumber: number
+  title: string
+  chapterRange: string
+  summary: string
+  mainEmotion: string
+  stagePayoff: string
+  conflictFocus: string
+  hookStrategy: string
+  highlights: string[]
+  forbidden: string[]
 }
 
 interface Project {
@@ -41,7 +76,11 @@ interface Project {
   description?: string | null
   genre?: string | null
   writingStyle?: string | null
+  lengthType?: 'SHORT' | 'MEDIUM' | 'LONG' | 'ULTRA_LONG' | null
   targetWordCount?: number | null
+  effectiveTargetWordCount?: number | null
+  estimatedTotalChapters?: number
+  expectedStageCount?: number
   currentWordCount: number
   chapterWordCount: number
   outline?: string | null
@@ -67,7 +106,12 @@ interface Project {
   conflictIntensity?: number
   mysteryDensity?: number
   chapters: Chapter[]
+  workflowStage?: 'BLUEPRINT_CONFIRM' | 'ARC_PLAN_CONFIRM' | 'GENERATE'
+  blueprintConfirmedAt?: string | null
+  arcPlanConfirmedAt?: string | null
+  bookBlueprint?: BookBlueprint | null
   arcPlans?: ArcPlan[]
+  storyRoadmap?: StoryRoadmapItem[]
   recentCommits?: Array<{
     id: string
     chapterNo: number
@@ -173,6 +217,7 @@ interface PipelineStatus {
   totalChapters: number
   error?: string
   pipelineJobId?: number
+  speedMode?: GenerationSpeedMode
   runtime?: PipelineRuntimeState
   updatedAt?: string
 }
@@ -213,12 +258,47 @@ const pipelineStepMap: Record<string, string> = {
   RESEARCH: '资料整理',
   DESLOPPER: '去AI味',
   VALIDATOR: '一致性校验',
+  POLISHER: '章节润色',
+  REVIEWER: '对抗审稿',
+  REVIEW_REVISION: '审稿修订',
   PLAN: '策划',
   REVIEW: '审稿',
   POLISH: '润色',
   DRAFT: '草稿生成',
   VALIDATE: '校验',
   INITIALIZE: '初始化',
+}
+
+const speedModeOptions: Array<{
+  value: GenerationSpeedMode
+  label: string
+  description: string
+}> = [
+  {
+    value: 'fast',
+    label: '快速验收',
+    description: '跳过重型审稿链，适合验证主链路是否跑通。',
+  },
+  {
+    value: 'balanced',
+    label: '均衡生成',
+    description: '默认模式，正文质量与生成速度更适合日常写作。',
+  },
+  {
+    value: 'quality',
+    label: '精修质量',
+    description: '完整多 Agent 审稿、润色、去 AI 味，适合重点章节。',
+  },
+]
+
+const speedModeLabels: Record<GenerationSpeedMode, string> = {
+  fast: '快速验收',
+  balanced: '均衡生成',
+  quality: '精修质量',
+}
+
+function getSpeedModeDescription(speedMode: GenerationSpeedMode) {
+  return speedModeOptions.find(option => option.value === speedMode)?.description || ''
 }
 
 const healthLevelMap: Record<NonNullable<Project['preflight']>['healthLevel'], { label: string; variant: 'success' | 'warning' | 'danger' }> = {
@@ -260,7 +340,7 @@ type NextStepState = {
   title: string
   description: string
   ctaLabel: string
-  ctaAction: 'start' | 'edit' | 'settings' | 'retry' | 'wait' | 'resume' | 'tab-settings'
+  ctaAction: 'start' | 'edit' | 'settings' | 'retry' | 'wait' | 'resume' | 'tab-settings' | 'confirm-blueprint' | 'confirm-arc-plan'
   disabled?: boolean
 }
 
@@ -318,6 +398,7 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [pipelineStarting, setPipelineStarting] = useState(false)
+  const [selectedSpeedMode, setSelectedSpeedMode] = useState<GenerationSpeedMode>('balanced')
   const [maintenanceRetrying, setMaintenanceRetrying] = useState(false)
   const [activeTab, setActiveTab] = useState<DashboardTab>('dashboard')
 
@@ -511,8 +592,20 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
   }
 
   const handleStartPipeline = async () => {
+    if (!project) return
+
     if (maintenanceActive) {
       toast.error('创作系统仍在初始化，请完成后再开始 AI 生成')
+      return
+    }
+
+    if (!project.blueprintConfirmedAt) {
+      toast.error('请先确认蓝图')
+      return
+    }
+
+    if (!project.arcPlanConfirmedAt) {
+      toast.error('请先确认故事路线图')
       return
     }
 
@@ -520,6 +613,8 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
     try {
       const res = await fetch(`/api/novel/projects/${projectId}/pipeline/start`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ speedMode: selectedSpeedMode }),
       })
       const data = await res.json()
       if (data.success) {
@@ -531,6 +626,13 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
           currentChapter: 0,
           totalChapters: 0,
           pipelineJobId: data.data.jobId,
+          speedMode: data.data.speedMode || selectedSpeedMode,
+          runtime: {
+            currentChapter: null,
+            recentChapters: [],
+            speedMode: data.data.speedMode || selectedSpeedMode,
+            streamRevision: 0,
+          },
         })
       } else {
         toast.error(data.error?.message || '启动失败')
@@ -539,6 +641,25 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
       toast.error('启动 AI 生成失败')
     } finally {
       setPipelineStarting(false)
+    }
+  }
+
+  const handleRecoverPipeline = async (action: 'continue' | 'retry_chapter' | 'retry_batch', chapterNumber?: number) => {
+    try {
+      const res = await fetch(`/api/novel/projects/${projectId}/pipeline/recover`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, chapterNumber }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        toast.success(data.data?.message || '恢复动作已触发')
+        fetchProject()
+      } else {
+        toast.error(data.error?.message || '恢复失败')
+      }
+    } catch {
+      toast.error('恢复失败')
     }
   }
 
@@ -566,6 +687,27 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
     setPreviewChapter(chapter)
     setShowChapterPreview(true)
   }
+
+  const findChapterByNumber = useCallback((chapterNumber: number) => (
+    project?.chapters.find(chapter => chapter.chapterNumber === chapterNumber) || null
+  ), [project?.chapters])
+
+  const openChapterEditor = useCallback((chapterId: number) => {
+    router.push(`/projects/${projectId}/chapters/${chapterId}`)
+  }, [projectId, router])
+
+  const openChapterGenerate = useCallback((chapterId: number) => {
+    router.push(`/projects/${projectId}/chapters/${chapterId}/generate`)
+  }, [projectId, router])
+
+  const getReviewingReason = useCallback((chapter: Chapter) => {
+    const minimumWordCount = getMinimumChapterWordCount(project?.chapterWordCount || 3000, chapter.chapterNumber)
+    if ((chapter.wordCount || 0) < minimumWordCount) {
+      return `当前仅 ${(chapter.wordCount || 0).toLocaleString()} 字，低于最低要求 ${minimumWordCount.toLocaleString()} 字，需要补写或重写后再保存。`
+    }
+
+    return '这章已被标记为待审稿，说明 AI 结果没有被系统直接视为稳定成稿。建议打开章节检查正文后，再决定是手工修订还是重新生成。'
+  }, [project?.chapterWordCount])
 
   const toolboxItems = [
     {
@@ -633,16 +775,31 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
   }
 
   const progress = project.targetWordCount
-    ? Math.round((project.currentWordCount / project.targetWordCount) * 100)
+    ? Math.round((project.currentWordCount / (project.effectiveTargetWordCount || project.targetWordCount)) * 100)
     : null
+  const effectiveTargetWordCount = project.effectiveTargetWordCount || project.targetWordCount || null
+  const estimatedTotalChapters = project.estimatedTotalChapters || (effectiveTargetWordCount
+    ? Math.ceil(effectiveTargetWordCount / Math.max(1, project.chapterWordCount || 3000))
+    : null)
 
   const completedChapters = project.chapters.filter(c => c.status === 'COMPLETED').length
   const reviewingChapters = project.chapters.filter(c => c.status === 'REVIEWING').length
   const arcGroups = groupChaptersByArc(project)
   const liveChapter = pipeline?.runtime?.currentChapter || null
   const recentChapterRuns = pipeline?.runtime?.recentChapters || []
+  const activeSpeedMode = pipeline?.speedMode || pipeline?.runtime?.speedMode || selectedSpeedMode
   const hasBoundModel = Boolean(project.aiModelConfig)
   const isAnalyzeMode = project.projectMode === 'ANALYZE'
+  const workflowStage = project.workflowStage || (!project.blueprintConfirmedAt ? 'BLUEPRINT_CONFIRM' : !project.arcPlanConfirmedAt ? 'ARC_PLAN_CONFIRM' : 'GENERATE')
+  const flowBlockedReason = !project.bookBlueprint
+    ? '请先生成并确认全书蓝图'
+    : !project.blueprintConfirmedAt
+      ? 'Blueprint 未确认前，不允许启动正文生成'
+      : !project.arcPlans?.length
+        ? '请先生成 ArcPlan'
+        : !project.arcPlanConfirmedAt
+          ? '故事路线图未确认前，不允许生成章节目录'
+          : null
   const steeringValues = {
     pace: project.pace ?? defaultSteeringValues.pace,
     darkness: project.darkness ?? defaultSteeringValues.darkness,
@@ -692,10 +849,32 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
         badgeVariant: 'secondary',
         badgeLabel: '等待中',
         title: 'AI 正在接管底层创作配置',
-        description: '系统正在自动补齐 Blueprint、阶段规划、故事状态和 RAG 索引。这里完成后，再开始整书生成。',
+        description: '系统正在自动补齐 Blueprint、故事路线和故事状态。这里完成后，再开始整书生成。',
         ctaLabel: '等待完成',
         ctaAction: 'wait',
         disabled: true,
+      }
+    }
+
+    if (!project.bookBlueprint || !project.blueprintConfirmedAt) {
+      return {
+        badgeVariant: 'warning',
+        badgeLabel: '待确认',
+        title: '先确认全书蓝图',
+        description: '核心卖点、世界方向、主线方向、成长方向、终局方向以及平台/题材/风格策略需要先被人工确认，之后才能进入后续生产。',
+        ctaLabel: '确认蓝图',
+        ctaAction: 'confirm-blueprint',
+      }
+    }
+
+    if (!project.arcPlans?.length || !project.arcPlanConfirmedAt) {
+      return {
+        badgeVariant: 'warning',
+        badgeLabel: '待确认',
+        title: '先确认故事路线图',
+        description: 'AI 已经给出全书发展路线。你只需要判断故事这样发展是否顺眼，确认后才允许生成目录和正文。',
+        ctaLabel: '确认故事路线',
+        ctaAction: 'confirm-arc-plan',
       }
     }
 
@@ -762,6 +941,12 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
       case 'start':
         void handleStartPipeline()
         break
+      case 'confirm-blueprint':
+        setActiveTab('dashboard')
+        break
+      case 'confirm-arc-plan':
+        setActiveTab('dashboard')
+        break
       case 'edit':
         setShowEditModal(true)
         break
@@ -827,6 +1012,13 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
             </div>
             <span className={`text-xs ${pipeline.status === 'PAUSED' ? 'text-amber-500' : 'text-blue-500'}`}>{pipeline.progress}%</span>
           </div>
+          <div className={`mt-1 text-xs ${
+            pipeline.status === 'PAUSED'
+              ? 'text-amber-600 dark:text-amber-400'
+              : 'text-blue-600 dark:text-blue-400'
+          }`}>
+            生成模式：{speedModeLabels[activeSpeedMode]}
+          </div>
           <Progress value={pipeline.progress} max={100} size="sm" />
           <div className={`flex items-center justify-between mt-2 text-xs ${
             pipeline.status === 'PAUSED'
@@ -857,6 +1049,11 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
               {liveChapter.lastMessage && (
                 <div className="mt-1 truncate">{liveChapter.lastMessage}</div>
               )}
+              {liveChapter.error && (
+                <div className="mt-1 truncate text-red-600 dark:text-red-300">
+                  卡在 {getPipelineStepLabel(liveChapter.currentPhase || liveChapter.currentAgent || 'WRITE')}：{liveChapter.error}
+                </div>
+              )}
             </div>
           )}
           <div className="mt-3 flex items-center gap-2">
@@ -866,10 +1063,23 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
                 暂停
               </Button>
             ) : (
-              <Button variant="primary" size="sm" onClick={handleResumePipeline} className="gap-1.5">
-                <Play className="h-3.5 w-3.5" />
-                继续运行
-              </Button>
+              <>
+                <Button variant="primary" size="sm" onClick={() => handleRecoverPipeline('continue')} className="gap-1.5">
+                  <Play className="h-3.5 w-3.5" />
+                  继续生成
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleRecoverPipeline('retry_chapter', liveChapter?.chapterNumber || pipeline.currentChapter)}
+                  className="gap-1.5"
+                >
+                  重试当前章节
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => handleRecoverPipeline('retry_batch')} className="gap-1.5">
+                  重试当前批次目录
+                </Button>
+              </>
             )}
           </div>
         </div>
@@ -886,10 +1096,23 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
           {pipeline.error && (
             <p className="text-sm text-red-600 dark:text-red-400 mb-3">{pipeline.error}</p>
           )}
-          <Button variant="outline" size="sm" onClick={handleResumePipeline} className="gap-1.5">
-            <Play className="h-3.5 w-3.5" />
-            恢复运行
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="primary" size="sm" onClick={() => handleRecoverPipeline('continue')} className="gap-1.5">
+              <Play className="h-3.5 w-3.5" />
+              继续生成
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleRecoverPipeline('retry_chapter', liveChapter?.chapterNumber || pipeline.currentChapter)}
+              className="gap-1.5"
+            >
+              重试当前章节
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => handleRecoverPipeline('retry_batch')} className="gap-1.5">
+              重试当前批次目录
+            </Button>
+          </div>
         </div>
       )}
 
@@ -923,11 +1146,12 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
                 size="sm"
                 onClick={handleStartPipeline}
                 loading={pipelineStarting}
-                disabled={pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING' || pipeline?.status === 'PAUSED' || !hasBoundModel || maintenanceActive}
+                disabled={pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING' || pipeline?.status === 'PAUSED' || !hasBoundModel || maintenanceActive || Boolean(flowBlockedReason)}
                 className="gap-1.5"
+                title={flowBlockedReason || undefined}
               >
                 <Rocket className="h-4 w-4" />
-                {projectInitializing ? '初始化中' : '开始 AI 生成'}
+                {projectInitializing ? '初始化中' : '开始生成'}
               </Button>
               <Button
                 variant="outline"
@@ -1087,6 +1311,109 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
                 </Card>
               )}
 
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">主流程</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="rounded-2xl border border-gray-200 bg-gray-50/80 p-4 dark:border-gray-800 dark:bg-slate-950/30">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Badge
+                            variant={
+                              workflowStage === 'BLUEPRINT_CONFIRM'
+                                ? 'warning'
+                                : workflowStage === 'ARC_PLAN_CONFIRM'
+                                  ? 'primary'
+                                  : 'success'
+                            }
+                          >
+                            {workflowStage === 'BLUEPRINT_CONFIRM'
+                              ? '当前阶段：蓝图确认'
+                              : workflowStage === 'ARC_PLAN_CONFIRM'
+                                ? '当前阶段：路线确认'
+                                : '当前阶段：开始生成'}
+                          </Badge>
+                          <span className="text-xs text-gray-500">
+                            {project.blueprintConfirmedAt && project.arcPlanConfirmedAt ? '前置确认已完成' : '先完成前置确认，再交给 AI 连续生产'}
+                          </span>
+                        </div>
+                        <div className="text-sm text-gray-700 dark:text-gray-300">
+                          {flowBlockedReason || '当前没有前置阻断，主链路已经解锁。'}
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Badge variant={project.blueprintConfirmedAt ? 'success' : 'warning'}>
+                          蓝图{project.blueprintConfirmedAt ? '已确认' : '待确认'}
+                        </Badge>
+                        <Badge variant={project.arcPlanConfirmedAt ? 'success' : project.blueprintConfirmedAt ? 'warning' : 'secondary'}>
+                          路线{project.arcPlanConfirmedAt ? '已确认' : '待确认'}
+                        </Badge>
+                        <Badge variant={flowBlockedReason ? 'secondary' : 'success'}>
+                          生成{flowBlockedReason ? '未解锁' : '已解锁'}
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+                  <WorkflowBlueprintCard
+                    key={`bp-${project.updatedAt}-${project.blueprintConfirmedAt || 'pending'}`}
+                    projectId={projectId}
+                    blueprint={project.bookBlueprint}
+                    confirmed={Boolean(project.blueprintConfirmedAt)}
+                    confirmedAt={project.blueprintConfirmedAt}
+                    onUpdated={fetchProject}
+                  />
+                  <WorkflowArcPlanCard
+                    key={`arc-${project.updatedAt}-${project.arcPlanConfirmedAt || 'pending'}`}
+                    projectId={projectId}
+                    roadmap={project.storyRoadmap || []}
+                    confirmed={Boolean(project.arcPlanConfirmedAt)}
+                    disabled={!project.blueprintConfirmedAt}
+                    onUpdated={fetchProject}
+                  />
+                  <Card className={`border-green-200 bg-green-50/60 dark:border-green-900/40 dark:bg-green-950/20 ${project.blueprintConfirmedAt && project.arcPlanConfirmedAt ? 'ring-1 ring-green-200 dark:ring-green-800/60' : ''}`}>
+                    <CardContent className="flex flex-col gap-4 p-5 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="space-y-2">
+                        <div className="text-sm font-medium text-green-800 dark:text-green-200">3. 开始生成</div>
+                        <div className="mt-1 text-sm text-green-700 dark:text-green-300">
+                          {project.blueprintConfirmedAt && project.arcPlanConfirmedAt
+                            ? '主链路已经解锁，可以直接开始生成章节目录和正文。'
+                            : '只有当 Blueprint 和 ArcPlan 都确认后，系统才允许生成章节目录和正文。'}
+                        </div>
+                        <div className="rounded-md border border-green-200 bg-white/70 px-3 py-2 text-xs leading-5 text-green-800 dark:border-green-900/50 dark:bg-slate-950/30 dark:text-green-200">
+                          当前模式：{speedModeLabels[selectedSpeedMode]}。{getSpeedModeDescription(selectedSpeedMode)}
+                        </div>
+                        {flowBlockedReason && (
+                          <div className="mt-2 text-xs text-green-700/80 dark:text-green-300/80">{flowBlockedReason}</div>
+                        )}
+                      </div>
+                      <div className="flex w-full flex-col gap-2 sm:w-56">
+                        <select
+                          value={selectedSpeedMode}
+                          onChange={(event) => setSelectedSpeedMode(event.target.value as GenerationSpeedMode)}
+                          disabled={pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING'}
+                          className="h-9 rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900 shadow-sm dark:border-gray-700 dark:bg-slate-950 dark:text-gray-100"
+                          aria-label="生成速度模式"
+                        >
+                          {speedModeOptions.map(option => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                          ))}
+                        </select>
+                        <Button
+                          variant="primary"
+                          onClick={handleStartPipeline}
+                          loading={pipelineStarting}
+                          disabled={pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING' || pipeline?.status === 'PAUSED' || !hasBoundModel || maintenanceActive || Boolean(flowBlockedReason)}
+                        >
+                          开始生成
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </CardContent>
+              </Card>
+
               {/* Chapter Preview List */}
               <Card>
                 <CardHeader>
@@ -1117,56 +1444,67 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
                         size="sm"
                         onClick={handleStartPipeline}
                         loading={pipelineStarting}
-                        disabled={pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING' || pipeline?.status === 'PAUSED' || !hasBoundModel || maintenanceActive}
+                        disabled={pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING' || pipeline?.status === 'PAUSED' || !hasBoundModel || maintenanceActive || Boolean(flowBlockedReason)}
                         className="mt-4 gap-1.5"
+                        title={flowBlockedReason || undefined}
                       >
                         <Rocket className="h-4 w-4" />
-                        {projectInitializing ? '初始化中' : '开始 AI 生成'}
+                        {projectInitializing ? '初始化中' : '开始生成'}
                       </Button>
                     </div>
                   ) : (
                     <div className="space-y-6">
-                      {arcGroups.map((group, groupIdx) => (
-                        <div key={groupIdx}>
-                          {group.arcName && (
-                            <div className="flex items-center gap-2 mb-2 px-1">
-                              <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wide">
-                                {group.arcName}
-                              </span>
-                              <span className="text-xs text-gray-400">
-                                {group.chapters.length} 章
-                              </span>
-                            </div>
-                          )}
-                          <div className="space-y-1">
-                            {group.chapters.map((chapter) => (
-                              <div
-                                key={chapter.id}
-                                onClick={() => openChapterPreview(chapter)}
-                                className="flex items-center justify-between px-3 py-2.5 rounded-lg border border-gray-100 dark:border-gray-800 hover:border-blue-200 dark:hover:border-blue-800 hover:bg-blue-50/50 dark:hover:bg-blue-900/10 cursor-pointer transition-all group"
-                              >
-                                <div className="flex items-center gap-3 flex-1 min-w-0">
-                                  <span className="text-gray-400 text-sm shrink-0">
-                                    第{chapter.chapterNumber}章
-                                  </span>
-                                  <span className="font-medium text-sm truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                                    {chapter.title || '无标题'}
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-3 shrink-0">
-                                  <span className="text-xs text-gray-500">
-                                    {(chapter.wordCount || 0).toLocaleString()} 字
-                                  </span>
-                                  <Badge variant={chapterStatusMap[chapter.status].variant} className="text-xs">
-                                    {chapterStatusMap[chapter.status].label}
-                                  </Badge>
-                                  <Eye className="h-3.5 w-3.5 text-gray-300 group-hover:text-blue-500 transition-colors" />
-                                </div>
+                      {arcGroups.map((group, groupIdx) => {
+                        const groupKey = `${group.arcNumber || 0}-${group.arcName || 'chapters'}-${groupIdx}`
+
+                        return (
+                          <div key={groupKey}>
+                            {group.arcName && (
+                              <div className="flex items-center gap-2 mb-2 px-1">
+                                <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wide">
+                                  {group.arcName}
+                                </span>
+                                <span className="text-xs text-gray-400">
+                                  {group.chapters.length} 章
+                                </span>
                               </div>
-                            ))}
+                            )}
+                            <ExpandableList
+                              items={group.chapters}
+                              initialVisibleCount={INITIAL_VISIBLE_PROJECT_CHAPTERS_PER_GROUP}
+                              className="space-y-1"
+                              buttonClassName="gap-1.5"
+                              collapsedLabel={(hiddenCount) => `展开剩余 ${hiddenCount} 章`}
+                              expandedLabel="收起目录"
+                              getKey={(chapter) => chapter.id}
+                              renderItem={(chapter) => (
+                                <div
+                                  onClick={() => openChapterPreview(chapter)}
+                                  className="flex items-center justify-between px-3 py-2.5 rounded-lg border border-gray-100 dark:border-gray-800 hover:border-blue-200 dark:hover:border-blue-800 hover:bg-blue-50/50 dark:hover:bg-blue-900/10 cursor-pointer transition-all group"
+                                >
+                                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                                    <span className="text-gray-400 text-sm shrink-0">
+                                      第{chapter.chapterNumber}章
+                                    </span>
+                                    <span className="font-medium text-sm truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                                      {chapter.title || '无标题'}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-3 shrink-0">
+                                    <span className="text-xs text-gray-500">
+                                      {(chapter.wordCount || 0).toLocaleString()} 字
+                                    </span>
+                                    <Badge variant={chapterStatusMap[chapter.status].variant} className="text-xs">
+                                      {chapterStatusMap[chapter.status].label}
+                                    </Badge>
+                                    <Eye className="h-3.5 w-3.5 text-gray-300 group-hover:text-blue-500 transition-colors" />
+                                  </div>
+                                </div>
+                              )}
+                            />
                           </div>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   )}
                 </CardContent>
@@ -1191,11 +1529,15 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
                             {getPipelineStepLabel(liveChapter.currentPhase || liveChapter.currentAgent || 'WRITE')}
                           </Badge>
                         </div>
-                        <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-600 dark:text-gray-400">
+                        <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-600 dark:text-gray-400 md:grid-cols-3">
                           <div>当前字数：{liveChapter.currentWordCount}</div>
                           <div>目标字数：{liveChapter.targetWordCount}</div>
                           <div>Planner：{formatDuration(liveChapter.phaseTimings.planner)}</div>
                           <div>Writer：{formatDuration(liveChapter.phaseTimings.writer)}</div>
+                          <div>Polisher：{formatDuration(liveChapter.phaseTimings.polisher)}</div>
+                          <div>Reviewer：{formatDuration(liveChapter.phaseTimings.reviewer)}</div>
+                          <div>Validator：{formatDuration(liveChapter.phaseTimings.validator)}</div>
+                          <div>Deslopper：{formatDuration(liveChapter.phaseTimings.deslopper)}</div>
                           <div>Summarizer：{formatDuration(liveChapter.phaseTimings.summarizer)}</div>
                           <div>DB 回写：{formatDuration(liveChapter.phaseTimings.db_write)}</div>
                         </div>
@@ -1220,11 +1562,82 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
                                 {chapterRun.status === 'FAILED' ? '失败' : chapterRun.qualityStatus === 'reviewing' ? '待审稿' : '完成'}
                               </span>
                             </div>
-                            <div className="mt-1 grid grid-cols-2 gap-2 text-gray-500 dark:text-gray-400">
+                            <div className="mt-1 grid grid-cols-2 gap-2 text-gray-500 dark:text-gray-400 md:grid-cols-3">
                               <div>Planner：{formatDuration(chapterRun.phaseTimings.planner)}</div>
                               <div>Writer：{formatDuration(chapterRun.phaseTimings.writer)}</div>
+                              <div>Polisher：{formatDuration(chapterRun.phaseTimings.polisher)}</div>
+                              <div>Reviewer：{formatDuration(chapterRun.phaseTimings.reviewer)}</div>
+                              <div>Validator：{formatDuration(chapterRun.phaseTimings.validator)}</div>
+                              <div>Deslopper：{formatDuration(chapterRun.phaseTimings.deslopper)}</div>
                               <div>Summarizer：{formatDuration(chapterRun.phaseTimings.summarizer)}</div>
                               <div>DB 回写：{formatDuration(chapterRun.phaseTimings.db_write)}</div>
+                            </div>
+                            {(chapterRun.status === 'FAILED' || chapterRun.qualityStatus === 'reviewing' || chapterRun.lastMessage) && (
+                              <div
+                                className={`mt-2 rounded-md px-3 py-2 leading-5 ${
+                                  chapterRun.status === 'FAILED'
+                                    ? 'border border-red-200 bg-red-50 text-red-700 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300'
+                                    : chapterRun.qualityStatus === 'reviewing'
+                                      ? 'border border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-200'
+                                      : 'border border-gray-200 bg-gray-50 text-gray-600 dark:border-gray-800 dark:bg-slate-900/40 dark:text-gray-300'
+                                }`}
+                              >
+                                {chapterRun.status === 'FAILED'
+                                  ? chapterRun.error || chapterRun.lastMessage || '生成流程中断，Writer 之后的某一步没有完成，请重试本章或查看正文是否已落库。'
+                                  : chapterRun.qualityStatus === 'reviewing'
+                                    ? chapterRun.warning || chapterRun.lastMessage || '该章已进入待审稿状态，需要打开章节做人工处理。'
+                                    : chapterRun.lastMessage}
+                              </div>
+                            )}
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {(() => {
+                                const chapter = findChapterByNumber(chapterRun.chapterNumber)
+                                if (chapterRun.status === 'FAILED') {
+                                  return (
+                                    <>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => handleRecoverPipeline('retry_chapter', chapterRun.chapterNumber)}
+                                      >
+                                        重试本章
+                                      </Button>
+                                      {chapter ? (
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => openChapterEditor(chapter.id)}
+                                        >
+                                          查看章节
+                                        </Button>
+                                      ) : null}
+                                    </>
+                                  )
+                                }
+
+                                if (chapterRun.qualityStatus === 'reviewing' && chapter) {
+                                  return (
+                                    <>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => openChapterEditor(chapter.id)}
+                                      >
+                                        去审稿
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => openChapterGenerate(chapter.id)}
+                                      >
+                                        重新生成
+                                      </Button>
+                                    </>
+                                  )
+                                }
+
+                                return null
+                              })()}
                             </div>
                           </div>
                         ))}
@@ -1354,7 +1767,7 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
                         <div className="mt-1 text-xs leading-5 text-blue-700 dark:text-blue-300">
                           {maintenanceFailed
                             ? (project.maintenanceSummary?.bootstrapError || project.maintenanceSummary?.ragError || '后台初始化任务失败，请检查当前 AI 模型配置后重试。')
-                            : '系统会自动补齐 Book Blueprint、阶段规划、世界状态、故事状态以及 RAG 索引。完成前请勿开始 AI 生成。页面会自动刷新，无需手动刷新。'}
+                            : '系统会自动补齐 Book Blueprint、故事路线、世界状态、故事状态以及 RAG 索引。完成前请勿开始 AI 生成。页面会自动刷新，无需手动刷新。'}
                         </div>
                         {maintenanceFailed && (
                           <div className="mt-3 flex flex-wrap gap-2">
@@ -1405,7 +1818,7 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
                     <div className="grid grid-cols-2 gap-2 text-gray-600 dark:text-gray-400">
                       <div>模型：{project.preflight.hasModel ? '已绑定' : '未绑定'}</div>
                       <div>蓝图：{project.preflight.hasBlueprint ? '已生成' : '未生成'}</div>
-                      <div>阶段规划：{project.preflight.hasArcPlans ? '已生成' : '未生成'}</div>
+                      <div>故事路线：{project.preflight.hasArcPlans ? '已生成' : '未生成'}</div>
                       <div>故事状态：{project.preflight.hasStoryState ? '已初始化' : '未初始化'}</div>
                       <div>世界状态：{project.preflight.hasWorldState ? '已初始化' : '未初始化'}</div>
                       <div>已完成：{project.preflight.completedChapters} 章</div>
@@ -1670,27 +2083,36 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
                   {progress !== null ? `${progress}%` : '-'}
                 </span>
               </div>
-              {project.targetWordCount ? (
-                <Progress value={project.currentWordCount} max={project.targetWordCount} showLabel size="sm" />
+              {effectiveTargetWordCount ? (
+                <Progress value={project.currentWordCount} max={effectiveTargetWordCount} showLabel size="sm" />
               ) : (
                 <div className="w-full h-2 bg-gray-100 dark:bg-gray-800 rounded-full">
                   <div className="h-full w-0 bg-blue-500 rounded-full" />
                 </div>
               )}
-              <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+              <div className="mt-3 grid grid-cols-4 gap-2 text-center">
                 <div>
                   <p className="text-sm font-bold">{project.currentWordCount.toLocaleString()}</p>
                   <p className="text-xs text-gray-500">当前</p>
                 </div>
                 <div>
-                  <p className="text-sm font-bold">{project.targetWordCount?.toLocaleString() || '-'}</p>
+                  <p className="text-sm font-bold">{effectiveTargetWordCount?.toLocaleString() || '-'}</p>
                   <p className="text-xs text-gray-500">目标</p>
                 </div>
                 <div>
+                  <p className="text-sm font-bold">{estimatedTotalChapters?.toLocaleString() || '-'}</p>
+                  <p className="text-xs text-gray-500">预计章数</p>
+                </div>
+                <div>
                   <p className="text-sm font-bold">{project.chapters.length}</p>
-                  <p className="text-xs text-gray-500">章节</p>
+                  <p className="text-xs text-gray-500">已建章节</p>
                 </div>
               </div>
+              {estimatedTotalChapters && project.expectedStageCount ? (
+                <p className="mt-3 text-xs text-gray-500">
+                  当前按 {project.lengthType || 'LONG'} 口径规划，全书预计约 {estimatedTotalChapters} 章，默认拆分为 {project.expectedStageCount} 个阶段。
+                </p>
+              ) : null}
             </CardContent>
           </Card>
 
@@ -1787,6 +2209,12 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
               </span>
             </div>
 
+            {previewChapter.status === 'REVIEWING' && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-200">
+                {getReviewingReason(previewChapter)}
+              </div>
+            )}
+
             {previewChapter.summary && (
               <div className="rounded-lg bg-blue-50 dark:bg-blue-900/20 p-4">
                 <h4 className="text-xs font-semibold text-blue-600 dark:text-blue-400 mb-2 uppercase tracking-wide">
@@ -1811,7 +2239,25 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
               </div>
             )}
 
-            <div className="flex justify-end">
+            <div className="flex flex-wrap justify-end gap-2">
+              {previewChapter.id ? (
+                <>
+                  {previewChapter.status === 'REVIEWING' ? (
+                    <>
+                      <Button variant="outline" onClick={() => openChapterGenerate(previewChapter.id)}>
+                        重新生成
+                      </Button>
+                      <Button variant="primary" onClick={() => openChapterEditor(previewChapter.id)}>
+                        去审稿
+                      </Button>
+                    </>
+                  ) : (
+                    <Button variant="outline" onClick={() => openChapterEditor(previewChapter.id)}>
+                      打开章节
+                    </Button>
+                  )}
+                </>
+              ) : null}
               <Button variant="outline" onClick={() => {
                 setShowChapterPreview(false)
                 setPreviewChapter(null)

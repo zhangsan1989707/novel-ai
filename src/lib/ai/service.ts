@@ -4,6 +4,11 @@ import { getTraceableAIProvider, getDefaultVendor, createConfigFromEnv } from '.
 import type { AIProvider, AIConfig } from './types'
 import { AIVendor } from '@/types'
 import { auth } from '@/lib/auth'
+import {
+  resolveModelIdForRole,
+  type GenerationRole,
+  type GenerationSpeedMode,
+} from './speed-mode'
 
 // 获取当前用户（开发模式返回默认用户）
 async function getCurrentUserId() {
@@ -34,6 +39,8 @@ export interface GenerateOptions {
   userId?: number
   projectId?: number | null
   usageType?: string
+  speedMode?: GenerationSpeedMode
+  generationRole?: GenerationRole
 }
 
 /**
@@ -183,6 +190,15 @@ export class AIService {
       config = this.getDefaultConfig(AIVendor.DEEPSEEK)
     }
 
+    config = {
+      ...config,
+      modelId: resolveModelIdForRole({
+        vendor: config.vendor,
+        currentModelId: config.modelId,
+        speedMode: options?.speedMode,
+        role: options?.generationRole,
+      }),
+    }
     config = this.attachEmbeddingConfig(config)
 
     logger.info(
