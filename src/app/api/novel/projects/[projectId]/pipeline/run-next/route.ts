@@ -1,8 +1,5 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import { runProductionPipeline } from '@/lib/engine/production-pipeline'
-import { normalizeGenerationSpeedMode } from '@/lib/ai/speed-mode'
-import { failStaleRunningJobs } from '@/lib/engine/generation-job'
+import { runNextPipelineJob } from '@/lib/engine/pipeline-worker'
 
 export async function POST(
   _request: Request,
@@ -19,33 +16,11 @@ export async function POST(
       )
     }
 
-    await failStaleRunningJobs({ projectId })
-
-    const job = await prisma.generationJob.findFirst({
-      where: {
-        projectId,
-        status: 'PENDING',
-      },
-      orderBy: { createdAt: 'desc' },
-    })
-
-    if (!job) {
-      return NextResponse.json({
-        success: true,
-        data: { status: 'IDLE', message: '没有待推进的生成任务' },
-      })
-    }
-
-    const payload = job.payload && typeof job.payload === 'object'
-      ? job.payload as Record<string, unknown>
-      : {}
-    const speedMode = normalizeGenerationSpeedMode(payload.speedMode)
-
-    await runProductionPipeline(job.id, { speedMode })
+    const result = await runNextPipelineJob({ projectId })
 
     return NextResponse.json({
       success: true,
-      data: { jobId: job.id, projectId, status: 'processed', speedMode },
+      data: result,
     })
   } catch (error) {
     console.error('Pipeline run-next error:', error)
