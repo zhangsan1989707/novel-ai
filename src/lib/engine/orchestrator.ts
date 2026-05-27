@@ -20,6 +20,7 @@ import { directChapter } from '../agents/narrative-director'
 import { chapterDeslopper } from '../agents/deslopper'
 import { recordAndApplyChapterCommit } from './chapter-commit'
 import { buildRevisionPrompt } from '@/lib/ai'
+import type { GenerationRole, GenerationSpeedMode } from '@/lib/ai/speed-mode'
 import type {
   ChapterOutline,
   ValidationReport as EngineValidationReport,
@@ -79,18 +80,26 @@ export async function runChapterGenerationPipeline(
   chapterNo: number,
   emit: SSEEmitter,
   options?: {
-    speedMode?: 'fast' | 'balanced' | 'quality'
+    speedMode?: GenerationSpeedMode
   }
 ): Promise<GenerationResult> {
   const speedMode = options?.speedMode || 'balanced'
   const startTime = Date.now()
   let lastReportedWordCount = 0
 
-  // 创建共享 AI Provider（避免每个 Agent 重复 DB 查询）
-  const sharedProvider = await AIService.createProvider({
-    projectId,
-    usageType: 'PIPELINE',
-  })
+  const providerCache = new Map<GenerationRole, Awaited<ReturnType<typeof AIService.createProvider>>>()
+  const getRoleProvider = async (role: GenerationRole) => {
+    const cached = providerCache.get(role)
+    if (cached) return cached
+    const provider = await AIService.createProvider({
+      projectId,
+      usageType: `PIPELINE_${role.toUpperCase()}`,
+      speedMode,
+      generationRole: role,
+    })
+    providerCache.set(role, provider)
+    return provider
+  }
 
   // Phase 计时辅助函数
   const runPhase = async (phase: string, fn: () => Promise<void>) => {
@@ -209,7 +218,7 @@ export async function runChapterGenerationPipeline(
           emotionalArc,
           recentChapterSummaries: memoryPack.recentChapterSummaries,
           recentChapterCount: memoryPack.recentChapterSummaries.length,
-          provider: sharedProvider,
+          provider: await getRoleProvider('planner'),
           popularFictionProfile,
         })
 
@@ -220,7 +229,7 @@ export async function runChapterGenerationPipeline(
           where: { id: chapter.id },
           data: {
             chapterOutline: outline as unknown as Prisma.InputJsonValue,
-            lastAgentType: 'VALIDATOR',
+            lastAgentType: 'PLANNER',
           },
         })
 
@@ -271,7 +280,7 @@ export async function runChapterGenerationPipeline(
           outline,
           characterProfiles: memoryPack.characterProfiles,
           recentSummaries: memoryPack.recentChapterSummaries,
-          provider: sharedProvider,
+          provider: await getRoleProvider('writer'),
           popularFictionProfile,
         },
         (token) => {
@@ -300,7 +309,7 @@ export async function runChapterGenerationPipeline(
             chapterNo,
             content: draftContent,
             styleGuide: project.writingStyle,
-            provider: sharedProvider,
+            provider: await getRoleProvider('polisher'),
           },
           (token) => {
             polishedContent += token
@@ -326,7 +335,7 @@ export async function runChapterGenerationPipeline(
               targetAudience: project.targetAudience,
               chapterNo,
               worldSetting: project.worldSetting,
-              provider: sharedProvider,
+              provider: await getRoleProvider('reviewer'),
             },
           )
 
@@ -376,7 +385,7 @@ export async function runChapterGenerationPipeline(
                 buildReviewSuggestion(reviewResult)
               )
 
-              const revisionResult = await sharedProvider.generate(reviewPrompt, {
+              const revisionResult = await (await getRoleProvider('revision')).generate(reviewPrompt, {
                 temperature: reviewRevisionType === 'rewrite' ? 0.72 : 0.55,
                 maxTokens: Math.min(4096, Math.max(2000, Math.ceil(polishedContent.length * 0.75))),
               })
@@ -415,7 +424,7 @@ export async function runChapterGenerationPipeline(
           openPlotlines: memoryPack.openPlotlines,
           chapterTitle: outline.chapterTitle,
           chapterGoal: outline.chapterGoal,
-          provider: sharedProvider,
+          provider: await getRoleProvider('validator'),
           popularFictionProfile,
         })
 
@@ -536,7 +545,7 @@ export async function runChapterGenerationPipeline(
             genre: project.genre,
             writingStyle: project.writingStyle,
             strictness: 'medium',
-            provider: sharedProvider,
+            provider: await getRoleProvider('deslopper'),
           })
           finalContent = deslopResult.revisedContent
         } catch (deslopError) {
@@ -567,7 +576,7 @@ export async function runChapterGenerationPipeline(
           memoryContext: summarizerMemoryContext,
           worldSetting: project.worldSetting,
           protagonistProfile: project.protagonistProfile,
-          provider: sharedProvider,
+          provider: await getRoleProvider('summarizer'),
         })
 
         await storyState.updateChapterProgress(projectId, chapterNo)

@@ -75,7 +75,11 @@ export class TaskQueue {
   }
 
   private constructor() {
-    this.start()
+    if (process.env.NOVEL_AI_LEGACY_TASK_QUEUE === 'true') {
+      this.start()
+    } else {
+      logger.warn('Legacy TaskQueue is disabled; use GenerationJob pipeline routes for real novel production')
+    }
   }
 
   // ================================
@@ -83,6 +87,10 @@ export class TaskQueue {
   // ================================
 
   start(): void {
+    if (process.env.NOVEL_AI_LEGACY_TASK_QUEUE !== 'true') {
+      logger.warn('Legacy TaskQueue start skipped; set NOVEL_AI_LEGACY_TASK_QUEUE=true only for legacy tests')
+      return
+    }
     if (this.running) return
     this.running = true
     this.worker = this.runWorker()

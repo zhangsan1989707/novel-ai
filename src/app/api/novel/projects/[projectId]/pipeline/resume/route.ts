@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { prepareJobRecovery, resumeJob } from '@/lib/engine/generation-job'
+import { failStaleRunningJobs, prepareJobRecovery, resumeJob } from '@/lib/engine/generation-job'
 import { runProductionPipeline } from '@/lib/engine/production-pipeline'
+import { normalizeGenerationSpeedMode } from '@/lib/ai/speed-mode'
 
 export async function POST(
   _request: NextRequest,
@@ -26,6 +27,8 @@ export async function POST(
       )
     }
 
+    await failStaleRunningJobs({ projectId })
+
     const resumed = await prepareJobRecovery(project.pipelineJobId, { mode: 'continue' })
       || await resumeJob(project.pipelineJobId)
     if (!resumed) {
@@ -34,9 +37,19 @@ export async function POST(
         { status: 400 }
       )
     }
-    void runProductionPipeline(project.pipelineJobId)
+    const job = await prisma.generationJob.findUnique({
+      where: { id: project.pipelineJobId },
+      select: { payload: true },
+    })
+    const payload = job?.payload && typeof job.payload === 'object'
+      ? job.payload as Record<string, unknown>
+      : {}
+    const speedMode = normalizeGenerationSpeedMode(payload.speedMode)
+    if (process.env.NOVEL_AI_PIPELINE_INLINE !== 'false') {
+      void runProductionPipeline(project.pipelineJobId, { speedMode })
+    }
 
-    return NextResponse.json({ success: true, data: { jobId: project.pipelineJobId, status: 'pending' } })
+    return NextResponse.json({ success: true, data: { jobId: project.pipelineJobId, status: 'pending', speedMode } })
   } catch (error) {
     console.error('Pipeline resume error:', error)
     return NextResponse.json(

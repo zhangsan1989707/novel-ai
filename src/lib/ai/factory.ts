@@ -220,7 +220,7 @@ export function createConfigFromEnv(vendor: AIVendor): AIConfig {
     case AIVendor.MIMO:
       return {
         vendor: AIVendor.MIMO,
-        modelId: process.env.MIMO_MODEL_ID || 'mimo-v2.5-pro',
+        modelId: process.env.MIMO_MODEL_ID || 'mimo-v2.5',
         apiKey: process.env.MIMO_API_KEY || '',
         apiEndpoint: process.env.MIMO_API_ENDPOINT || 'https://token-plan-cn.xiaomimimo.com/v1',
         embeddingVendor: AIVendor.OPENAI,

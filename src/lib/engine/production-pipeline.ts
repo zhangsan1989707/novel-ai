@@ -1,7 +1,12 @@
 import { ArcStage as PrismaArcStage, Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { createProviderFromConfigId, createProviderFromDefaultConfig } from '@/lib/ai/factory'
+import { AIService } from '@/lib/ai/service'
 import type { AIProvider } from '@/lib/ai/types'
+import {
+  normalizeGenerationSpeedMode,
+  type GenerationRole,
+  type GenerationSpeedMode,
+} from '@/lib/ai/speed-mode'
 import type { PipelineStep, StorySteering } from '@/types'
 import { calculateBatchSize } from './batch-planner'
 import { clearJobRecoveryTarget, completeJob, failJob, getJobRecoveryTarget, saveCheckpoint, updateJobRuntime, updateJobStep } from './generation-job'
@@ -216,18 +221,19 @@ async function isJobPaused(jobId: number): Promise<boolean> {
   return job?.status === 'PAUSED'
 }
 
-export async function createProjectProvider(projectId: number): Promise<AIProvider> {
-  const project = await prisma.novelProject.findUnique({
-    where: { id: projectId },
-    select: { aiModelId: true },
-  })
-
-  if (project?.aiModelId) {
-    const provider = await createProviderFromConfigId(project.aiModelId)
-    if (provider) return provider
+export async function createProjectProvider(
+  projectId: number,
+  options?: {
+    speedMode?: GenerationSpeedMode
+    generationRole?: GenerationRole
   }
-
-  return createProviderFromDefaultConfig()
+): Promise<AIProvider> {
+  return AIService.createProvider({
+    projectId,
+    usageType: options?.generationRole ? `PIPELINE_${options.generationRole.toUpperCase()}` : 'PIPELINE',
+    speedMode: options?.speedMode,
+    generationRole: options?.generationRole,
+  })
 }
 
 export async function ensureBlueprint(projectId: number, provider: AIProvider) {
@@ -776,14 +782,17 @@ async function resolveResumePlan(jobId: number): Promise<ResumePlan> {
 export async function runProductionPipeline(
   jobId: number,
   options?: {
-    speedMode?: 'fast' | 'balanced' | 'quality'
+    speedMode?: GenerationSpeedMode
   }
 ): Promise<void> {
   const job = await prisma.generationJob.findUnique({ where: { id: jobId } })
   if (!job) return
 
   const projectId = job.projectId
-  const speedMode = options?.speedMode || 'quality'
+  const jobPayload = job.payload && typeof job.payload === 'object'
+    ? job.payload as Record<string, unknown>
+    : {}
+  const speedMode = normalizeGenerationSpeedMode(options?.speedMode || jobPayload.speedMode)
   const project = await prisma.novelProject.findUnique({
     where: { id: projectId },
     select: {
@@ -819,7 +828,9 @@ export async function runProductionPipeline(
       : undefined
   )
   if (runtime.streamRevision === 0 && runtime.currentChapter === null && runtime.recentChapters.length === 0) {
-    runtime = createPipelineRuntimeState()
+    runtime = createPipelineRuntimeState(speedMode)
+  } else {
+    runtime = { ...runtime, speedMode }
   }
   let lastPersistAt = 0
   let persistChain = Promise.resolve()
@@ -949,7 +960,7 @@ export async function runProductionPipeline(
   }
 
   try {
-    const provider = await createProjectProvider(projectId)
+    const provider = await createProjectProvider(projectId, { speedMode, generationRole: 'blueprint' })
     const resumePlan = await resolveResumePlan(jobId)
     await clearJobRecoveryTarget(jobId)
 
@@ -970,12 +981,14 @@ export async function runProductionPipeline(
 
     if (resumePlan.startFrom === 'blueprint' || resumePlan.startFrom === 'arc_plan') {
       await updateJobStep(jobId, 'arc_plan' as PipelineStep, 2)
-      const arcPlans = await ensureArcPlans(projectId, provider)
+      const arcPlanProvider = await createProjectProvider(projectId, { speedMode, generationRole: 'arc_plan' })
+      const arcPlans = await ensureArcPlans(projectId, arcPlanProvider)
       await saveCheckpoint(jobId, 'arc_plan' as PipelineStep, { projectId }, { arcCount: arcPlans.length })
     }
 
     await updateJobStep(jobId, 'chapter_list' as PipelineStep, 3)
-    const outlines = await planChapterBatch(projectId, provider, {
+    const chapterListProvider = await createProjectProvider(projectId, { speedMode, generationRole: 'planner' })
+    const outlines = await planChapterBatch(projectId, chapterListProvider, {
       resumeFromChapterNumber: resumePlan.resumeFromChapterNumber,
     })
     await prisma.generationJob.update({

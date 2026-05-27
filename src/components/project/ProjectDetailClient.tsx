@@ -14,6 +14,7 @@ import type { ProjectStatus } from '@/types'
 import type { PipelineRuntimeState } from '@/lib/engine/pipeline-runtime'
 import type { BlueprintConsoleSnapshot } from '@/lib/engine/blueprint-console'
 import { getMinimumChapterWordCount } from '@/lib/ai/chapter-quality'
+import type { GenerationSpeedMode } from '@/lib/ai/speed-mode'
 
 const INITIAL_VISIBLE_PROJECT_CHAPTERS_PER_GROUP = 10
 
@@ -216,6 +217,7 @@ interface PipelineStatus {
   totalChapters: number
   error?: string
   pipelineJobId?: number
+  speedMode?: GenerationSpeedMode
   runtime?: PipelineRuntimeState
   updatedAt?: string
 }
@@ -256,12 +258,47 @@ const pipelineStepMap: Record<string, string> = {
   RESEARCH: '资料整理',
   DESLOPPER: '去AI味',
   VALIDATOR: '一致性校验',
+  POLISHER: '章节润色',
+  REVIEWER: '对抗审稿',
+  REVIEW_REVISION: '审稿修订',
   PLAN: '策划',
   REVIEW: '审稿',
   POLISH: '润色',
   DRAFT: '草稿生成',
   VALIDATE: '校验',
   INITIALIZE: '初始化',
+}
+
+const speedModeOptions: Array<{
+  value: GenerationSpeedMode
+  label: string
+  description: string
+}> = [
+  {
+    value: 'fast',
+    label: '快速验收',
+    description: '跳过重型审稿链，适合验证主链路是否跑通。',
+  },
+  {
+    value: 'balanced',
+    label: '均衡生成',
+    description: '默认模式，正文质量与生成速度更适合日常写作。',
+  },
+  {
+    value: 'quality',
+    label: '精修质量',
+    description: '完整多 Agent 审稿、润色、去 AI 味，适合重点章节。',
+  },
+]
+
+const speedModeLabels: Record<GenerationSpeedMode, string> = {
+  fast: '快速验收',
+  balanced: '均衡生成',
+  quality: '精修质量',
+}
+
+function getSpeedModeDescription(speedMode: GenerationSpeedMode) {
+  return speedModeOptions.find(option => option.value === speedMode)?.description || ''
 }
 
 const healthLevelMap: Record<NonNullable<Project['preflight']>['healthLevel'], { label: string; variant: 'success' | 'warning' | 'danger' }> = {
@@ -361,6 +398,7 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [pipelineStarting, setPipelineStarting] = useState(false)
+  const [selectedSpeedMode, setSelectedSpeedMode] = useState<GenerationSpeedMode>('balanced')
   const [maintenanceRetrying, setMaintenanceRetrying] = useState(false)
   const [activeTab, setActiveTab] = useState<DashboardTab>('dashboard')
 
@@ -575,6 +613,8 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
     try {
       const res = await fetch(`/api/novel/projects/${projectId}/pipeline/start`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ speedMode: selectedSpeedMode }),
       })
       const data = await res.json()
       if (data.success) {
@@ -586,6 +626,13 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
           currentChapter: 0,
           totalChapters: 0,
           pipelineJobId: data.data.jobId,
+          speedMode: data.data.speedMode || selectedSpeedMode,
+          runtime: {
+            currentChapter: null,
+            recentChapters: [],
+            speedMode: data.data.speedMode || selectedSpeedMode,
+            streamRevision: 0,
+          },
         })
       } else {
         toast.error(data.error?.message || '启动失败')
@@ -740,6 +787,7 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
   const arcGroups = groupChaptersByArc(project)
   const liveChapter = pipeline?.runtime?.currentChapter || null
   const recentChapterRuns = pipeline?.runtime?.recentChapters || []
+  const activeSpeedMode = pipeline?.speedMode || pipeline?.runtime?.speedMode || selectedSpeedMode
   const hasBoundModel = Boolean(project.aiModelConfig)
   const isAnalyzeMode = project.projectMode === 'ANALYZE'
   const workflowStage = project.workflowStage || (!project.blueprintConfirmedAt ? 'BLUEPRINT_CONFIRM' : !project.arcPlanConfirmedAt ? 'ARC_PLAN_CONFIRM' : 'GENERATE')
@@ -964,6 +1012,13 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
             </div>
             <span className={`text-xs ${pipeline.status === 'PAUSED' ? 'text-amber-500' : 'text-blue-500'}`}>{pipeline.progress}%</span>
           </div>
+          <div className={`mt-1 text-xs ${
+            pipeline.status === 'PAUSED'
+              ? 'text-amber-600 dark:text-amber-400'
+              : 'text-blue-600 dark:text-blue-400'
+          }`}>
+            生成模式：{speedModeLabels[activeSpeedMode]}
+          </div>
           <Progress value={pipeline.progress} max={100} size="sm" />
           <div className={`flex items-center justify-between mt-2 text-xs ${
             pipeline.status === 'PAUSED'
@@ -993,6 +1048,11 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
               </div>
               {liveChapter.lastMessage && (
                 <div className="mt-1 truncate">{liveChapter.lastMessage}</div>
+              )}
+              {liveChapter.error && (
+                <div className="mt-1 truncate text-red-600 dark:text-red-300">
+                  卡在 {getPipelineStepLabel(liveChapter.currentPhase || liveChapter.currentAgent || 'WRITE')}：{liveChapter.error}
+                </div>
               )}
             </div>
           )}
@@ -1313,26 +1373,42 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
                     onUpdated={fetchProject}
                   />
                   <Card className={`border-green-200 bg-green-50/60 dark:border-green-900/40 dark:bg-green-950/20 ${project.blueprintConfirmedAt && project.arcPlanConfirmedAt ? 'ring-1 ring-green-200 dark:ring-green-800/60' : ''}`}>
-                    <CardContent className="flex flex-col gap-3 p-5 lg:flex-row lg:items-center lg:justify-between">
-                      <div>
+                    <CardContent className="flex flex-col gap-4 p-5 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="space-y-2">
                         <div className="text-sm font-medium text-green-800 dark:text-green-200">3. 开始生成</div>
                         <div className="mt-1 text-sm text-green-700 dark:text-green-300">
                           {project.blueprintConfirmedAt && project.arcPlanConfirmedAt
                             ? '主链路已经解锁，可以直接开始生成章节目录和正文。'
                             : '只有当 Blueprint 和 ArcPlan 都确认后，系统才允许生成章节目录和正文。'}
                         </div>
+                        <div className="rounded-md border border-green-200 bg-white/70 px-3 py-2 text-xs leading-5 text-green-800 dark:border-green-900/50 dark:bg-slate-950/30 dark:text-green-200">
+                          当前模式：{speedModeLabels[selectedSpeedMode]}。{getSpeedModeDescription(selectedSpeedMode)}
+                        </div>
                         {flowBlockedReason && (
                           <div className="mt-2 text-xs text-green-700/80 dark:text-green-300/80">{flowBlockedReason}</div>
                         )}
                       </div>
-                      <Button
-                        variant="primary"
-                        onClick={handleStartPipeline}
-                        loading={pipelineStarting}
-                        disabled={pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING' || pipeline?.status === 'PAUSED' || !hasBoundModel || maintenanceActive || Boolean(flowBlockedReason)}
-                      >
-                        开始生成
-                      </Button>
+                      <div className="flex w-full flex-col gap-2 sm:w-56">
+                        <select
+                          value={selectedSpeedMode}
+                          onChange={(event) => setSelectedSpeedMode(event.target.value as GenerationSpeedMode)}
+                          disabled={pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING'}
+                          className="h-9 rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900 shadow-sm dark:border-gray-700 dark:bg-slate-950 dark:text-gray-100"
+                          aria-label="生成速度模式"
+                        >
+                          {speedModeOptions.map(option => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                          ))}
+                        </select>
+                        <Button
+                          variant="primary"
+                          onClick={handleStartPipeline}
+                          loading={pipelineStarting}
+                          disabled={pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING' || pipeline?.status === 'PAUSED' || !hasBoundModel || maintenanceActive || Boolean(flowBlockedReason)}
+                        >
+                          开始生成
+                        </Button>
+                      </div>
                     </CardContent>
                   </Card>
                 </CardContent>
@@ -1453,11 +1529,15 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
                             {getPipelineStepLabel(liveChapter.currentPhase || liveChapter.currentAgent || 'WRITE')}
                           </Badge>
                         </div>
-                        <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-600 dark:text-gray-400">
+                        <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-600 dark:text-gray-400 md:grid-cols-3">
                           <div>当前字数：{liveChapter.currentWordCount}</div>
                           <div>目标字数：{liveChapter.targetWordCount}</div>
                           <div>Planner：{formatDuration(liveChapter.phaseTimings.planner)}</div>
                           <div>Writer：{formatDuration(liveChapter.phaseTimings.writer)}</div>
+                          <div>Polisher：{formatDuration(liveChapter.phaseTimings.polisher)}</div>
+                          <div>Reviewer：{formatDuration(liveChapter.phaseTimings.reviewer)}</div>
+                          <div>Validator：{formatDuration(liveChapter.phaseTimings.validator)}</div>
+                          <div>Deslopper：{formatDuration(liveChapter.phaseTimings.deslopper)}</div>
                           <div>Summarizer：{formatDuration(liveChapter.phaseTimings.summarizer)}</div>
                           <div>DB 回写：{formatDuration(liveChapter.phaseTimings.db_write)}</div>
                         </div>
@@ -1482,9 +1562,13 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
                                 {chapterRun.status === 'FAILED' ? '失败' : chapterRun.qualityStatus === 'reviewing' ? '待审稿' : '完成'}
                               </span>
                             </div>
-                            <div className="mt-1 grid grid-cols-2 gap-2 text-gray-500 dark:text-gray-400">
+                            <div className="mt-1 grid grid-cols-2 gap-2 text-gray-500 dark:text-gray-400 md:grid-cols-3">
                               <div>Planner：{formatDuration(chapterRun.phaseTimings.planner)}</div>
                               <div>Writer：{formatDuration(chapterRun.phaseTimings.writer)}</div>
+                              <div>Polisher：{formatDuration(chapterRun.phaseTimings.polisher)}</div>
+                              <div>Reviewer：{formatDuration(chapterRun.phaseTimings.reviewer)}</div>
+                              <div>Validator：{formatDuration(chapterRun.phaseTimings.validator)}</div>
+                              <div>Deslopper：{formatDuration(chapterRun.phaseTimings.deslopper)}</div>
                               <div>Summarizer：{formatDuration(chapterRun.phaseTimings.summarizer)}</div>
                               <div>DB 回写：{formatDuration(chapterRun.phaseTimings.db_write)}</div>
                             </div>

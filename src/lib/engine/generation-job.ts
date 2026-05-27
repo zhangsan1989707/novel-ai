@@ -7,6 +7,7 @@ import {
   sanitizePipelineRuntime,
   type PipelineRuntimeState,
 } from './pipeline-runtime'
+import type { GenerationSpeedMode } from '@/lib/ai/speed-mode'
 
 interface JobProgress {
   jobId: number
@@ -25,10 +26,21 @@ export type JobRecoveryTarget =
   | { mode: 'retry_batch' }
   | { mode: 'retry_chapter'; chapterNumber: number }
 
+const DEFAULT_STALE_RUNNING_JOB_MS = 10 * 60 * 1000
+
 function normalizePayload(payload: unknown): Record<string, unknown> {
   return payload && typeof payload === 'object' && !Array.isArray(payload)
     ? payload as Record<string, unknown>
     : {}
+}
+
+function readLastRuntimeEventAt(payload: Record<string, unknown>, fallback: Date): Date {
+  const runtime = sanitizePipelineRuntime(payload.runtime)
+  if (runtime.lastEventAt) {
+    const parsed = new Date(runtime.lastEventAt)
+    if (!Number.isNaN(parsed.getTime())) return parsed
+  }
+  return fallback
 }
 
 function normalizeRecoveryTarget(value: unknown): JobRecoveryTarget | null {
@@ -42,13 +54,17 @@ function normalizeRecoveryTarget(value: unknown): JobRecoveryTarget | null {
   return null
 }
 
-export async function createJob(projectId: number, type: string = 'FULL_PIPELINE'): Promise<number> {
+export async function createJob(
+  projectId: number,
+  type: string = 'FULL_PIPELINE',
+  speedMode: GenerationSpeedMode = 'balanced'
+): Promise<number> {
   const job = await prisma.generationJob.create({
     data: {
       projectId,
       type,
       status: 'PENDING',
-      payload: ({ runtime: createPipelineRuntimeState() } as unknown) as Prisma.InputJsonValue,
+      payload: ({ speedMode, runtime: createPipelineRuntimeState(speedMode) } as unknown) as Prisma.InputJsonValue,
     },
   })
 
@@ -252,6 +268,42 @@ export async function getJobProgress(jobId: number): Promise<JobProgress | null>
     ),
     error: job.errorMessage || undefined,
   }
+}
+
+export async function failStaleRunningJobs(
+  options: {
+    projectId?: number
+    staleMs?: number
+  } = {}
+): Promise<number> {
+  const staleMs = options.staleMs || DEFAULT_STALE_RUNNING_JOB_MS
+  const now = Date.now()
+  const jobs = await prisma.generationJob.findMany({
+    where: {
+      status: 'RUNNING',
+      ...(options.projectId ? { projectId: options.projectId } : {}),
+    },
+    select: {
+      id: true,
+      payload: true,
+      updatedAt: true,
+    },
+  })
+
+  let failedCount = 0
+  for (const job of jobs) {
+    const payload = normalizePayload(job.payload)
+    const lastEventAt = readLastRuntimeEventAt(payload, job.updatedAt)
+    if (now - lastEventAt.getTime() < staleMs) continue
+
+    await failJob(
+      job.id,
+      `生成任务超过 ${Math.round(staleMs / 60000)} 分钟没有进度事件，已标记为失败，可从恢复入口继续`
+    )
+    failedCount++
+  }
+
+  return failedCount
 }
 
 export async function resumeJob(jobId: number): Promise<boolean> {

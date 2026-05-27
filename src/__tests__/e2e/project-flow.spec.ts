@@ -86,6 +86,7 @@ test.describe('当前创作主流程', () => {
       hasText: '只有当 Blueprint 和 ArcPlan 都确认后，系统才允许生成章节目录和正文。',
     }).first()
     await expect(gatedStartCard).toBeVisible()
+    await expect(gatedStartCard.getByLabel('生成速度模式')).toHaveValue('balanced')
     await expect(gatedStartCard.getByRole('button', { name: '开始生成' })).toBeDisabled()
 
     await expect(page.getByText('暂无章节，开始 AI 生成后会自动生成')).toBeVisible()
