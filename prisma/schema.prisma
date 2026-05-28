@@ -166,6 +166,11 @@ model NovelProject {
   @@index([creatorId])
   @@index([status])
   @@index([creatorId, status])
+  @@index([pipelineJobId])
+  @@index([workflowStage])
+  @@index([styleProfileId])
+  @@index([projectMode])
+  @@index([createdAt])
   @@map("novel_projects")
 }
 
@@ -198,6 +203,7 @@ model NovelChapter {
   @@unique([projectId, chapterNumber])
   @@index([projectId])
   @@index([projectId, status])
+  @@index([status])
   @@map("novel_chapters")
 }
 
@@ -219,6 +225,7 @@ model ChapterCommit {
 
   @@index([projectId])
   @@index([projectId, chapterNo])
+  @@index([status])
   @@map("chapter_commits")
 }
 
@@ -245,8 +252,11 @@ model VirtualWriter {
   chapters           NovelChapter[]
   creator            User             @relation(fields: [creatorId], references: [id])
   documents          WriterDocument[]
+  styleProfiles      StyleProfile[]
 
   @@index([creatorId])
+  @@index([isPublic])
+  @@index([trainingStatus])
   @@map("virtual_writers")
 }
 
@@ -264,6 +274,7 @@ model WriterDocument {
   virtualWriter   VirtualWriter  @relation(fields: [virtualWriterId], references: [id], onDelete: Cascade)
 
   @@index([virtualWriterId])
+  @@index([status])
   @@map("writer_documents")
 }
 
@@ -337,14 +348,15 @@ model AnalysisTask {
 }
 
 model SourceNovel {
-  id           String       @id @default(cuid())
-  projectId    Int          @unique
+  id           String         @id @default(cuid())
+  projectId    Int            @unique
   originalText String
   wordCount    Int
   sourceName   String?
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
-  project      NovelProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  project      NovelProject   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  styleProfiles StyleProfile[]
 
   @@map("source_novels")
 }
@@ -369,9 +381,12 @@ model StyleProfile {
   updatedAt       DateTime           @updatedAt
   projects        NovelProject[]
   creator         User               @relation(fields: [creatorId], references: [id])
+  sourceNovel     SourceNovel?        @relation(fields: [sourceNovelId], references: [id])
+  virtualWriter   VirtualWriter?      @relation(fields: [virtualWriterId], references: [id])
 
   @@index([creatorId])
   @@index([sourceType])
+  @@index([isPublic])
   @@map("style_profiles")
 }
 
@@ -404,6 +419,9 @@ model Character {
   project       NovelProject  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId])
+  @@index([creatorId])
+  @@index([name])
+  @@index([role])
   @@map("characters")
 }
 
@@ -424,6 +442,7 @@ model Plotline {
   @@index([projectId])
   @@index([status])
   @@index([projectId, status, plantedAt])
+  @@index([type])
   @@map("plotlines")
 }
 
@@ -456,6 +475,7 @@ model StoryEvent {
   @@index([projectId])
   @@index([chapterNo])
   @@index([projectId, createdAt])
+  @@index([eventType])
   @@map("story_events")
 }
 
@@ -476,6 +496,8 @@ model AgentLog {
 
   @@index([projectId, chapterNo])
   @@index([createdAt])
+  @@index([agentType])
+  @@index([status])
   @@map("agent_logs")
 }
 
@@ -551,6 +573,7 @@ model Notification {
 
   @@index([userId, isRead])
   @@index([userId, createdAt])
+  @@index([createdAt])
   @@map("notifications")
 }
 
@@ -601,6 +624,8 @@ model AIUsage {
 
   @@index([userId, usageMonth])
   @@index([projectId])
+  @@index([userId])
+  @@index([createdAt])
   @@map("ai_usages")
 }
 
@@ -617,6 +642,7 @@ model MarketTrend {
   createdAt      DateTime @default(now())
 
   @@index([platform, genre, rankDate])
+  @@index([rankDate])
   @@map("market_trends")
 }
 
@@ -637,6 +663,8 @@ model MarketBook {
 
   @@index([platform, genre])
   @@index([platform, rankDate])
+  @@index([rankPosition])
+  @@index([rankDate])
   @@map("market_books")
 }
 
@@ -752,6 +780,8 @@ model GenerationJob {
 
   @@index([projectId])
   @@index([status])
+  @@index([type])
+  @@index([projectId, status])
   @@map("generation_jobs")
 }
 
@@ -856,6 +886,9 @@ model Villain {
   project      NovelProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId])
+  @@index([arcNumber])
+  @@index([tier])
+  @@index([lifecycle])
   @@map("villains")
 }
 

@@ -18,6 +18,38 @@ interface QueueJob {
 
 // 内存队列（重启后丢失，生产环境用 BullMQ）
 const jobQueue: Map<string, QueueJob> = new Map()
+const MAX_QUEUE_SIZE = 10000
+const MAX_JOB_AGE_MS = 24 * 60 * 60 * 1000
+
+function cleanupQueue() {
+  const now = Date.now()
+  let removed = 0
+
+  for (const [id, job] of jobQueue.entries()) {
+    if (job.status === 'COMPLETED' || job.status === 'FAILED') {
+      const age = now - (job.completedAt?.getTime() || job.createdAt.getTime())
+      if (age > MAX_JOB_AGE_MS) {
+        jobQueue.delete(id)
+        removed++
+      }
+    }
+  }
+
+  if (jobQueue.size > MAX_QUEUE_SIZE) {
+    const pendingCount = Array.from(jobQueue.values()).filter(j => j.status === 'PENDING').length
+    if (pendingCount < jobQueue.size * 0.1) {
+      const entries = Array.from(jobQueue.entries())
+        .filter(([, j]) => j.status !== 'PENDING')
+        .sort(([, a], [, b]) => a.createdAt.getTime() - b.createdAt.getTime())
+
+      const toRemove = entries.slice(0, Math.max(0, jobQueue.size - MAX_QUEUE_SIZE * 0.7))
+      for (const [id] of toRemove) {
+        jobQueue.delete(id)
+        removed++
+      }
+    }
+  }
+}
 
 /**
  * 入队
@@ -37,6 +69,7 @@ export async function enqueueChapterGeneration(
   }
 
   jobQueue.set(jobId, job)
+  cleanupQueue()
 
   // 同时记录到数据库
   await prisma.agentLog.create({
@@ -66,7 +99,10 @@ export async function updateJobStatus(
   if (job) {
     job.status = status
     if (status === 'RUNNING') job.startedAt = new Date()
-    if (status === 'COMPLETED' || status === 'FAILED') job.completedAt = new Date()
+    if (status === 'COMPLETED' || status === 'FAILED') {
+      job.completedAt = new Date()
+      cleanupQueue()
+    }
     if (error) job.error = error
     jobQueue.set(jobId, job)
   }

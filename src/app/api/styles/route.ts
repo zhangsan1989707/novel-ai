@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const parsed = createStyleSchema.parse(body)
 
-    const creatorId = getCurrentUserId()
+    const creatorId = await getCurrentUserId()
 
     const style = await prisma.styleProfile.create({
       data: {

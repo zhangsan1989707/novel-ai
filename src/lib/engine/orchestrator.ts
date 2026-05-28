@@ -149,8 +149,8 @@ export async function runChapterGenerationPipeline(
     }
   }
 
-  // 初始化故事状态
-  if (!isRetry) {
+  const state = await storyState.getStoryState(projectId)
+  if (!state) {
     await storyState.initStoryState(projectId, project.totalVolumes * 25)
   }
   const directorContext = isRetry ? null : await directChapter(chapterNo, projectId).catch(() => null)

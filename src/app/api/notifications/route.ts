@@ -17,7 +17,6 @@ const createNotificationSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional(),
 })
 
-const DEFAULT_USER_ID = getCurrentUserId()
 
 // ============================================
 // API Handlers
@@ -33,9 +32,10 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '20')
     const unreadOnly = searchParams.get('unreadOnly') === 'true'
+    const userId = await getCurrentUserId()
 
     const where = {
-      userId: DEFAULT_USER_ID,
+      userId,
       ...(unreadOnly ? { isRead: false } : {}),
     }
 
@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
     ])
 
     const unreadCount = await prisma.notification.count({
-      where: { userId: DEFAULT_USER_ID, isRead: false },
+      where: { userId, isRead: false },
     })
 
     return NextResponse.json({
@@ -80,10 +80,11 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const data = createNotificationSchema.parse(body)
+    const userId = await getCurrentUserId()
 
     const notification = await prisma.notification.create({
       data: {
-        userId: DEFAULT_USER_ID,
+        userId,
         type: data.type,
         priority: data.priority,
         title: data.title,

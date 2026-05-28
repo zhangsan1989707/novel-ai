@@ -18,3 +18,4 @@ export { CollapsibleSection, StepIndicator, ProgressIndicator } from './Collapsi
 export { ExpandableList } from './ExpandableList'
 export { ConfirmToast, useConfirmDialog } from './ConfirmToast'
 export { Tabs, TabsList, TabsTrigger, TabsContent } from './Tabs'
+export { ErrorBoundary } from './ErrorBoundary'

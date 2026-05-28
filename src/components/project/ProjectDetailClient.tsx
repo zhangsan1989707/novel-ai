@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { Button, Card, CardContent, CardHeader, CardTitle, Badge, Progress, Modal, toast, MoreActionsMenu } from '@/components/ui'
+import { Button, Card, CardContent, CardHeader, CardTitle, Badge, Progress, Modal, toast, MoreActionsMenu, ErrorBoundary } from '@/components/ui'
 import { BlueprintConsole, ProjectBaseInfoForm } from '@/components/project'
 import { WorkflowBlueprintCard } from '@/components/project/WorkflowBlueprintCard'
 import { WorkflowArcPlanCard } from '@/components/project/WorkflowArcPlanCard'
@@ -73,6 +73,8 @@ export default function ProjectDetailPage({ initialProject }: { initialProject: 
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [maintenanceRetrying, setMaintenanceRetrying] = useState(false)
+  const [confirmingBlueprint, setConfirmingBlueprint] = useState(false)
+  const [confirmingRoadmap, setConfirmingRoadmap] = useState(false)
   const [activeTab, setActiveTab] = useState<'dashboard' | 'settings' | 'analysis' | 'characters'>('dashboard')
 
   const {
@@ -113,6 +115,42 @@ export default function ProjectDetailPage({ initialProject }: { initialProject: 
     }
   }
 
+  const handleConfirmBlueprint = async () => {
+    setConfirmingBlueprint(true)
+    try {
+      const res = await fetch(`/api/novel/projects/${projectId}/blueprint/confirm`, { method: 'POST' })
+      const data = await res.json()
+      if (data.success) {
+        toast.success('蓝图已确认')
+        await fetchProject()
+      } else {
+        toast.error(data.error?.message || '确认蓝图失败')
+      }
+    } catch {
+      toast.error('确认蓝图失败')
+    } finally {
+      setConfirmingBlueprint(false)
+    }
+  }
+
+  const handleConfirmRoadmap = async () => {
+    setConfirmingRoadmap(true)
+    try {
+      const res = await fetch(`/api/novel/projects/${projectId}/arc-plans/confirm`, { method: 'POST' })
+      const data = await res.json()
+      if (data.success) {
+        toast.success('故事路线图已确认')
+        await fetchProject()
+      } else {
+        toast.error(data.error?.message || '确认路线图失败')
+      }
+    } catch {
+      toast.error('确认路线图失败')
+    } finally {
+      setConfirmingRoadmap(false)
+    }
+  }
+
   const handleQuickExportTxt = async () => {
     try {
       const res = await fetch(`/api/novel/projects/${projectId}/export`, {
@@ -142,7 +180,7 @@ ${ch.content || ''}
         document.body.appendChild(a)
         a.click()
         document.body.removeChild(a)
-        URL.revokeObjectURL(url)
+        setTimeout(() => URL.revokeObjectURL(url), 1000)
         toast.success('导出成功')
       }
     } catch {
@@ -344,7 +382,9 @@ ${ch.content || ''}
 
       {isAnalyzeMode ? (
         <div className="space-y-6">
-          <AnalysisWorkbench projectId={projectId} />
+          <ErrorBoundary>
+            <AnalysisWorkbench projectId={projectId} />
+          </ErrorBoundary>
         </div>
       ) : (
         <>
@@ -404,6 +444,34 @@ ${ch.content || ''}
                             {nextStepState.ctaLabel}
                           </Button>
                         )}
+                        {nextStepState.ctaAction === 'blueprint' && (
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            disabled={!project.bookBlueprint || confirmingBlueprint}
+                            onClick={() => {
+                              if (!project.bookBlueprint) return
+                              handleConfirmBlueprint()
+                            }}
+                            loading={confirmingBlueprint}
+                          >
+                            {project.bookBlueprint ? '确认全书蓝图' : '等待蓝图生成'}
+                          </Button>
+                        )}
+                        {nextStepState.ctaAction === 'roadmap' && (
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            disabled={!project.arcPlans?.length || confirmingRoadmap}
+                            onClick={() => {
+                              if (!project.arcPlans?.length) return
+                              handleConfirmRoadmap()
+                            }}
+                            loading={confirmingRoadmap}
+                          >
+                            {project.arcPlans?.length ? '确认故事路线图' : '等待路线图生成'}
+                          </Button>
+                        )}
                       </div>
                     </div>
                   </CardContent>
@@ -412,6 +480,24 @@ ${ch.content || ''}
 
               {activeTab === 'dashboard' && (
                 <>
+                  {workflowStage === 'BLUEPRINT_CONFIRM' && (
+                    <WorkflowBlueprintCard
+                      projectId={projectId}
+                      blueprint={project.bookBlueprint ?? null}
+                      confirmed={Boolean(project.blueprintConfirmedAt)}
+                      onUpdated={fetchProject}
+                    />
+                  )}
+
+                  {workflowStage === 'ARC_PLAN_CONFIRM' && (
+                    <WorkflowArcPlanCard
+                      projectId={projectId}
+                      confirmed={Boolean(project.arcPlanConfirmedAt)}
+                      roadmap={(project.storyRoadmap || []) as unknown as import('@/lib/engine/story-roadmap').StoryRoadmapItem[]}
+                      onUpdated={fetchProject}
+                    />
+                  )}
+
                   <Card className="border-green-200 bg-green-50/70 dark:border-green-900/40 dark:bg-green-950/20">
                     <CardContent className="p-5">
                       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -518,7 +604,9 @@ ${ch.content || ''}
               )}
 
               {activeTab === 'analysis' && project.projectMode === 'ANALYZE' && (
-                <AnalysisWorkbench projectId={projectId} />
+                <ErrorBoundary>
+                  <AnalysisWorkbench projectId={projectId} />
+                </ErrorBoundary>
               )}
 
               {activeTab === 'characters' && project.projectMode === 'ANALYZE' && (
@@ -530,7 +618,9 @@ ${ch.content || ''}
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
+                    <ErrorBoundary>
                     <CharacterPanel projectId={projectId} />
+                  </ErrorBoundary>
                   </CardContent>
                 </Card>
               )}
@@ -559,6 +649,7 @@ ${ch.content || ''}
                     </CardContent>
                   </Card>
 
+                  <ErrorBoundary>
                   <BlueprintConsole
                     key={`${project.updatedAt}-${project.blueprintConsole.generatedAt || 'console'}`}
                     projectId={projectId}
@@ -568,18 +659,21 @@ ${ch.content || ''}
                     onRefreshed={fetchProject}
                     onEditBaseInfo={() => openModal('edit')}
                   />
+                  </ErrorBoundary>
                 </div>
               )}
             </div>
 
-            <ProjectSidebar
-              project={project}
-              progress={progress}
-              effectiveTargetWordCount={effectiveTargetWordCount}
-              estimatedTotalChapters={estimatedTotalChapters}
-              sidebarCollapsed={sidebarCollapsed}
-              onToggleSidebar={setSidebarCollapsed}
-            />
+            <div className="xl:col-span-3">
+              <ProjectSidebar
+                project={project}
+                progress={progress}
+                effectiveTargetWordCount={effectiveTargetWordCount}
+                estimatedTotalChapters={estimatedTotalChapters}
+                sidebarCollapsed={sidebarCollapsed}
+                onToggleSidebar={setSidebarCollapsed}
+              />
+            </div>
           </div>
         </>
       )}

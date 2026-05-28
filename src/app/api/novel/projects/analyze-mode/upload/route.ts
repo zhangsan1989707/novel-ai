@@ -214,7 +214,7 @@ ${contentPreview}
         // 元数据提取失败不影响主流程，使用默认值
       }
 
-      let creatorId = getCurrentUserId()
+      let creatorId = await getCurrentUserId()
       const user = await prisma.user.findUnique({ where: { id: creatorId } })
       if (!user) {
         const newUser = await prisma.user.create({

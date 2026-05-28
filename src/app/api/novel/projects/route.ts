@@ -136,7 +136,7 @@ export async function GET(request: NextRequest) {
       ]
     }
 
-    const creatorId = getCurrentUserId()
+    const creatorId = await getCurrentUserId()
 
     const [projects, total, statsResult] = await Promise.all([
       prisma.novelProject.findMany({
@@ -218,7 +218,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const validatedData = createProjectSchema.parse(body)
 
-    let creatorId = getCurrentUserId()
+    let creatorId = await getCurrentUserId()
 
     // 确保用户存在：优先使用当前 ID，否则回退到开发用户（按邮箱查找或创建）
     const userById = await prisma.user.findUnique({ where: { id: creatorId } })

@@ -40,11 +40,31 @@ export function useProjectPipeline(options: {
   const [pipeline, setPipeline] = useState<PipelineStatus | null>(null)
   const [pipelineStarting, setPipelineStarting] = useState(false)
   const lastPipelineStatusRef = useRef<PipelineStatus['status'] | null>(null)
+  const lastSnapshotUpdatedAtRef = useRef<string | null>(null)
   const pipelineStreamRef = useRef<EventSource | null>(null)
+  const onCompletedRef = useRef(onCompleted)
+  const onFailedRef = useRef(onFailed)
+  const pollAbortRef = useRef<AbortController | null>(null)
+
+  useEffect(() => {
+    onCompletedRef.current = onCompleted
+  })
+  useEffect(() => {
+    onFailedRef.current = onFailed
+  })
 
   const applyPipelineSnapshot = useCallback((nextPipeline: PipelineStatus) => {
     const nextStatus = nextPipeline.status
     const prevStatus = lastPipelineStatusRef.current
+    const nextUpdatedAt = nextPipeline.updatedAt || ''
+
+    if (nextUpdatedAt && lastSnapshotUpdatedAtRef.current) {
+      if (nextUpdatedAt < lastSnapshotUpdatedAtRef.current) return
+    }
+    if (nextUpdatedAt) {
+      lastSnapshotUpdatedAtRef.current = nextUpdatedAt
+    }
+
     setPipeline(nextPipeline)
     lastPipelineStatusRef.current = nextStatus
 
@@ -55,24 +75,30 @@ export function useProjectPipeline(options: {
 
     if (nextStatus === 'COMPLETED' && prevStatus !== 'COMPLETED') {
       toast.success(`AI 生成完成，共生成 ${nextPipeline.totalChapters} 章`)
-      onCompleted?.()
+      onCompletedRef.current?.()
     } else if (nextStatus === 'FAILED' && prevStatus !== 'FAILED') {
       toast.error(nextPipeline.error || 'AI 生成失败')
-      onFailed?.()
+      onFailedRef.current?.()
     }
-  }, [onCompleted, onFailed, setSelectedChapterNumber])
+  }, [setSelectedChapterNumber])
 
   useEffect(() => {
     let timer: ReturnType<typeof setInterval> | null = null
 
     const pollPipeline = async () => {
       try {
-        const res = await fetch(`/api/novel/projects/${projectId}/pipeline/status`)
+        const controller = new AbortController()
+        pollAbortRef.current?.abort()
+        pollAbortRef.current = controller
+        const res = await fetch(`/api/novel/projects/${projectId}/pipeline/status`, {
+          signal: controller.signal,
+        })
         const data = await res.json()
         if (data.success) {
           applyPipelineSnapshot(data.data)
         }
-      } catch {
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return
         // silent fail on polling errors
       }
     }
@@ -82,6 +108,7 @@ export function useProjectPipeline(options: {
     timer = setInterval(pollPipeline, 3000)
     return () => {
       if (timer) clearInterval(timer)
+      pollAbortRef.current?.abort()
     }
   }, [projectId, applyPipelineSnapshot])
 
@@ -94,10 +121,11 @@ export function useProjectPipeline(options: {
     const eventSource = new EventSource(`/api/novel/projects/${projectId}/pipeline/stream`)
     pipelineStreamRef.current = eventSource
 
+    const applyRef = applyPipelineSnapshot
     eventSource.addEventListener('pipeline', (event) => {
       try {
         const snapshot = JSON.parse((event as MessageEvent).data) as PipelineStatus
-        applyPipelineSnapshot(snapshot)
+        applyRef(snapshot)
       } catch {
         // ignore bad stream payloads
       }

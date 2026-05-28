@@ -131,12 +131,13 @@ export async function resolveCurrentUserId(): Promise<number> {
     return Number(session.user.id)
   }
 
+  if (isProductionLike()) {
+    throw new Error('Unauthorized: no valid session')
+  }
+
   return 1
 }
 
-/**
- * @deprecated 迁移中临时保留，请尽快改为异步调用 `resolveCurrentUserId()`
- */
-export function getCurrentUserId(): number {
-  return 1
+export async function getCurrentUserId(): Promise<number> {
+  return resolveCurrentUserId()
 }

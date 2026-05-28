@@ -1,19 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUserId } from '@/lib/auth'
 
-const DEFAULT_USER_ID = getCurrentUserId()
-
-/**
- * PATCH /api/notifications/read-all
- * 标记所有通知为已读
- */
 export async function PATCH(request: NextRequest) {
   try {
     const { prisma } = await import('@/lib/prisma')
+    const userId = await getCurrentUserId()
 
     const result = await prisma.notification.updateMany({
       where: {
-        userId: DEFAULT_USER_ID,
+        userId,
         isRead: false,
       },
       data: {

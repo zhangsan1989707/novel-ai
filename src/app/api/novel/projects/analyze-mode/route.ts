@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
     } = analyzeModeSchema.parse(body)
 
     // 确保用户存在
-    let creatorId = getCurrentUserId()
+    let creatorId = await getCurrentUserId()
     const user = await prisma.user.findUnique({ where: { id: creatorId } })
     if (!user) {
       const newUser = await prisma.user.create({

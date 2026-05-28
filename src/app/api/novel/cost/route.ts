@@ -16,11 +16,11 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const action = searchParams.get('action')
-    const userId = getCurrentUserId()
-
+    const userId = await getCurrentUserId()
+  
     // 初始化默认定价（首次运行时）
     await initializeDefaultPricings()
-
+  
     if (action === 'quota') {
       // 获取配额状态
       const status = await checkQuotaStatus(userId)
@@ -75,7 +75,7 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
-    const userId = getCurrentUserId()
+    const userId = await getCurrentUserId()
 
     const { monthlyLimit, alertThreshold } = body
 

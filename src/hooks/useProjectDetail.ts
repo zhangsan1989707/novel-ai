@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { toast } from '@/components/ui'
 import type { ProjectBaseInfoFormData } from '@/components/project'
@@ -228,6 +228,9 @@ export function useProjectDetail(initialProject: ProjectDetail | null) {
 
   const [previewChapter, setPreviewChapter] = useState<ProjectChapter | null>(null)
 
+  const fetchIdRef = useRef(0)
+  const abortControllerRef = useRef<AbortController | null>(null)
+
   const openModal = useCallback((key: ModalKey) => {
     setModals(prev => ({ ...prev, [key]: true }))
   }, [])
@@ -237,26 +240,38 @@ export function useProjectDetail(initialProject: ProjectDetail | null) {
   }, [])
 
   const fetchProject = useCallback(async () => {
+    const fetchId = ++fetchIdRef.current
+    abortControllerRef.current?.abort()
+    const controller = new AbortController()
+    abortControllerRef.current = controller
+
     try {
-      const res = await fetch(`/api/novel/projects/${projectId}`)
+      const res = await fetch(`/api/novel/projects/${projectId}`, {
+        signal: controller.signal,
+      })
+      if (fetchId !== fetchIdRef.current) return
       const data = await res.json()
       if (data.success) {
         setProject(data.data)
       } else {
-        setError(data.error.message)
+        setError(data.error?.message)
       }
-    } catch {
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return
+      if (fetchId !== fetchIdRef.current) return
       setError('获取小说详情失败')
     } finally {
-      setLoading(false)
+      if (fetchId === fetchIdRef.current) {
+        setLoading(false)
+      }
     }
   }, [projectId])
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void fetchProject()
-    }, 0)
-    return () => window.clearTimeout(timer)
+    fetchProject()
+    return () => {
+      abortControllerRef.current?.abort()
+    }
   }, [fetchProject])
 
   const maintenanceActive = Boolean(
@@ -286,12 +301,16 @@ export function useProjectDetail(initialProject: ProjectDetail | null) {
   const handleUpdate = async (formData: ProjectBaseInfoFormData) => {
     setSubmitting(true)
     try {
+      const body: Record<string, unknown> = { title: formData.title }
+      if (formData.description !== undefined) body.description = formData.description
+      if (formData.genre !== undefined) body.genre = formData.genre
+      if (formData.writingStyle !== undefined) body.writingStyle = formData.writingStyle
+      if (formData.targetAudience !== undefined) body.targetAudience = formData.targetAudience
+
       const res = await fetch(`/api/novel/projects/${projectId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: formData.title,
-        }),
+        body: JSON.stringify(body),
       })
       const data = await res.json()
       if (data.success) {

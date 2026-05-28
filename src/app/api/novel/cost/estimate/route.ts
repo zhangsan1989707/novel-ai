@@ -198,7 +198,7 @@ export async function POST(request: Request) {
     let willExceedQuota = false
     
     try {
-      const DEFAULT_USER_ID = getCurrentUserId()
+      const DEFAULT_USER_ID = await getCurrentUserId()
 
       const quota = await prisma.userQuota.findUnique({
         where: { userId: DEFAULT_USER_ID },

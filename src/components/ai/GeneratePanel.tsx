@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button, Input, Select } from '@/components/ui'
 import { Sparkles, Settings } from 'lucide-react'
 
@@ -43,6 +43,19 @@ export function GeneratePanel({
     stream: defaultSettings?.stream ?? true,
     virtualWriterId: defaultSettings?.virtualWriterId,
   })
+
+  useEffect(() => {
+    if (defaultSettings) {
+      setSettings(prev => ({
+        useContext: defaultSettings.useContext ?? prev.useContext,
+        contextChapterCount: defaultSettings.contextChapterCount ?? prev.contextChapterCount,
+        targetWordCount: defaultSettings.targetWordCount ?? prev.targetWordCount,
+        temperature: defaultSettings.temperature ?? prev.temperature,
+        stream: defaultSettings.stream ?? prev.stream,
+        virtualWriterId: defaultSettings.virtualWriterId ?? prev.virtualWriterId,
+      }))
+    }
+  }, [defaultSettings])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
