@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
 import { logError } from '@/lib/logger'
+import { loadProjectForExport } from '@/lib/export/service'
 
 interface RouteParams {
   params: Promise<{ projectId: string }>
@@ -8,7 +8,7 @@ interface RouteParams {
 
 /**
  * GET /api/novel/projects/{projectId}/export-data
- * 获取项目导出数据（包含章节内容）
+ * 获取项目导出数据（兼容旧接口，已标记为 Deprecated）
  */
 export async function GET(request: NextRequest, { params }: RouteParams) {
   let projectIdNum: number | null = null
@@ -23,25 +23,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       )
     }
 
-    const project = await prisma.novelProject.findUnique({
-      where: { id: projectIdNum },
-      include: {
-        bookBlueprint: true,
-        storyState: true,
-        worldState: true,
-        arcPlans: {
-          orderBy: { arcNumber: 'asc' },
-        },
-        chapters: {
-          orderBy: { chapterNumber: 'asc' },
-          select: {
-            chapterNumber: true,
-            title: true,
-            content: true,
-          },
-        },
-      },
-    })
+    const project = await loadProjectForExport(projectIdNum)
 
     if (!project) {
       return NextResponse.json(
@@ -50,19 +32,31 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       )
     }
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        id: project.id,
-        title: project.title,
-        outline: project.outline,
-        bookBlueprint: project.bookBlueprint,
-        storyState: project.storyState,
-        worldState: project.worldState,
-        arcPlans: project.arcPlans,
-        chapters: project.chapters,
+    return NextResponse.json(
+      {
+        success: true,
+        data: {
+          id: project.id,
+          title: project.title,
+          outline: project.outline,
+          bookBlueprint: project.bookBlueprint,
+          storyState: project.storyState,
+          worldState: (project as { worldState?: unknown }).worldState ?? null,
+          arcPlans: project.arcPlans,
+          chapters: project.chapters.map((chapter) => ({
+            chapterNumber: chapter.chapterNumber,
+            title: chapter.title,
+            content: chapter.content,
+          })),
+        },
       },
-    })
+      {
+        headers: {
+          'X-Deprecated-Route': 'true',
+          'X-Deprecated-Suggestion': 'POST /api/novel/projects/{projectId}/export { view: "data" }',
+        },
+      }
+    )
   } catch (error) {
     logError(error instanceof Error ? error : new Error(String(error)), { type: 'get_export_data', projectId: projectIdNum })
     return NextResponse.json(

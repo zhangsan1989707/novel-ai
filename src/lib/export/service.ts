@@ -22,7 +22,7 @@ type ExportProjectCore = Pick<
   'title' | 'description' | 'genre' | 'createdAt' | 'updatedAt'
 >
 
-async function loadProjectForExport(projectId: number) {
+export async function loadProjectForExport(projectId: number) {
   return prisma.novelProject.findUnique({
     where: { id: projectId },
     include: {

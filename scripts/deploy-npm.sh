@@ -2,7 +2,7 @@
 
 set -e
 
-SERVER="root@47.109.85.168"
+SERVER="root@DEPLOY_SERVER"
 DEPLOY_DIR="/opt/novel-ai"
 PROJECT_DIR=$(cd "$(dirname "$0")/.." && pwd)
 
@@ -13,7 +13,7 @@ if ! command -v sshpass &> /dev/null; then
   brew install hudochenkov/sshpass/sshpass 2>/dev/null || true
 fi
 
-SSH_PASSWORD="Sfpy5NN;e"
+SSH_PASSWORD="${NOVELAI_SSH_PASSWORD:-$(cat .deploy-password 2>/dev/null || true)}"
 
 echo "📝 生成版本信息..."
 cd "$PROJECT_DIR"
@@ -90,4 +90,4 @@ EOF
 
 echo ""
 echo "✅ 部署完成！"
-echo "📍 访问地址: http://47.109.85.168:3200"
+echo "📍 访问地址: http://DEPLOY_SERVER:3200"

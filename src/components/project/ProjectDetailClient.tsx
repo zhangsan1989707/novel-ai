@@ -1184,7 +1184,11 @@ export default function ProjectDetailPage({ initialProject }: ProjectDetailClien
                 onExport={() => {
                   const handleExport = async () => {
                     try {
-                      const res = await fetch(`/api/novel/projects/${projectId}/export-data`)
+                      const res = await fetch(`/api/novel/projects/${projectId}/export`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ view: 'data' }),
+                    })
                       const data = await res.json()
                       if (data.success) {
                         let content = `${project.title}\n\n${'='.repeat(40)}\n\n`

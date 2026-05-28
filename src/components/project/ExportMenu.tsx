@@ -72,7 +72,11 @@ function exportAsMarkdown(data: ExportData): string {
 export function ExportMenu({ project }: ExportMenuProps) {
   const handleExportTxt = async () => {
     try {
-      const res = await fetch(`/api/novel/projects/${project.id}/export-data`)
+      const res = await fetch(`/api/novel/projects/${project.id}/export`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ view: 'data' }),
+      })
       if (!res.ok) throw new Error('获取数据失败')
 
       const data = await res.json()
@@ -89,7 +93,11 @@ export function ExportMenu({ project }: ExportMenuProps) {
 
   const handleExportMarkdown = async () => {
     try {
-      const res = await fetch(`/api/novel/projects/${project.id}/export-data`)
+      const res = await fetch(`/api/novel/projects/${project.id}/export`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ view: 'data' }),
+      })
       if (!res.ok) throw new Error('获取数据失败')
 
       const data = await res.json()

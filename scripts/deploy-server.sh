@@ -3,7 +3,7 @@
 set -e
 
 # 配置
-SERVER="root@47.109.85.168"
+SERVER="root@DEPLOY_SERVER"
 DEPLOY_DIR="/opt/novel-ai-temp"
 PROJECT_DIR=$(cd "$(dirname "$0")/.." && pwd)
 
@@ -56,4 +56,4 @@ EOF
 
 echo ""
 echo "✅ 部署完成！"
-echo "📍 访问地址: http://47.109.85.168:3200"
+echo "📍 访问地址: http://DEPLOY_SERVER:3200"
