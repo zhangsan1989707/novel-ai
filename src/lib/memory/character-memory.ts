@@ -215,3 +215,113 @@ export async function createCharacterProfile(
   })
   return character.id
 }
+
+/**
+ * 角色声音指纹接口
+ */
+export interface CharacterVoice {
+  name: string
+  speechStyle: string | null
+  vocabularyLevel: string | null
+  sentencePattern: string | null
+  catchphraseStyle: string | null
+  dialogueExamples: string[]
+  voiceNotes: string | null
+}
+
+/**
+ * 获取角色声音指纹
+ */
+export async function getCharacterVoiceFingerprint(
+  characterId: string
+): Promise<CharacterVoice | null> {
+  const character = await prisma.character.findUnique({
+    where: { id: characterId },
+    select: {
+      name: true,
+      speechStyle: true,
+      vocabularyLevel: true,
+      sentencePattern: true,
+      catchphraseStyle: true,
+      dialogueExamples: true,
+      voiceNotes: true,
+    },
+  })
+
+  if (!character) return null
+
+  // 如果没有任何声音数据，返回 null
+  const hasVoiceData = character.speechStyle || character.vocabularyLevel ||
+    character.sentencePattern || character.catchphraseStyle ||
+    (character.dialogueExamples && character.dialogueExamples.length > 0) ||
+    character.voiceNotes
+
+  if (!hasVoiceData) return null
+
+  return {
+    name: character.name,
+    speechStyle: character.speechStyle,
+    vocabularyLevel: character.vocabularyLevel,
+    sentencePattern: character.sentencePattern,
+    catchphraseStyle: character.catchphraseStyle,
+    dialogueExamples: character.dialogueExamples || [],
+    voiceNotes: character.voiceNotes,
+  }
+}
+
+/**
+ * 批量获取项目角色声音指纹
+ */
+export async function getCharacterVoicesForProject(
+  projectId: number
+): Promise<CharacterVoice[]> {
+  const characters = await prisma.character.findMany({
+    where: {
+      projectId,
+      OR: [
+        { speechStyle: { not: null } },
+        { vocabularyLevel: { not: null } },
+        { sentencePattern: { not: null } },
+        { catchphraseStyle: { not: null } },
+        { voiceNotes: { not: null } },
+      ],
+    },
+    select: {
+      name: true,
+      speechStyle: true,
+      vocabularyLevel: true,
+      sentencePattern: true,
+      catchphraseStyle: true,
+      dialogueExamples: true,
+      voiceNotes: true,
+    },
+  })
+
+  return characters.map(c => ({
+    name: c.name,
+    speechStyle: c.speechStyle,
+    vocabularyLevel: c.vocabularyLevel,
+    sentencePattern: c.sentencePattern,
+    catchphraseStyle: c.catchphraseStyle,
+    dialogueExamples: c.dialogueExamples || [],
+    voiceNotes: c.voiceNotes,
+  }))
+}
+
+/**
+ * 格式化角色声音约束为文本（供 Writer prompt 使用）
+ */
+export function formatCharacterVoiceConstraint(voice: CharacterVoice): string {
+  const parts: string[] = []
+  parts.push(`【角色声音约束 - ${voice.name}】`)
+  if (voice.speechStyle) parts.push(`说话风格：${voice.speechStyle}`)
+  if (voice.vocabularyLevel) parts.push(`用词层次：${voice.vocabularyLevel}`)
+  if (voice.sentencePattern) parts.push(`句式偏好：${voice.sentencePattern}`)
+  if (voice.catchphraseStyle) parts.push(`口头禅规则：${voice.catchphraseStyle}`)
+  if (voice.dialogueExamples.length > 0) {
+    parts.push('示例对话：')
+    voice.dialogueExamples.forEach(ex => parts.push(`  "${ex}"`))
+  }
+  if (voice.voiceNotes) parts.push(`补充说明：${voice.voiceNotes}`)
+  return parts.join('\n')
+}

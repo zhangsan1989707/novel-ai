@@ -23,6 +23,10 @@ interface WriterPromptInput {
     conflictEngine?: { conflictTypes?: string[]; hookStrategy?: string } | null
     characterTagEngine?: { protagonistTags?: string[]; behaviorProofs?: Array<{ tag: string; requiredScene: string; forbiddenBehavior: string }> } | null
   } | null
+  /** 角色声音约束文本 */
+  voiceConstraints?: string
+  /** 风格调制指令 */
+  styleDirective?: string
 }
 
 export function buildWriterPrompt(input: WriterPromptInput): string {
@@ -52,6 +56,15 @@ export function buildWriterPrompt(input: WriterPromptInput): string {
 
   parts.push(`\n## 出场角色档案`)
   parts.push(input.characterProfiles)
+
+  if (input.voiceConstraints) {
+    parts.push(`\n## 角色声音一致性要求`)
+    parts.push(input.voiceConstraints)
+    parts.push(`\n- 每个角色的对话必须符合其语言指纹`)
+    parts.push(`- 不同角色之间的对话风格必须有明显差异`)
+    parts.push(`- 主角内心独白也需符合其用词层次`)
+    parts.push(`- 有口头禅的角色在对应情绪场景下必须使用口头禅`)
+  }
 
   parts.push(`\n## 前情摘要（最近3章）`)
   parts.push(input.recentSummaries)
@@ -95,6 +108,10 @@ export function buildWriterPrompt(input: WriterPromptInput): string {
     parts.push(`- 人设证明：${input.outline.characterTagProof || input.popularFictionProfile.characterTagEngine?.behaviorProofs?.map(item => `${item.tag}:${item.requiredScene}`).join('；') || '通过行为证明主角标签'}`)
     parts.push(`- 结尾钩子：${input.outline.cliffhanger || input.popularFictionProfile.conflictEngine?.hookStrategy || '本章结尾必须留下新威胁或承诺'}`)
     parts.push(`- 禁止错误：${input.outline.forbiddenMistakes?.join('；') || '禁止大段设定说明、流水账、关键时刻圣母、复杂说明金手指'}`)
+  }
+
+  if (input.styleDirective) {
+    parts.push(`\n${input.styleDirective}`)
   }
 
   parts.push(`\n## 写作规范`)

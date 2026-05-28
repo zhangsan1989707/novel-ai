@@ -6,6 +6,7 @@ import { getOpenPlotlines } from './plotline-tracker'
 import { getRecentChapterSummaries } from './chapter-summary'
 import { getStoryState } from '@/lib/engine/story-state'
 import { buildRAGContext } from '@/lib/engine/rag-vector'
+import { decaySummary } from '@/lib/engine/context-compression'
 
 export type MemoryPackRole = 'planner' | 'writer' | 'validator' | 'summarizer'
 
@@ -16,6 +17,8 @@ export interface MemoryPackOptions {
   plotlineLimit?: number
   researchLimit?: number
   speedMode?: 'fast' | 'balanced' | 'quality'
+  /** 启用记忆衰减压缩（默认 true） */
+  enableDecay?: boolean
 }
 
 export interface MemoryPackSection {
@@ -75,6 +78,8 @@ export interface MemoryPack {
   writerContext: string
   validatorContext: string
   summarizerContext: string
+  /** 是否启用了记忆衰减 */
+  enableDecay: boolean
 }
 
 function clampText(value: string, maxChars: number): string {
@@ -190,6 +195,21 @@ function buildPlotlineSection(plotlines: MemoryPack['openPlotlines']): string {
     : '暂无未回收伏笔'
 }
 
+/**
+ * 根据章节年龄压缩摘要
+ * - 近 10 章：保留完整摘要
+ * - 10-30 章前：压缩为"关键事件 + 伏笔"两行
+ * - 30+ 章前：压缩为"伏笔状态"一行（只保留未解决的伏笔引用）
+ * 伏笔引用无论多老都必须保留完整
+ */
+export function compressChapterSummary(
+  summary: string,
+  chapterAge: number,
+  openPlotlineRefs: string[]
+): string {
+  return decaySummary(summary, chapterAge, openPlotlineRefs)
+}
+
 function buildResearchSection(refs: MemoryPack['researchRefs']): string {
   return refs.length > 0
     ? refs.map(ref => {
@@ -254,13 +274,20 @@ function pickMemorySections(pack: MemoryPack, role: MemoryPackRole): MemoryPackS
     ))
   }
 
-  const recentSummaryLimit = role === 'summarizer' ? 2 : role === 'validator' ? 4 : 3
+  // 衰减模式下展示所有已衰减的摘要（旧章节已被压缩，总量可控）
+  const recentSummaryLimit = pack.enableDecay
+    ? pack.recentChapterSummaries.length
+    : role === 'summarizer' ? 2 : role === 'validator' ? 4 : 3
+  const summaryLabel = pack.enableDecay ? '章节记忆（含衰减）' : `最近${recentSummaryLimit}章摘要`
+  const summaryBudget = pack.enableDecay
+    ? (role === 'writer' ? 3200 : 2400)
+    : (role === 'writer' ? 2200 : 1600)
   sections.push(buildSection(
     'recent-chapters',
-    `最近${recentSummaryLimit}章摘要`,
+    summaryLabel,
     buildRecentChapterSection(pack.recentChapterSummaries.slice(-recentSummaryLimit)),
     4,
-    role === 'writer' ? 2200 : 1600
+    summaryBudget
   ))
 
   sections.push(buildSection(
@@ -362,7 +389,11 @@ export async function buildChapterMemoryPack(
   chapterNo: number,
   options: MemoryPackOptions = {}
 ): Promise<MemoryPack> {
-  const recentChapterCount = options.recentChapterCount ?? 3
+  const enableDecay = options.enableDecay ?? true
+  // 衰减模式下拉取更多章节摘要（旧章节会被压缩，不会撑爆上下文）
+  const recentChapterCount = enableDecay
+    ? Math.max(options.recentChapterCount ?? 3, 50)
+    : (options.recentChapterCount ?? 3)
   const recentVolumeCount = options.recentVolumeCount ?? 2
   const characterLimit = options.characterLimit ?? 10
   const plotlineLimit = options.plotlineLimit ?? 10
@@ -407,6 +438,18 @@ export async function buildChapterMemoryPack(
     Math.max(project.totalVolumes * 25, chapterNo)
   )
 
+  // 应用记忆衰减压缩
+  const decayedSummaries = enableDecay
+    ? recentChapterSummaries.map(s => ({
+        ...s,
+        summary: compressChapterSummary(
+          s.summary,
+          chapterNo - s.chapterNo,
+          openPlotlines.map(p => `[伏笔#${p.id}]`)
+        ),
+      })).filter(s => s.summary.length > 0)
+    : recentChapterSummaries
+
   const bookBlueprint = project.bookBlueprint
     ? {
         corePitch: project.bookBlueprint.corePitch,
@@ -434,7 +477,7 @@ export async function buildChapterMemoryPack(
     chapterNo,
     bookBlueprint,
     storyState,
-    recentChapterSummaries,
+    recentChapterSummaries: decayedSummaries,
     openPlotlines: trimmedPlotlines,
     characterProfiles: trimmedCharacters,
   })
@@ -469,7 +512,7 @@ export async function buildChapterMemoryPack(
       const distance = currentVolume - volume.volumeNumber
       return distance >= 0 && distance < recentVolumeCount
     }),
-    recentChapterSummaries,
+    recentChapterSummaries: decayedSummaries,
     openPlotlines: trimmedPlotlines,
     characterProfiles: trimmedCharacters,
     storyState,
@@ -491,6 +534,7 @@ export async function buildChapterMemoryPack(
     writerContext: '',
     validatorContext: '',
     summarizerContext: '',
+    enableDecay,
   }
 
   memoryPack.sections = pickMemorySections(memoryPack, 'planner')

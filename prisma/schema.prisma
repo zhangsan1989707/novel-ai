@@ -363,6 +363,12 @@ model Character {
   creatorId     Int?
   isPublic      Boolean       @default(false)
   tags          String[]      @default([])
+  speechStyle      String?
+  vocabularyLevel  String?
+  sentencePattern  String?
+  catchphraseStyle String?
+  dialogueExamples String[]    @default([])
+  voiceNotes       String?
   creator       User?         @relation("CharacterCreator", fields: [creatorId], references: [id])
   project       NovelProject  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 

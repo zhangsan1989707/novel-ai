@@ -19,6 +19,17 @@ const BUDGET_ALLOCATION: Record<ContextSectionKey, number> = {
   currentOutline: 0.12,
 }
 
+/** 衰减模式预算分配：摘要被压缩后，释放空间给伏笔系统 */
+const BUDGET_ALLOCATION_DECAY: Record<ContextSectionKey, number> = {
+  blueprint: 0.14,
+  arcPlan: 0.16,
+  summaries: 0.16,
+  plotlines: 0.22,
+  characters: 0.12,
+  styleGuide: 0.08,
+  currentOutline: 0.12,
+}
+
 const SECTION_LABELS: Record<ContextSectionKey, string> = {
   blueprint: '蓝图',
   arcPlan: 'Arc计划',
@@ -208,7 +219,7 @@ function trimSectionContent(section: ContextSection, tokenBudget: number) {
   }
 }
 
-function allocateBudgets(sections: ContextSection[], maxTokens: number): Record<ContextSectionKey, number> {
+function allocateBudgets(sections: ContextSection[], maxTokens: number, decayMode?: boolean): Record<ContextSectionKey, number> {
   const budgets = {} as Record<ContextSectionKey, number>
 
   for (const key of DEFAULT_SECTION_ORDER) {
@@ -224,7 +235,8 @@ function allocateBudgets(sections: ContextSection[], maxTokens: number): Record<
 
   let assigned = 0
   for (const section of sections) {
-    const budget = Math.max(1, Math.floor(distributable * BUDGET_ALLOCATION[section.key]))
+    const allocation = decayMode ? BUDGET_ALLOCATION_DECAY : BUDGET_ALLOCATION
+    const budget = Math.max(1, Math.floor(distributable * allocation[section.key]))
     budgets[section.key] = budget
     assigned += budget
   }
@@ -273,7 +285,7 @@ export function buildChapterContext(
   }
 }
 
-export function manageContextBudget(context: ChapterContext, maxTokens: number): ManagedContextBudget {
+export function manageContextBudget(context: ChapterContext, maxTokens: number, options?: { decayMode?: boolean }): ManagedContextBudget {
   const sections = buildSections(context)
   const fullContext = context.fullContext || joinSections(sections)
   const originalTokens = estimateTokens(fullContext)
@@ -306,7 +318,7 @@ export function manageContextBudget(context: ChapterContext, maxTokens: number):
     }
   }
 
-  const sectionBudgets = allocateBudgets(sections, maxTokens)
+  const sectionBudgets = allocateBudgets(sections, maxTokens, options?.decayMode)
   let prioritizedRecentSummaryChunks = 0
   let droppedSummaryChunks = 0
 
@@ -355,12 +367,12 @@ export function manageContextBudget(context: ChapterContext, maxTokens: number):
   }
 }
 
-export function trimContext(context: ChapterContext, maxTokens: number): string {
-  return manageContextBudget(context, maxTokens).trimmedContext
+export function trimContext(context: ChapterContext, maxTokens: number, options?: { decayMode?: boolean }): string {
+  return manageContextBudget(context, maxTokens, options).trimmedContext
 }
 
-export function getBudgetAllocation(): Record<string, number> {
-  return { ...BUDGET_ALLOCATION }
+export function getBudgetAllocation(decayMode?: boolean): Record<string, number> {
+  return { ...(decayMode ? BUDGET_ALLOCATION_DECAY : BUDGET_ALLOCATION) }
 }
 
 export function estimateContextTokens(
