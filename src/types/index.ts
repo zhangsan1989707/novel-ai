@@ -55,7 +55,8 @@ export enum AnalysisDimension {
   FORESHADOWING = 'FORESHADOWING',             // 伏笔悬念
   CHAPTER_STRUCTURE = 'CHAPTER_STRUCTURE',     // 章节结构
   READING_EXPERIENCE = 'READING_EXPERIENCE',   // 阅读体验
-  WORLD_SETTING = 'WORLD_SETTING'              // 世界观设定
+  WORLD_SETTING = 'WORLD_SETTING',             // 世界观设定
+  STYLE_PROFILE = 'STYLE_PROFILE',
 }
 
 // 分析类型

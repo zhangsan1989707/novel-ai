@@ -109,6 +109,9 @@ model NovelProject {
   status             ProjectStatus            @default(DRAFT)
   coverImage         String?
   totalVolumes       Int                      @default(4)
+  styleProfileId  String?
+  styleStrength   Float    @default(0.5)
+  styleSafetyMode String   @default("SAFE_ABSTRACT")
   aiModelId          Int?
   creatorId          Int
   createdAt          DateTime                 @default(now())
@@ -154,6 +157,7 @@ model NovelProject {
   sourceNovel        SourceNovel?
   storyEvents        StoryEvent[]
   storyState         StoryState?
+  styleProfile       StyleProfile?             @relation(fields: [styleProfileId], references: [id])
   villains           Villain[]
   volumeSummaries    VolumeSummary[]
   worldState         WorldState?
@@ -342,6 +346,32 @@ model SourceNovel {
   project      NovelProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@map("source_novels")
+}
+
+model StyleProfile {
+  id              String             @id @default(cuid())
+  name            String
+  description     String?
+  sourceType      String             @default("USER_UPLOADED")
+  riskLevel       String             @default("MEDIUM")
+  authorLabel     String?
+  displayLabel    String
+  profileJson     Json
+  promptCard      String?            @db.Text
+  sampleStats     Json?
+  sourceNovelId   String?
+  virtualWriterId Int?
+  creatorId       Int
+  isPublic        Boolean            @default(false)
+  tags            String[]           @default([])
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  projects        NovelProject[]
+  creator         User               @relation(fields: [creatorId], references: [id])
+
+  @@index([creatorId])
+  @@index([sourceType])
+  @@map("style_profiles")
 }
 
 model Character {
