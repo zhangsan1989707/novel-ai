@@ -82,9 +82,11 @@ export async function runChapterGenerationPipeline(
   emit: SSEEmitter,
   options?: {
     speedMode?: GenerationSpeedMode
+    _retryMemoryPack?: Awaited<ReturnType<typeof buildChapterMemoryPack>>
   }
 ): Promise<GenerationResult> {
   const speedMode = options?.speedMode || 'balanced'
+  const isRetry = !!options?._retryMemoryPack
   const startTime = Date.now()
   let lastReportedWordCount = 0
 
@@ -103,11 +105,12 @@ export async function runChapterGenerationPipeline(
   }
 
   // Phase 计时辅助函数
-  const runPhase = async (phase: string, fn: () => Promise<void>) => {
+  const runPhase = async <T>(phase: string, fn: () => Promise<T>): Promise<T> => {
     const phaseStart = Date.now()
-    await fn()
+    const result = await fn()
     const durationMs = Date.now() - phaseStart
     emit({ type: 'phase_timing', data: { phase, durationMs, speedMode } })
+    return result
   }
 
   // 获取项目信息
@@ -124,17 +127,22 @@ export async function runChapterGenerationPipeline(
     (project.bookBlueprint as unknown as { popularFictionProfile?: unknown } | null)?.popularFictionProfile
   )
 
-  // 初始化故事状态（如果不存在）
-  await storyState.initStoryState(projectId, project.totalVolumes * 25)
-  const directorContext = await directChapter(chapterNo, projectId).catch(() => null)
+  // 初始化故事状态
+  if (!isRetry) {
+    await storyState.initStoryState(projectId, project.totalVolumes * 25)
+  }
+  const directorContext = isRetry ? null : await directChapter(chapterNo, projectId).catch(() => null)
   const directorDirective = directorContext?.fullDirective || ''
-  const memoryPack = await buildChapterMemoryPack(projectId, chapterNo, {
-    recentChapterCount: 3,
-    recentVolumeCount: 2,
-    characterLimit: 10,
-    plotlineLimit: 10,
-    researchLimit: 3,
-  })
+  const memoryPack = isRetry
+    ? options!._retryMemoryPack!
+    : await buildChapterMemoryPack(projectId, chapterNo, {
+        recentChapterCount: 3,
+        recentVolumeCount: 2,
+        characterLimit: 10,
+        plotlineLimit: 10,
+        researchLimit: 3,
+        speedMode,
+      })
   const emotionalArc = memoryPack.storyState?.emotionalArc || []
   const plannerMemoryContext = [memoryPack.plannerContext, directorDirective ? `## 导演指令\n${directorDirective}` : '']
     .filter(Boolean)
@@ -181,7 +189,25 @@ export async function runChapterGenerationPipeline(
     // ========== Phase 1: 策划 Agent ==========
     let outline!: ChapterOutline
 
-    if (speedMode === 'fast') {
+    if (isRetry) {
+      const retryChapter = await prisma.novelChapter.findUnique({
+        where: { id: chapter.id },
+        select: { chapterOutline: true },
+      })
+      outline = (retryChapter?.chapterOutline as unknown as ChapterOutline) || {
+        chapterTitle: `第${chapterNo}章`,
+        chapterGoal: '继续推进故事发展',
+        mainConflict: '当前核心矛盾',
+        keyScenes: [
+          { scene: '开场：快速进入本章情节', characters: ['主角'], emotion: '推进' },
+          { scene: '发展：推进核心矛盾', characters: ['主角', '关键角色'], emotion: '对抗' },
+          { scene: '收尾：留下悬念', characters: ['主角'], emotion: '悬念' },
+        ],
+        ending: '留下新的悬念，为下一章铺垫',
+        foreshadows: [],
+        resolvedPlotlines: [],
+      }
+    } else if (speedMode === 'fast') {
       outline = {
         chapterTitle: `第${chapterNo}章`,
         chapterGoal: '继续推进故事发展',
@@ -298,28 +324,72 @@ export async function runChapterGenerationPipeline(
       )
     })
 
-    // ========== Phase 3: 润色 Agent ==========
+    // ========== Phase 3 + 7: 润色 + 摘要 并行 ==========
     let polishedContent = draftContent
+    let summaryData!: ChapterSummaryData
 
     if (speedMode === 'quality') {
-      await runPhase('polisher', async () => {
-        emit({ type: 'agent_switch', data: { agent: 'polisher' } })
+      emit({ type: 'agent_switch', data: { agent: 'polisher_summarizer' } })
 
-        polishedContent = ''
-        await polisherAgent(
-          {
+      polishedContent = ''
+      const [, sd] = await Promise.all([
+        runPhase('polisher', async () => {
+          await polisherAgent(
+            {
+              projectId,
+              chapterNo,
+              content: draftContent,
+              styleGuide: project.writingStyle,
+              provider: await getRoleProvider('polisher'),
+            },
+            (token) => {
+              polishedContent += token
+              emit({ type: 'token', data: { content: token } })
+            }
+          )
+        }),
+        runPhase('summarizer', async () => {
+          const sd = await summarizerAgent({
             projectId,
             chapterNo,
-            content: draftContent,
-            styleGuide: project.writingStyle,
-            provider: await getRoleProvider('polisher'),
-          },
-          (token) => {
-            polishedContent += token
-            emit({ type: 'token', data: { content: token } })
-          }
-        )
+            chapterTitle: outline.chapterTitle,
+            chapterContent: draftContent,
+            memoryContext: summarizerMemoryContext,
+            worldSetting: project.worldSetting,
+            protagonistProfile: project.protagonistProfile,
+            provider: await getRoleProvider('summarizer'),
+          })
+          await storyState.updateChapterProgress(projectId, chapterNo)
+          return sd
+        }),
+      ])
+      summaryData = sd
+    } else if (speedMode === 'balanced') {
+      await runPhase('summarizer', async () => {
+        emit({ type: 'agent_switch', data: { agent: 'summarizer' } })
+
+        summaryData = await summarizerAgent({
+          projectId,
+          chapterNo,
+          chapterTitle: outline.chapterTitle,
+          chapterContent: draftContent,
+          memoryContext: summarizerMemoryContext,
+          worldSetting: project.worldSetting,
+          protagonistProfile: project.protagonistProfile,
+          provider: await getRoleProvider('summarizer'),
+        })
+
+        await storyState.updateChapterProgress(projectId, chapterNo)
       })
+    } else {
+      summaryData = {
+        summary: `第${chapterNo}章（快速模式生成）`,
+        keyEvents: [],
+        emotionalTone: null,
+        plantedPlotlines: [],
+        resolvedPlotlines: [],
+      }
+      await storyState.updateChapterProgress(projectId, chapterNo)
     }
 
     // ========== Phase 4: 对抗审稿 Agent ==========
@@ -409,63 +479,95 @@ export async function runChapterGenerationPipeline(
       })
     }
 
-    // ========== Phase 5: 校验 Agent ==========
+    // ========== Phase 5 + 6: 校验 + 去 AI 味 并行 ==========
     let validationReport: ValidatorValidationReport | null = null
+    let finalContent = reviewedContent
 
     if (speedMode === 'quality') {
-      await runPhase('validator', async () => {
-        emit({ type: 'agent_switch', data: { agent: 'validator' } })
+      emit({ type: 'agent_switch', data: { agent: 'validator_deslopper' } })
 
-        validationReport = await validatorAgent({
-          projectId,
-          chapterNo,
-          newChapterContent: reviewedContent,
-          memoryContext: validatorMemoryContext,
-          characterProfiles: memoryPack.characterProfiles,
-          recentSummaries: memoryPack.recentChapterSummaries,
-          worldSetting: project.worldSetting,
-          openPlotlines: memoryPack.openPlotlines,
-          chapterTitle: outline.chapterTitle,
-          chapterGoal: outline.chapterGoal,
-          provider: await getRoleProvider('validator'),
-          popularFictionProfile,
-        })
+      const [validReport, deslopContent] = await Promise.all([
+        runPhase('validator', async () => {
+          let report = await validatorAgent({
+            projectId,
+            chapterNo,
+            newChapterContent: reviewedContent,
+            memoryContext: validatorMemoryContext,
+            characterProfiles: memoryPack.characterProfiles,
+            recentSummaries: memoryPack.recentChapterSummaries,
+            worldSetting: project.worldSetting,
+            openPlotlines: memoryPack.openPlotlines,
+            chapterTitle: outline.chapterTitle,
+            chapterGoal: outline.chapterGoal,
+            provider: await getRoleProvider('validator'),
+            popularFictionProfile,
+          })
 
-        const popularScore = scorePopularFictionChapter({
-          content: reviewedContent,
-          outline,
-          profile: popularFictionProfile,
-        })
-        validationReport = {
-          ...validationReport,
-          popularFiction: popularScore,
-          result: popularScore.emotion < 7 || popularScore.conflict < 7 || popularScore.hook < 7 || popularScore.character < 7
-            ? 'retry'
-            : validationReport.result,
-          issues: [
-            ...validationReport.issues,
-            ...popularScore.issues.map(issue => ({
-              type: 'emotion' as const,
-              severity: 'major' as const,
-              description: issue,
-              location: '全文',
-              reference: '爆款四因子诊断',
-            })),
-          ],
-        }
+          const popularScore = scorePopularFictionChapter({
+            content: reviewedContent,
+            outline,
+            profile: popularFictionProfile,
+          })
+          report = {
+            ...report,
+            popularFiction: popularScore,
+            result: popularScore.emotion < 7 || popularScore.conflict < 7 || popularScore.hook < 7 || popularScore.character < 7
+              ? 'retry'
+              : report.result,
+            issues: [
+              ...report.issues,
+              ...popularScore.issues.map(issue => ({
+                type: 'emotion' as const,
+                severity: 'major' as const,
+                description: issue,
+                location: '全文',
+                reference: '爆款四因子诊断',
+              })),
+            ],
+          }
 
-        emit({
-          type: 'validation',
-          data: {
-          result: validationReport.result,
-          score: validationReport.score,
-          },
-        })
-      })
+          emit({
+            type: 'validation',
+            data: {
+              result: report.result,
+              score: report.score,
+            },
+          })
 
-      // 校验失败处理
-      const currentValidationReport = validationReport as ValidatorValidationReport | null
-      if (currentValidationReport?.result === 'retry') {
+          return report
+        }),
+        runPhase('deslopper', async () => {
+          try {
+            const result = await chapterDeslopper({
+              projectId,
+              chapterId: chapter.id,
+              content: reviewedContent,
+              chapterNumber: chapterNo,
+              chapterTitle: outline.chapterTitle,
+              genre: project.genre,
+              writingStyle: project.writingStyle,
+              strictness: 'medium',
+              provider: await getRoleProvider('deslopper'),
+            })
+            return result.revisedContent
+          } catch (deslopError) {
+            emit({
+              type: 'hook_warning',
+              data: {
+                warnings: [
+                  `去 AI 味失败，已保留润色稿：${deslopError instanceof Error ? deslopError.message : '未知错误'}`,
+                ],
+              },
+            })
+            return reviewedContent
+          }
+        }),
+      ])
+
+      validationReport = validReport
+      finalContent = deslopContent
+
+      if (validReport?.result === 'retry') {
         const currentRetry = await prisma.novelChapter.findUnique({
           where: { id: chapter.id },
         })
@@ -479,7 +581,7 @@ export async function runChapterGenerationPipeline(
               content: reviewedContent,
               status: ChapterStatus.REVIEWING,
               retryCount,
-              validationReport: currentValidationReport as unknown as Prisma.InputJsonValue,
+              validationReport: validReport as unknown as Prisma.InputJsonValue,
               wordCount: failedWordCount,
               lastAgentType: 'VALIDATOR',
             },
@@ -505,7 +607,7 @@ export async function runChapterGenerationPipeline(
           data: { retryCount },
         })
 
-        return runChapterGenerationPipeline(projectId, chapterNo, emit, { speedMode })
+        return runChapterGenerationPipeline(projectId, chapterNo, emit, { speedMode, _retryMemoryPack: memoryPack })
       }
     } else {
       const popularScore = scorePopularFictionChapter({
@@ -529,71 +631,6 @@ export async function runChapterGenerationPipeline(
         },
       }
       reviewedContent = polishedContent
-    }
-
-    // ========== Phase 6: 去 AI 味 Agent ==========
-    let finalContent = reviewedContent
-
-    if (speedMode === 'quality') {
-      await runPhase('deslopper', async () => {
-        emit({ type: 'agent_switch', data: { agent: 'deslopper' } })
-
-        try {
-          const deslopResult = await chapterDeslopper({
-            projectId,
-            chapterId: chapter.id,
-            content: reviewedContent,
-            chapterNumber: chapterNo,
-            chapterTitle: outline.chapterTitle,
-            genre: project.genre,
-            writingStyle: project.writingStyle,
-            strictness: 'medium',
-            provider: await getRoleProvider('deslopper'),
-          })
-          finalContent = deslopResult.revisedContent
-        } catch (deslopError) {
-          emit({
-            type: 'hook_warning',
-            data: {
-              warnings: [
-                `去 AI 味失败，已保留润色稿：${deslopError instanceof Error ? deslopError.message : '未知错误'}`,
-              ],
-            },
-          })
-        }
-      })
-    }
-
-    // ========== Phase 7: 摘要 Agent ==========
-    let summaryData!: ChapterSummaryData
-
-    if (speedMode !== 'fast') {
-      await runPhase('summarizer', async () => {
-        emit({ type: 'agent_switch', data: { agent: 'summarizer' } })
-
-        summaryData = await summarizerAgent({
-          projectId,
-          chapterNo,
-          chapterTitle: outline.chapterTitle,
-          chapterContent: finalContent,
-          memoryContext: summarizerMemoryContext,
-          worldSetting: project.worldSetting,
-          protagonistProfile: project.protagonistProfile,
-          provider: await getRoleProvider('summarizer'),
-        })
-
-        await storyState.updateChapterProgress(projectId, chapterNo)
-      })
-    } else {
-      summaryData = {
-        summary: `第${chapterNo}章（快速模式生成）`,
-        keyEvents: [],
-        emotionalTone: null,
-        plantedPlotlines: [],
-        resolvedPlotlines: [],
-      }
-
-      await storyState.updateChapterProgress(projectId, chapterNo)
     }
 
     const finalWordCount = countChineseWords(finalContent)

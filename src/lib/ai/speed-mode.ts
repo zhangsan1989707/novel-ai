@@ -85,7 +85,7 @@ export function resolveModelIdForRole(input: {
 }
 
 export function estimateMaxTokensForTargetWordCount(targetWordCount: number): number {
-  return Math.ceil(Math.max(1, targetWordCount) * 1.5)
+  return Math.ceil(Math.max(1, targetWordCount) * 1.1)
 }
 
 export function resolveEffectiveChapterWordCount(

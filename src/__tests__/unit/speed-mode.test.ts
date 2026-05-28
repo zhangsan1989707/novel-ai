@@ -43,7 +43,7 @@ describe('generation speed mode strategy', () => {
   })
 
   it('estimates stream max tokens from requested word count', () => {
-    expect(estimateMaxTokensForTargetWordCount(2000)).toBe(3000)
+    expect(estimateMaxTokensForTargetWordCount(2000)).toBe(2200)
     expect(estimateMaxTokensForTargetWordCount(0)).toBe(2)
   })
 

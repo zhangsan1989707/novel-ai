@@ -223,9 +223,10 @@ export async function runChapterProjectionWriters(
   try {
     const content = normalizedContent || ''
     if (content.trim().length > 0) {
-      await indexChapterContent(context.projectId, context.chapterNo, content)
+      void indexChapterContent(context.projectId, context.chapterNo, content)
+        .catch(err => { /* RAG index failure is non-critical */ })
     }
-    projectionStatus.rag = 'done'
+    projectionStatus.rag = 'queued'
   } catch (error) {
     markFailure(projectionStatus, 'rag', error)
   }

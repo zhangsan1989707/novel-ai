@@ -15,6 +15,7 @@ export interface MemoryPackOptions {
   characterLimit?: number
   plotlineLimit?: number
   researchLimit?: number
+  speedMode?: 'fast' | 'balanced' | 'quality'
 }
 
 export interface MemoryPackSection {
@@ -366,6 +367,7 @@ export async function buildChapterMemoryPack(
   const characterLimit = options.characterLimit ?? 10
   const plotlineLimit = options.plotlineLimit ?? 10
   const researchLimit = options.researchLimit ?? 3
+  const skipAIRerank = options.speedMode !== 'quality'
 
   const project = await prisma.novelProject.findUnique({
     where: { id: projectId },
@@ -440,7 +442,7 @@ export async function buildChapterMemoryPack(
     ? await buildRAGContext(projectId, chapterNo, ragQuery, {
         maxChunks: 4,
         includeTypes: ['plot', 'character', 'setting'],
-        rerank: true,
+        rerank: !skipAIRerank,
       })
     : null
 
