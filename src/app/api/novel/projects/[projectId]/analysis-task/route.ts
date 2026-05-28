@@ -261,7 +261,8 @@ async function executeAnalysisAsync(
           provider,
           BATCH_SIZE,
           true,
-          projectId
+          projectId,
+          taskId
         )
         summaries = [...summaries, ...newSummaries]
       }
@@ -391,12 +392,20 @@ async function generateChapterSummariesBatch(
   provider: Awaited<ReturnType<typeof import('@/lib/ai').createProviderFromDefaultConfig>>,
   batchSize: number,
   persistToDb: boolean,
-  projectId?: number
+  projectId?: number,
+  taskId?: string
 ): Promise<{ chapterNumber: number; summary: string; keyEvents: string[] }[]> {
   const summaries: { chapterNumber: number; summary: string; keyEvents: string[] }[] = []
 
   for (let i = 0; i < chapters.length; i += batchSize) {
     const batch = chapters.slice(i, i + batchSize)
+    const currentBatch = Math.floor(i / batchSize) + 1
+    const totalBatches = Math.ceil(chapters.length / batchSize)
+    const progressPercent = Math.round((currentBatch / totalBatches) * 100)
+
+    if (taskId) {
+      await analysisTaskManager.updateProgress(taskId, progressPercent, `正在生成章节摘要 (${currentBatch}/${totalBatches} 批)...`)
+    }
 
     const prompt = `请为以下 ${batch.length} 章小说生成简短摘要。
 
