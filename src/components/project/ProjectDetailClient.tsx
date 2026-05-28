@@ -290,6 +290,7 @@ ${ch.content || ''}
             {pipeline && (
               <Badge variant={pipeline.status === 'RUNNING' ? 'primary' : pipeline.status === 'FAILED' ? 'danger' : 'secondary'}>
                 {getPipelineStatusLabel(pipeline.status)}
+              </Badge>
             )}
           </div>
           <p className="mt-1 text-sm text-gray-500">

@@ -4,7 +4,8 @@ import { Button, Card, CardContent, CardHeader, CardTitle, Progress } from '@/co
 import { Layers, Pause, Play, Loader2 } from 'lucide-react'
 import type { GenerationSpeedMode } from '@/lib/ai/speed-mode'
 import type { PipelineStatus } from '@/hooks/useProjectPipeline'
-import { getPipelineStatusLabel, getPipelineStepLabel, speedModeLabels } from './constants'
+import { getPipelineStatusLabel, getPipelineStepLabel } from './utils'
+import { speedModeLabels } from './constants'
 
 interface PipelineControlPanelProps {
   pipeline: PipelineStatus
