@@ -15,7 +15,12 @@ import { toInternalArcStage, toInternalPlatform, toPrismaArcStage } from './prod
 import { runChapterGenerationPipeline } from './orchestrator'
 import { parseAiJsonArray, parseAiJsonObject } from './ai-json'
 import { buildChapterListPrompt } from '../prompts/novel/chapter-list'
-import { archiveChapterRuntime, createPipelineRuntimeState, sanitizePipelineRuntime } from './pipeline-runtime'
+import {
+  archiveChapterRuntime,
+  appendChapterLiveContent,
+  createPipelineRuntimeState,
+  sanitizePipelineRuntime,
+} from './pipeline-runtime'
 import { initStoryState, initWorldState } from './story-state'
 import { loadProjectHealthReport } from './project-health'
 import { syncProjectHealthNotification } from '@/lib/notifications/project-health'
@@ -861,6 +866,7 @@ export async function runProductionPipeline(
         currentPhase: 'planner',
         currentWordCount: 0,
         targetWordCount,
+        liveContent: '',
         startedAt: now,
         updatedAt: now,
         phaseTimings: {},
@@ -884,6 +890,9 @@ export async function runProductionPipeline(
       }
       case 'agent_switch': {
         const agent = typeof event.data.agent === 'string' ? event.data.agent : current.currentAgent
+        if ((agent === 'writer' || agent === 'polisher') && current.currentPhase !== agent) {
+          current.liveContent = ''
+        }
         current.currentAgent = agent
         current.currentPhase = agent
         break
@@ -953,6 +962,22 @@ export async function runProductionPipeline(
     runtime = {
       ...runtime,
       currentChapter: current,
+    }
+
+    if (event.type === 'token') {
+      runtime = appendChapterLiveContent(
+        runtime,
+        typeof event.data.content === 'string' ? event.data.content : ''
+      )
+      if (runtime.currentChapter) {
+        runtime = {
+          ...runtime,
+          currentChapter: {
+            ...runtime.currentChapter,
+            lastTokenAt: now,
+          },
+        }
+      }
     }
 
     const forcePersist = event.type === 'done' || event.type === 'error' || event.type === 'phase_timing'

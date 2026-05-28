@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { AIVendor } from '@/types'
 import {
   estimateMaxTokensForTargetWordCount,
+  resolveEffectiveChapterWordCount,
   normalizeGenerationSpeedMode,
   resolveMiMoModelId,
   resolveModelIdForRole,
@@ -42,7 +43,13 @@ describe('generation speed mode strategy', () => {
   })
 
   it('estimates stream max tokens from requested word count', () => {
-    expect(estimateMaxTokensForTargetWordCount(2000)).toBe(3000)
+    expect(estimateMaxTokensForTargetWordCount(2000)).toBe(2200)
     expect(estimateMaxTokensForTargetWordCount(0)).toBe(2)
+  })
+
+  it('reduces the chapter target word count according to the speed mode', () => {
+    expect(resolveEffectiveChapterWordCount(3000, 'fast')).toBe(2400)
+    expect(resolveEffectiveChapterWordCount(3000, 'balanced')).toBe(2700)
+    expect(resolveEffectiveChapterWordCount(3000, 'quality')).toBe(3000)
   })
 })

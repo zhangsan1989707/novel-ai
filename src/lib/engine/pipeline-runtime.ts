@@ -21,6 +21,7 @@ export interface PipelineChapterRuntime {
   currentPhase?: string
   currentWordCount: number
   targetWordCount: number
+  liveContent?: string
   startedAt: string
   updatedAt: string
   completedAt?: string
@@ -44,6 +45,7 @@ export interface PipelineRuntimeState {
 }
 
 const MAX_RECENT_CHAPTERS = 8
+const MAX_LIVE_CONTENT_CHARS = 12000
 
 export function createPipelineRuntimeState(speedMode?: GenerationSpeedMode): PipelineRuntimeState {
   return {
@@ -87,6 +89,27 @@ export function archiveChapterRuntime(
   }
 }
 
+export function appendChapterLiveContent(
+  runtime: PipelineRuntimeState,
+  token: string,
+  options: { reset?: boolean } = {}
+): PipelineRuntimeState {
+  if (!runtime.currentChapter || typeof token !== 'string' || token.length === 0) {
+    return runtime
+  }
+
+  const currentContent = options.reset ? '' : runtime.currentChapter.liveContent || ''
+  const nextContent = (currentContent + token).slice(-MAX_LIVE_CONTENT_CHARS)
+
+  return {
+    ...runtime,
+    currentChapter: {
+      ...runtime.currentChapter,
+      liveContent: nextContent,
+    },
+  }
+}
+
 function isChapterRuntime(value: unknown): value is PipelineChapterRuntime {
   if (!value || typeof value !== 'object') return false
   const item = value as Partial<PipelineChapterRuntime>
@@ -97,4 +120,5 @@ function isChapterRuntime(value: unknown): value is PipelineChapterRuntime {
     && typeof item.startedAt === 'string'
     && typeof item.updatedAt === 'string'
     && !!item.phaseTimings
+    && (item.liveContent === undefined || typeof item.liveContent === 'string')
 }
