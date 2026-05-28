@@ -1,13 +1,12 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { Button, Card, CardContent, CardHeader, CardTitle, Badge, Progress, Modal, toast, MoreActionsMenu, ErrorBoundary } from '@/components/ui'
-import { BlueprintConsole, ProjectBaseInfoForm } from '@/components/project'
+import { Button, Card, CardContent, CardHeader, CardTitle, Badge, toast, MoreActionsMenu, ErrorBoundary } from '@/components/ui'
+import { BlueprintConsole } from '@/components/project'
 import { WorkflowBlueprintCard } from '@/components/project/WorkflowBlueprintCard'
 import { WorkflowArcPlanCard } from '@/components/project/WorkflowArcPlanCard'
-import { Toolbox, CharacterPanel } from '@/components/ai'
-import { CoverGenerator, ResearchPanel, ReviewPanel, DeslopPanel, ExportPanel, AnalysisWorkbench } from '@/components/ai'
-import { BookOpen, Users, Layers, Search, Rocket, ClipboardList, Shield, Sparkles, Wrench, Play, Pause, Loader2, Download } from 'lucide-react'
+import { CharacterPanel, AnalysisWorkbench } from '@/components/ai'
+import { BookOpen, Users, Search, Rocket, ClipboardList, Shield, Sparkles, Wrench, Play, Download } from 'lucide-react'
 import { formatDisplayDate } from '@/lib/helpers'
 import { getMinimumChapterWordCount } from '@/lib/ai/chapter-quality'
 import type { GenerationSpeedMode } from '@/lib/ai/speed-mode'
@@ -26,26 +25,14 @@ import {
   defaultSteeringValues,
   getSpeedModeDescription,
   getPipelineStatusLabel,
-  formatDuration,
   groupChaptersByArc,
 } from '@/components/project/detail'
-
-type NextStepState = {
-  badgeVariant: 'primary' | 'secondary' | 'success' | 'warning' | 'danger'
-  badgeLabel: string
-  title: string
-  description: string
-  ctaLabel: string
-  ctaAction: string
-  disabled?: boolean
-}
 
 export default function ProjectDetailPage({ initialProject }: { initialProject: NonNullable<ReturnType<typeof useProjectDetail>['project']> | null }) {
   const {
     projectId,
     router,
     project,
-    setProject,
     loading,
     error,
     submitting,
@@ -53,7 +40,6 @@ export default function ProjectDetailPage({ initialProject }: { initialProject: 
     setSelectedSpeedMode,
     selectedChapterNumber,
     setSelectedChapterNumber,
-    chapterDirectoryTouched,
     setChapterDirectoryTouched,
     modals,
     openModal,
@@ -79,7 +65,6 @@ export default function ProjectDetailPage({ initialProject }: { initialProject: 
 
   const {
     pipeline,
-    setPipeline,
     pipelineStarting,
     handleStartPipeline,
     handleResumePipeline,
@@ -93,6 +78,13 @@ export default function ProjectDetailPage({ initialProject }: { initialProject: 
     setSelectedChapterNumber,
     onCompleted: fetchProject,
     onFailed: fetchProject,
+  })
+
+  const nextStepState = useNextStepState({
+    project,
+    pipeline,
+    maintenanceActive,
+    maintenanceFailed,
   })
 
   const handleRetryMaintenance = async () => {
@@ -197,50 +189,6 @@ ${ch.content || ''}
     return '这章已被标记为待审稿，说明 AI 结果没有被系统直接视为稳定成稿。建议打开章节检查正文后，再决定是手工修订还是重新生成。'
   }, [project?.chapterWordCount])
 
-  const toolboxItems = [
-    {
-      id: 'research',
-      label: '资料研究',
-      description: 'AI辅助收集设定资料',
-      icon: <Search className="h-4 w-4" />,
-      onClick: () => openModal('research'),
-    },
-    {
-      id: 'cover',
-      label: '封面生成',
-      description: 'AI生成小说封面',
-      icon: <Rocket className="h-4 w-4" />,
-      onClick: () => openModal('cover'),
-    },
-    {
-      id: 'plotAnalyzer',
-      label: project?.projectMode === 'ANALYZE' ? '拆书工作台' : '剧情分析',
-      description: project?.projectMode === 'ANALYZE' ? '查看拆书结论与发起分析任务' : '分析剧情结构和发展',
-      icon: <ClipboardList className="h-4 w-4" />,
-      onClick: () => {
-        if (project?.projectMode === 'ANALYZE') {
-          setActiveTab('analysis')
-          return
-        }
-        openModal('plotAnalysis')
-      },
-    },
-    {
-      id: 'review',
-      label: '对抗审稿',
-      description: '多模型交叉审稿',
-      icon: <Shield className="h-4 w-4" />,
-      onClick: () => openModal('review'),
-    },
-    {
-      id: 'deslop',
-      label: '去AI味',
-      description: '润色去除AI痕迹',
-      icon: <Sparkles className="h-4 w-4" />,
-      onClick: () => openModal('deslop'),
-    },
-  ]
-
   if (loading) {
     return (
       <div className="space-y-4">
@@ -274,7 +222,6 @@ ${ch.content || ''}
   const reviewingChapters = project.chapters.filter(c => c.status === 'REVIEWING').length
   const arcGroups = groupChaptersByArc(project)
   const liveChapter = pipeline?.runtime?.currentChapter || null
-  const recentChapterRuns = pipeline?.runtime?.recentChapters || []
   const activeSpeedMode = pipeline?.speedMode || pipeline?.runtime?.speedMode || selectedSpeedMode
   const hasBoundModel = Boolean(project.aiModelConfig)
   const isAnalyzeMode = project.projectMode === 'ANALYZE'
@@ -309,12 +256,6 @@ ${ch.content || ''}
     bookSummaryReady: project.preflight.bookSummaryCount > 0,
     primaryAction: project.preflight.primaryAction,
   } : undefined
-  const nextStepState = useNextStepState({
-    project,
-    pipeline,
-    maintenanceActive,
-    maintenanceFailed,
-  })
 
   return (
     <>

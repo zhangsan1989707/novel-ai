@@ -12,7 +12,7 @@ export type NextStepState = {
 }
 
 interface UseNextStepStateParams {
-  project: ProjectDetail
+  project: ProjectDetail | null
   pipeline: PipelineStatus | null
   maintenanceActive: boolean
   maintenanceFailed: boolean
@@ -24,7 +24,7 @@ export function useNextStepState({
   maintenanceActive,
   maintenanceFailed,
 }: UseNextStepStateParams): NextStepState | null {
-  if (!project.preflight) {
+  if (!project?.preflight) {
     return null
   }
 
