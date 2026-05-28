@@ -30,6 +30,7 @@ import type {
   AgentType,
 } from './types'
 import { normalizePopularFictionProfile, scorePopularFictionChapter } from './popular-fiction'
+import type { StyleProfilePromptCard } from '@/types/style'
 
 const MAX_RETRY_COUNT = 3
 
@@ -116,7 +117,7 @@ export async function runChapterGenerationPipeline(
   // 获取项目信息
   const project = await prisma.novelProject.findUnique({
     where: { id: projectId },
-    include: { aiModelConfig: true, bookBlueprint: true },
+    include: { aiModelConfig: true, bookBlueprint: true, styleProfile: true },
   })
 
   if (!project) {
@@ -126,6 +127,27 @@ export async function runChapterGenerationPipeline(
   const popularFictionProfile = normalizePopularFictionProfile(
     (project.bookBlueprint as unknown as { popularFictionProfile?: unknown } | null)?.popularFictionProfile
   )
+
+  // 加载风格画像
+  let styleProfilePromptCard: StyleProfilePromptCard | null = null
+  if (project.styleProfile && project.styleProfile.promptCard) {
+    const sp = project.styleProfile
+    const profileData = sp.profileJson as Record<string, unknown>
+    styleProfilePromptCard = {
+      displayLabel: sp.displayLabel,
+      prose: formatStyleSection(profileData, 'prose'),
+      vocabulary: formatStyleSection(profileData, 'vocabulary'),
+      sentence: formatStyleSection(profileData, 'sentence'),
+      rhetoric: formatStyleSection(profileData, 'rhetoric'),
+      narrative: formatStyleSection(profileData, 'narrative'),
+      plot: formatStyleSection(profileData, 'plot'),
+      character: formatStyleSection(profileData, 'character'),
+      mustDo: ((profileData.generationGuide as Record<string, unknown> | undefined)?.mustDo as string[]) || [],
+      avoid: ((profileData.generationGuide as Record<string, unknown> | undefined)?.avoid as string[]) || [],
+      riskLevel: (sp.riskLevel as 'LOW' | 'MEDIUM' | 'HIGH') || 'LOW',
+      safetyMode: (project.styleSafetyMode as 'SAFE_ABSTRACT' | 'STRICT_PUBLIC_DOMAIN' | 'USER_LICENSED') || 'SAFE_ABSTRACT',
+    }
+  }
 
   // 初始化故事状态
   if (!isRetry) {
@@ -311,6 +333,9 @@ export async function runChapterGenerationPipeline(
           provider: await getRoleProvider('writer'),
           maxTokens: estimateMaxTokensForTargetWordCount(chapterTargetWordCount),
           popularFictionProfile,
+          styleProfilePromptCard,
+          styleStrength: project.styleStrength,
+          styleSafetyMode: (project.styleSafetyMode as 'SAFE_ABSTRACT' | 'STRICT_PUBLIC_DOMAIN' | 'USER_LICENSED') || 'SAFE_ABSTRACT',
         },
         (token) => {
           draftContent += token
@@ -731,4 +756,16 @@ export async function getChapterGenerationStatus(
     validationReport: chapter.validationReport as EngineValidationReport | null,
     lastAgentType: chapter.lastAgentType as AgentType | null,
   }
+}
+
+function formatStyleSection(profileData: Record<string, unknown>, section: string): string {
+  const data = profileData[section] as Record<string, unknown> | undefined
+  if (!data) return ''
+  return Object.entries(data)
+    .filter(([, v]) => v !== undefined && v !== null && v !== '')
+    .map(([k, v]) => {
+      if (Array.isArray(v)) return `${k}: ${v.join('、')}`
+      return `${k}: ${v}`
+    })
+    .join('\n')
 }

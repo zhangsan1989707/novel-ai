@@ -14,6 +14,7 @@ import { formatCharacterVoiceConstraint } from '../memory/character-memory'
 import type { CorrectionPlan } from './correction-builder'
 import { buildCorrectionPrompt } from './correction-builder'
 import { buildCorrectionSystemPrompt, buildCorrectionUserPrompt } from '../prompts/chapter/correction'
+import type { StyleProfilePromptCard, StyleSafetyMode } from '@/types/style'
 
 interface WriterInput extends AgentContext {
   outline: ChapterOutline
@@ -36,6 +37,9 @@ interface WriterInput extends AgentContext {
   styleVector?: StyleVector
   /** 风格预设名称 */
   stylePresetName?: string
+  styleProfilePromptCard?: StyleProfilePromptCard | null
+  styleStrength?: number
+  styleSafetyMode?: StyleSafetyMode
 }
 
 // 默认使用增强版提示词
@@ -96,6 +100,9 @@ export async function writerAgent(
       popularFictionProfile: input.popularFictionProfile,
       voiceConstraints: voiceConstraints || undefined,
       styleDirective: input.styleVector ? buildStyleModulationPrompt(input.styleVector, input.stylePresetName) : undefined,
+      styleProfilePromptCard: input.styleProfilePromptCard || null,
+      styleStrength: input.styleStrength,
+      styleSafetyMode: input.styleSafetyMode,
     })
   }
 

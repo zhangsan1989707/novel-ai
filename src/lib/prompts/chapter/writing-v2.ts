@@ -4,6 +4,8 @@
 import { CHAPTER_WORD_COUNT, CHAPTER_PACING } from '../shared/constants'
 import type { ChapterOutline } from '@/lib/engine/types'
 import { getKnowledgeForGenre, getAntiAiPromptFragment } from '@/lib/knowledge'
+import type { StyleProfilePromptCard, StyleSafetyMode } from '@/types/style'
+import { buildStylePromptCard, buildStyleDirectiveForWriter } from '../style/style-card'
 
 interface WriterPromptInput {
   projectTitle: string
@@ -27,6 +29,9 @@ interface WriterPromptInput {
   voiceConstraints?: string
   /** 风格调制指令 */
   styleDirective?: string
+  styleProfilePromptCard?: StyleProfilePromptCard | null
+  styleStrength?: number
+  styleSafetyMode?: StyleSafetyMode
 }
 
 export function buildWriterPrompt(input: WriterPromptInput): string {
@@ -112,6 +117,18 @@ export function buildWriterPrompt(input: WriterPromptInput): string {
 
   if (input.styleDirective) {
     parts.push(`\n${input.styleDirective}`)
+  }
+
+  if (input.styleProfilePromptCard) {
+    const styleStrength = input.styleStrength ?? 0.5
+    const safetyMode = input.styleSafetyMode ?? 'SAFE_ABSTRACT'
+    const styleCard = buildStyleDirectiveForWriter(
+      buildStylePromptCard({ ...input.styleProfilePromptCard, safetyMode }),
+      styleStrength
+    )
+    if (styleCard) {
+      parts.push(`\n${styleCard}`)
+    }
   }
 
   parts.push(`\n## 写作规范`)
