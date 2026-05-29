@@ -1,12 +1,12 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { Button, Card, CardContent, CardHeader, CardTitle, Badge, toast, MoreActionsMenu, ErrorBoundary } from '@/components/ui'
 import { BlueprintConsole } from '@/components/project'
 import { WorkflowBlueprintCard } from '@/components/project/WorkflowBlueprintCard'
 import { WorkflowArcPlanCard } from '@/components/project/WorkflowArcPlanCard'
 import { CharacterPanel, AnalysisWorkbench } from '@/components/ai'
-import { BookOpen, Users, Search, Rocket, ClipboardList, Shield, Sparkles, Wrench, Play, Download } from 'lucide-react'
+import { BookOpen, Users, Search, Rocket, Wrench, Play, Download, Repeat } from 'lucide-react'
 import { formatDisplayDate } from '@/lib/helpers'
 import { getMinimumChapterWordCount } from '@/lib/ai/chapter-quality'
 import type { GenerationSpeedMode } from '@/lib/ai/speed-mode'
@@ -61,6 +61,8 @@ export default function ProjectDetailPage({ initialProject }: { initialProject: 
   const [maintenanceRetrying, setMaintenanceRetrying] = useState(false)
   const [confirmingBlueprint, setConfirmingBlueprint] = useState(false)
   const [confirmingRoadmap, setConfirmingRoadmap] = useState(false)
+  const [continuousMode, setContinuousMode] = useState(false)
+  const [continuousWaiting, setContinuousWaiting] = useState(false)
   const [activeTab, setActiveTab] = useState<'dashboard' | 'settings' | 'analysis' | 'characters'>('dashboard')
 
   const {
@@ -86,6 +88,64 @@ export default function ProjectDetailPage({ initialProject }: { initialProject: 
     maintenanceActive,
     maintenanceFailed,
   })
+
+  const continuousModeRef = useRef(continuousMode)
+  useEffect(() => {
+    continuousModeRef.current = continuousMode
+  }, [continuousMode])
+
+  const pipelineRef = useRef(pipeline)
+  useEffect(() => {
+    pipelineRef.current = pipeline
+  }, [pipeline])
+
+  useEffect(() => {
+    if (!continuousMode || !pipeline) return
+
+    if (pipeline.status !== 'COMPLETED') {
+      setContinuousWaiting(false)
+      return
+    }
+
+    const allArcsComplete = project?.arcPlans?.every(
+      (arc: { isCompleted?: boolean }) => arc.isCompleted
+    )
+
+    if (allArcsComplete) {
+      toast.success('全书已全部生成完毕')
+      setContinuousMode(false)
+      return
+    }
+
+    setContinuousWaiting(true)
+    const timer = setTimeout(async () => {
+      if (!continuousModeRef.current) return
+
+      try {
+        const res = await fetch(`/api/novel/projects/${projectId}/pipeline/start`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ speedMode: selectedSpeedMode }),
+        })
+        const data = await res.json()
+        if (data.success) {
+          toast.success('持续生成：下一批次已启动')
+          setContinuousWaiting(false)
+        } else {
+          const msg = data.error?.message || '启动下一批次失败'
+          toast.error(msg)
+          setContinuousMode(false)
+          setContinuousWaiting(false)
+        }
+      } catch {
+        toast.error('持续生成：启动下一批次失败')
+        setContinuousMode(false)
+        setContinuousWaiting(false)
+      }
+    }, 2000)
+
+    return () => clearTimeout(timer)
+  }, [pipeline?.status, pipeline?.updatedAt, continuousMode, projectId, project?.arcPlans, selectedSpeedMode])
 
   const handleRetryMaintenance = async () => {
     setMaintenanceRetrying(true)
@@ -448,6 +508,14 @@ ${ch.content || ''}
                           <div className="mt-2 rounded-lg border border-green-200 bg-white/80 px-3 py-2 text-xs text-green-800 dark:border-green-900/50 dark:bg-slate-950/30 dark:text-green-200">
                             当前模式：{speedModeLabels[selectedSpeedMode]}。{getSpeedModeDescription(selectedSpeedMode)}
                           </div>
+                          {continuousWaiting && pipeline?.status === 'COMPLETED' && (
+                            <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200">
+                              <span className="inline-block mr-1.5 align-middle">
+                                <span className="inline-block w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                              </span>
+                              持续生成模式：正在准备下一批次...
+                            </div>
+                          )}
                           {flowBlockedReason && (
                             <div className="mt-2 text-xs text-green-700/80 dark:text-green-300/80">{flowBlockedReason}</div>
                           )}
@@ -478,6 +546,23 @@ ${ch.content || ''}
                           >
                             开始生成
                           </Button>
+                          <label
+                            className={`flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium cursor-pointer transition-all duration-150 border ${
+                              continuousMode
+                                ? 'bg-blue-50 border-blue-300 text-blue-700 dark:bg-blue-950/20 dark:border-blue-700 dark:text-blue-300'
+                                : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-400 dark:hover:border-gray-600'
+                            } ${(pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING') ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          >
+                            <Repeat className={`h-4 w-4 ${continuousMode ? 'text-blue-500 animate-spin [animation-duration:3s]' : ''}`} />
+                            持续生成
+                            <input
+                              type="checkbox"
+                              checked={continuousMode}
+                              onChange={(e) => setContinuousMode(e.target.checked)}
+                              disabled={pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING'}
+                              className="sr-only"
+                            />
+                          </label>
                         </div>
                       </div>
                     </CardContent>
