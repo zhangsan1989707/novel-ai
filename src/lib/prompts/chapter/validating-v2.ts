@@ -30,8 +30,8 @@ interface ValidationIssue {
 }
 
 interface ValidationReport {
-  result: 'pass' | 'fail' | 'retry'
-  score: number
+  result: 'pass' | 'fail' | 'retry' | 'skipped'
+  score: number  // -1 表示跳过校验
   issues: ValidationIssue[]
   characterUpdates: Record<string, Record<string, unknown>>
   newPlotlines: string[]

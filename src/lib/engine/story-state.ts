@@ -27,27 +27,34 @@ export async function getStoryState(projectId: number): Promise<StoryState | nul
 
 /**
  * 创建或初始化故事状态
+ * 仅在不存在时创建，已存在则不覆盖已有数据
  */
 export async function initStoryState(
   projectId: number,
   totalPlanned: number = 100
 ): Promise<void> {
-  await prisma.storyState.upsert({
+  const existing = await prisma.storyState.findUnique({
     where: { projectId },
-    update: {
-      emotionalArc: [],
-      mainConflict: null,
-      subConflicts: [],
-      currentChapter: 0,
-      totalPlanned,
-    },
-    create: {
+  })
+
+  if (existing) {
+    if (existing.totalPlanned !== totalPlanned) {
+      await prisma.storyState.update({
+        where: { projectId },
+        data: { totalPlanned },
+      })
+    }
+    return
+  }
+
+  await prisma.storyState.create({
+    data: {
       projectId,
       emotionalArc: [],
       mainConflict: null,
       subConflicts: [],
       currentChapter: 0,
-      totalPlanned,
+    totalPlanned,
     },
   })
 }
@@ -56,19 +63,14 @@ export async function initStoryState(
  * 创建或初始化世界状态
  */
 export async function initWorldState(projectId: number): Promise<void> {
-  await prisma.worldState.upsert({
+  const existing = await prisma.worldState.findUnique({
     where: { projectId },
-    update: {
-      mapLevel: 1,
-      factionCount: 1,
-      powerLevel: 1,
-      civilizationLevel: 1,
-      classStructure: [],
-      regions: [],
-      currentExpansion: null,
-      lastExpandedAt: null,
-    },
-    create: {
+  })
+
+  if (existing) return
+
+  await prisma.worldState.create({
+    data: {
       projectId,
       mapLevel: 1,
       factionCount: 1,
@@ -274,4 +276,34 @@ export async function getStoryEventHistory(
     chapterNo: e.chapterNo || null,
     createdAt: e.createdAt,
   }))
+}
+
+export async function verifyStoryState(projectId: number): Promise<{
+  ok: boolean
+  issues: string[]
+}> {
+  const issues: string[] = []
+
+  const state = await prisma.storyState.findUnique({ where: { projectId } })
+  if (!state) {
+    issues.push('StoryState 未初始化')
+  } else {
+    if (state.currentChapter === null || state.currentChapter === undefined) {
+      issues.push('currentChapter 为 null')
+    }
+    if (state.totalPlanned === null || state.totalPlanned === undefined) {
+      issues.push('totalPlanned 为 null')
+    }
+  }
+
+  const world = await prisma.worldState.findUnique({ where: { projectId } })
+  if (!world) {
+    issues.push('WorldState 未初始化')
+  } else {
+    if (world.mapLevel === null || world.mapLevel === undefined) {
+      issues.push('mapLevel 为 null')
+    }
+  }
+
+  return { ok: issues.length === 0, issues }
 }

@@ -74,6 +74,41 @@ function analyzeImportance(
 }
 
 /**
+ * 根据章节年龄衰减压缩摘要
+ * 伏笔引用（[伏笔#xxx]）永不丢失
+ * @param summary 原始摘要文本
+ * @param age 章节年龄（当前章节号 - 该章节号）
+ * @param plotlineRefs 当前活跃的伏笔引用标记列表，如 ["[伏笔#abc]", "[伏笔#xyz]"]
+ */
+export function decaySummary(
+  summary: string,
+  age: number,
+  plotlineRefs: string[]
+): string {
+  // 近 10 章：保留完整摘要
+  if (age <= 10) return summary
+
+  // 提取摘要中已有的伏笔引用标记（如 [伏笔#xxx]）
+  const foreshadowPattern = /\[伏笔#[^\]]+\]/g
+  const foundRefs = summary.match(foreshadowPattern) || []
+
+  // 合并传入伏笔引用与摘要中发现的引用，去重
+  const allRefs = [...new Set([...plotlineRefs, ...foundRefs])]
+
+  if (age > 30) {
+    // 30+ 章前：只保留伏笔状态（无伏笔则可完全省略）
+    if (allRefs.length === 0) return ''
+    return `[伏笔状态] ${allRefs.join('；')}`
+  }
+
+  // 10-30 章前：压缩为"关键事件 + 伏笔"两行
+  const sentences = summary.split(/[。！？]/).filter(s => s.trim())
+  const keyEvent = (sentences[0] || summary.slice(0, 80)) + '。'
+  const refText = allRefs.length > 0 ? `[伏笔] ${allRefs.join('；')}` : ''
+  return [keyEvent, refText].filter(Boolean).join('\n')
+}
+
+/**
  * 智能上下文压缩
  */
 export async function compressContext(

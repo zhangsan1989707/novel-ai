@@ -2,8 +2,8 @@
 set -e
 
 # 临时服务器发版脚本
-SERVER="root@47.109.85.168"
-PASSWORD="Sfpy5NN;e"
+SERVER="root@DEPLOY_SERVER"
+PASSWORD="${NOVELAI_SSH_PASSWORD:-$(cat .deploy-password 2>/dev/null || true)}"
 DEPLOY_DIR="/opt/novel-ai-temp"
 PROJECT_DIR=$(cd "$(dirname "$0")/.." && pwd)
 SSHPASS_CMD="sshpass -p '$PASSWORD'"
@@ -71,4 +71,4 @@ REMOTE_EOF
 
 echo ""
 echo "✅ 发版完成！"
-echo " 访问地址: http://47.109.85.168:3200"
+echo " 访问地址: http://DEPLOY_SERVER:3200"

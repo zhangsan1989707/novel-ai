@@ -240,6 +240,11 @@ export function buildFallbackAnalysisData(
         locations: [],
         consistency: project.worldSetting ? '基础回填：已有世界观信息，但模型未返回完整一致性判断' : '模型拒绝后待重新分析',
       }
+
+    default:
+      return {
+        summary: '未知分析维度，返回空结构',
+      }
   }
 }
 

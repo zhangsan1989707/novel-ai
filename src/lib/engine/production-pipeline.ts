@@ -9,7 +9,7 @@ import {
 } from '@/lib/ai/speed-mode'
 import type { PipelineStep, StorySteering } from '@/types'
 import { calculateBatchSize } from './batch-planner'
-import { clearJobRecoveryTarget, completeJob, failJob, getJobRecoveryTarget, saveCheckpoint, updateJobRuntime, updateJobStep } from './generation-job'
+import { clearJobRecoveryTarget, completeJob, failJob, saveCheckpoint, updateJobRuntime, updateJobStep } from './generation-job'
 import { validateOutline } from './outline-validator'
 import { toInternalArcStage, toInternalPlatform, toPrismaArcStage } from './production-mapping'
 import { runChapterGenerationPipeline } from './orchestrator'
@@ -28,65 +28,12 @@ import type { SSEEvent } from './types'
 import { getPlatformTemplate } from './platform-style'
 import { canStartGeneration, getWorkflowBlockReason } from './project-flow'
 import { normalizeArcPlanOutputs, resolveProjectPlanningTargets } from './project-length'
-import { buildPopularFictionPromptBlock, normalizePopularFictionProfile, type PopularFictionProfile } from './popular-fiction'
-
-type ChapterOutline = {
-  chapterNumber: number
-  title: string
-  summary: string
-}
-
-type BlueprintOutput = {
-  corePitch?: string
-  worldDirection?: string
-  mainlineDirection?: string
-  growthDirection?: string
-  endingDirection?: string
-  platformStrategy?: string
-  genreStrategy?: string
-  styleStrategy?: string
-  popularFictionProfile?: PopularFictionProfile
-  constraints?: string[]
-}
-
-type ArcPlanOutput = {
-  arcNumber?: number
-  name?: string
-  stage?: string
-  description?: string
-  startChapter?: number
-  endChapter?: number
-  batchSize?: number
-  goals?: string[]
-  keyEvents?: string[]
-}
-
-type PlotlineGuard = {
-  description: string
-  plannedAt?: number | null
-  plantedAt?: number | null
-  status?: string | null
-}
-
-const STRATEGY_PREFIXES = {
-  platform: '策略-平台',
-  genre: '策略-题材',
-  style: '策略-风格',
-} as const
-
-const STAGE_BATCH_RANGES: Record<ReturnType<typeof toInternalArcStage>, { min: number; max: number }> = {
-  opening: { min: 5, max: 8 },
-  growth: { min: 8, max: 12 },
-  expansion: { min: 10, max: 15 },
-  mid_conflict: { min: 8, max: 12 },
-  pre_finale: { min: 5, max: 8 },
-  finale: { min: 3, max: 6 },
-}
-
-type ResumePlan = {
-  startFrom: 'blueprint' | 'arc_plan' | 'chapter_list' | 'write'
-  resumeFromChapterNumber?: number
-}
+import { buildPopularFictionPromptBlock, normalizePopularFictionProfile } from './popular-fiction'
+import type { PopularFictionProfile } from './popular-fiction'
+import type { ChapterOutline, BlueprintOutput, ArcPlanOutput, PlotlineGuard, ResumePlan } from './pipeline-types'
+import { STRATEGY_PREFIXES, STAGE_BATCH_RANGES } from './pipeline-types'
+import { isJobPaused, resolveResumePlan } from './pipeline-checkpoint'
+import { normalizeChapterTitle } from './chapter-metadata'
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
@@ -216,14 +163,6 @@ function buildPlotlineBrief(plotlines: PlotlineGuard[]): string {
     .slice(0, 8)
     .map(plotline => `${plotline.description}${plotline.plannedAt ? `（计划第${plotline.plannedAt}章回收）` : ''}`)
     .join('；')
-}
-
-async function isJobPaused(jobId: number): Promise<boolean> {
-  const job = await prisma.generationJob.findUnique({
-    where: { id: jobId },
-    select: { status: true },
-  })
-  return job?.status === 'PAUSED'
 }
 
 export async function createProjectProvider(
@@ -647,7 +586,7 @@ async function planChapterBatch(
     .filter(item => item.chapterNumber >= startChapter && item.chapterNumber <= endChapter)
     .map(item => ({
       chapterNumber: item.chapterNumber,
-      title: item.title || `第${item.chapterNumber}章`,
+      title: normalizeChapterTitle(item.chapterNumber, item.title) || `第${item.chapterNumber}章`,
       summary: item.summary || item.title || `第${item.chapterNumber}章剧情推进`,
     }))
 
@@ -741,47 +680,6 @@ async function markCompletedArcIfNeeded(projectId: number) {
       await prisma.arcPlan.update({ where: { id: arc.id }, data: { isCompleted: true } })
     }
   }
-}
-
-async function resolveResumePlan(jobId: number): Promise<ResumePlan> {
-  const [job, target] = await Promise.all([
-    prisma.generationJob.findUnique({
-      where: { id: jobId },
-      include: {
-        checkpoints: {
-          orderBy: { createdAt: 'desc' },
-          take: 1,
-        },
-      },
-    }),
-    getJobRecoveryTarget(jobId),
-  ])
-
-  if (target?.mode === 'retry_batch') {
-    return { startFrom: 'chapter_list' }
-  }
-  if (target?.mode === 'retry_chapter') {
-    return { startFrom: 'write', resumeFromChapterNumber: target.chapterNumber }
-  }
-
-  if (!job) return { startFrom: 'blueprint' }
-
-  if (job.currentStep === 'CHAPTER_LIST') {
-    return { startFrom: 'chapter_list' }
-  }
-  if (job.currentStep === 'WRITE' && job.currentChapter > 0) {
-    return { startFrom: 'write', resumeFromChapterNumber: job.currentChapter }
-  }
-
-  const lastCheckpoint = job.checkpoints[0]
-  if (lastCheckpoint?.step === 'CHAPTER_LIST') {
-    return { startFrom: 'write', resumeFromChapterNumber: job.currentChapter || undefined }
-  }
-  if (lastCheckpoint?.step === 'ARC_PLAN') {
-    return { startFrom: 'chapter_list' }
-  }
-
-  return { startFrom: 'blueprint' }
 }
 
 export async function runProductionPipeline(

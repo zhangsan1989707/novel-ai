@@ -416,7 +416,7 @@ interface GenerateChapterListRequest {
 |----------|------|------|
 | `/api/novel/projects/[projectId]/export` | POST | 导出小说 |
 | `/api/novel/projects/[projectId]/export/download` | GET | 下载导出文件 |
-| `/api/novel/projects/[projectId]/export-data` | GET | 导出数据 |
+| `/api/novel/projects/[projectId]/export-data` | GET | 导出数据（兼容旧接口，建议迁移至 `POST /api/novel/projects/[projectId]/export {"view":"data"}`） |
 
 ### 12.2 导出格式
 

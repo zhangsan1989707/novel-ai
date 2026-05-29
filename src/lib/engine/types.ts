@@ -95,8 +95,8 @@ export interface ValidationIssue {
 }
 
 export interface ValidationReport {
-  result: 'pass' | 'retry' | 'fail'
-  score: number  // 0-100
+  result: 'pass' | 'retry' | 'fail' | 'skipped'
+  score: number  // 0-100, -1 表示跳过校验
   issues: ValidationIssue[]
   characterUpdates: Record<string, Record<string, unknown>>
   newPlotlines: string[]

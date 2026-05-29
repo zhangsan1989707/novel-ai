@@ -25,7 +25,7 @@ function buildNotificationContent(report: ProjectHealthReport): string {
 }
 
 export async function syncProjectHealthNotification(projectId: number, projectTitle: string, report: ProjectHealthReport): Promise<void> {
-  const userId = getCurrentUserId()
+  const userId = await getCurrentUserId()
   const title = buildNotificationTitle(projectTitle)
   const content = buildNotificationContent(report)
 

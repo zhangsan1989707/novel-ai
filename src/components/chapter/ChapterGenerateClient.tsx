@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Button, Card, CardContent, Badge, Progress, toast } from '@/components/ui'
+import { Button, Card, CardContent, Badge, Progress, toast, ErrorBoundary } from '@/components/ui'
 import { ChapterQualityPanel } from '@/components/ai/ChapterQualityPanel'
 import { ArrowLeft, RefreshCw, Save, Sparkles, Square, Wand2 } from 'lucide-react'
 import { ChapterStatus } from '@/types'
@@ -126,6 +126,7 @@ export function ChapterGenerateClient({ projectId, chapterId, initialChapter }: 
         body: JSON.stringify({
           title: chapter.title,
           content,
+          wordCount,
           status: chapter.status === ChapterStatus.REVIEWING ? 'REVIEWING' : 'COMPLETED',
         }),
       })
@@ -365,6 +366,7 @@ export function ChapterGenerateClient({ projectId, chapterId, initialChapter }: 
         {showQualityPanel && (chapter.content || '').length > 100 ? (
           <Card>
             <CardContent className="p-6">
+              <ErrorBoundary>
               <ChapterQualityPanel
                 projectId={projectId}
                 chapterId={chapterId}
@@ -373,6 +375,7 @@ export function ChapterGenerateClient({ projectId, chapterId, initialChapter }: 
                 content={chapter.content || ''}
                 onOptimizeComplete={handleOptimizeComplete}
               />
+              </ErrorBoundary>
             </CardContent>
           </Card>
         ) : null}

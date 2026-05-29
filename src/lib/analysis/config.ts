@@ -9,6 +9,7 @@ export const ANALYSIS_DIMENSIONS = [
   AnalysisDimension.CHAPTER_STRUCTURE,
   AnalysisDimension.READING_EXPERIENCE,
   AnalysisDimension.WORLD_SETTING,
+  AnalysisDimension.STYLE_PROFILE,
 ] as const
 
 export const DEFAULT_ANALYSIS_DIMENSIONS = [...ANALYSIS_DIMENSIONS]
@@ -22,6 +23,7 @@ export const ANALYSIS_DIMENSION_LABELS: Record<AnalysisDimension, string> = {
   [AnalysisDimension.CHAPTER_STRUCTURE]: '章节结构',
   [AnalysisDimension.READING_EXPERIENCE]: '阅读体验',
   [AnalysisDimension.WORLD_SETTING]: '世界观设定',
+  [AnalysisDimension.STYLE_PROFILE]: '文风提取',
 }
 
 export const ANALYSIS_DIMENSION_DESCRIPTIONS: Record<AnalysisDimension, string> = {
@@ -33,6 +35,7 @@ export const ANALYSIS_DIMENSION_DESCRIPTIONS: Record<AnalysisDimension, string> 
   [AnalysisDimension.CHAPTER_STRUCTURE]: '分析章节功能、节奏分布和结构推进',
   [AnalysisDimension.READING_EXPERIENCE]: '评估开篇抓力、爽点、章尾钩子和疲劳段',
   [AnalysisDimension.WORLD_SETTING]: '提取世界观、规则体系和设定兑现度',
+  [AnalysisDimension.STYLE_PROFILE]: '深度提取小说文笔、句式、修辞、叙事、剧情、人物创作风格',
 }
 
 export const ANALYSIS_FORMAT_TEMPLATES: Record<AnalysisDimension, string> = {
@@ -171,6 +174,58 @@ export const ANALYSIS_FORMAT_TEMPLATES: Record<AnalysisDimension, string> = {
     { "name": "地名", "description": "描述", "significance": "重要程度" }
   ],
   "consistency": "设定一致性评价"
+}`,
+  [AnalysisDimension.STYLE_PROFILE]: `{
+  "prose": {
+    "overallTone": "整体文笔语气",
+    "sentenceLength": "short|medium|long|mixed",
+    "rhythm": "节奏描述",
+    "descriptionDensity": 50,
+    "dialogueDensity": 30,
+    "innerMonologueDensity": 10
+  },
+  "vocabulary": {
+    "commonWords": ["高频词1", "高频词2"],
+    "forbiddenWords": ["应避免词1"],
+    "idiomLevel": "low|medium|high",
+    "modernity": "classical|modern|webnovel"
+  },
+  "sentence": {
+    "commonPatterns": ["句式1", "句式2"],
+    "paragraphPattern": "段落特征",
+    "transitionStyle": "过渡方式"
+  },
+  "rhetoric": {
+    "devices": ["比喻", "白描"],
+    "metaphorStyle": "比喻风格",
+    "ironyLevel": 20,
+    "sensoryDetail": "感官描写特征"
+  },
+  "narrative": {
+    "pov": "third_limited",
+    "narratorPresence": 30,
+    "expositionStyle": "信息揭示方式",
+    "suspenseMethod": "悬念手法"
+  },
+  "plot": {
+    "pacing": "节奏特征",
+    "conflictDensity": 70,
+    "reversalFrequency": 30,
+    "cliffhangerStyle": "章尾钩子特征",
+    "payoffPattern": "爽点兑现方式"
+  },
+  "character": {
+    "protagonistPattern": "主角塑造模式",
+    "dialogueStyle": "对话风格",
+    "emotionalExpression": "情绪外化方式",
+    "relationshipPattern": "人物关系特征"
+  },
+  "generationGuide": {
+    "mustDo": ["风格必须遵循的要点1", "要点2"],
+    "avoid": ["风格必须避免的1", "避免2"],
+    "sampleInstruction": "生成指导说明"
+  },
+  "riskNotes": ["风险提示1"]
 }`,
 }
 

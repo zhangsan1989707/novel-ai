@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const data = createVirtualWriterSchema.parse(body)
 
-    const creatorId = getCurrentUserId()
+    const creatorId = await getCurrentUserId()
 
     const writer = await prisma.virtualWriter.create({
       data: {

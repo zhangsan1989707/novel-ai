@@ -11,7 +11,7 @@
 
 | 项目 | 值 |
 |------|-----|
-| 服务器地址 | 47.109.85.168 |
+| 服务器地址 | DEPLOY_SERVER |
 | SSH 端口 | 22 |
 | 应用端口 | 3200 |
 | 部署目录 | /opt/novel-ai |
@@ -32,7 +32,7 @@
 
 2. **配置密码文件**
    ```bash
-   echo "Sfpy5NN;e" > .deploy-password
+   echo "***" > .deploy-password
    ```
 
 3. **确保密码文件不在 git 版本控制中**
@@ -69,22 +69,22 @@ COPYFILE_DISABLE=1 tar --exclude='node_modules' --exclude='.next' --exclude='.gi
   -czf /tmp/novel-ai-code.tar.gz .
 
 # 4. 上传到服务器
-sshpass -p "密码" scp -o StrictHostKeyChecking=no /tmp/novel-ai-code.tar.gz root@47.109.85.168:/opt/novel-ai/
+sshpass -p "$SSH_PASSWORD" scp -o StrictHostKeyChecking=no /tmp/novel-ai-code.tar.gz root@DEPLOY_SERVER:/opt/novel-ai/
 
 # 5. 服务器端操作
-sshpass -p "密码" ssh -o StrictHostKeyChecking=no root@47.109.85.168 << 'EOF'
+sshpass -p "$SSH_PASSWORD" ssh -o StrictHostKeyChecking=no root@DEPLOY_SERVER << 'EOF'
 cd /opt/novel-ai
 tar -xzf novel-ai-code.tar.gz
 npm ci
 npx prisma generate
 
 # 初始化 pgvector 扩展
-docker exec -i -e PGPASSWORD=password novelai-db psql -U novelai -d novel_ai << 'SQLEOF' || true
+docker exec -i -e PGPASSWORD="$POSTGRES_PASSWORD" novelai-db psql -U novelai -d novel_ai << 'SQLEOF' || true
 CREATE EXTENSION IF NOT EXISTS vector;
 SQLEOF
 
 # 应用数据库迁移（新增枚举和字段）
-docker exec -i -e PGPASSWORD=password novelai-db psql -U novelai -d novel_ai << 'SQLEOF' || true
+docker exec -i -e PGPASSWORD="$POSTGRES_PASSWORD" novelai-db psql -U novelai -d novel_ai << 'SQLEOF' || true
 ALTER TYPE "AIVendor" ADD VALUE IF NOT EXISTS 'ZHIPU';
 ALTER TYPE "AIVendor" ADD VALUE IF NOT EXISTS 'MIMO';
 ALTER TABLE "ai_model_configs" ADD COLUMN IF NOT EXISTS "embeddingVendor" "AIVendor";
@@ -93,7 +93,7 @@ ALTER TABLE "ai_model_configs" ADD COLUMN IF NOT EXISTS "embeddingApiEndpoint" T
 SQLEOF
 
 # 运行数据库迁移
-DATABASE_URL='postgresql://novelai:password@localhost:5433/novel_ai?schema=public' npx prisma migrate deploy
+DATABASE_URL='postgresql://$POSTGRES_USER:$POSTGRES_PASSWORD@localhost:5433/novel_ai?schema=public' npx prisma migrate deploy
 
 npm run build
 
@@ -158,7 +158,7 @@ PORT=3200 HOSTNAME=0.0.0.0 nohup npx next start -p 3200 > app.log 2>&1 &
 **解决方案**：
 ```bash
 # 手动指定数据库 URL
-DATABASE_URL='postgresql://novelai:password@localhost:5433/novel_ai?schema=public' npx prisma migrate deploy
+DATABASE_URL='postgresql://$POSTGRES_USER:$POSTGRES_PASSWORD@localhost:5433/novel_ai?schema=public' npx prisma migrate deploy
 ```
 
 ### 4.1 数据库枚举/字段缺失
@@ -169,7 +169,7 @@ DATABASE_URL='postgresql://novelai:password@localhost:5433/novel_ai?schema=publi
 
 **解决方案**：部署脚本已自动处理，手动执行：
 ```bash
-docker exec -i -e PGPASSWORD=password novelai-db psql -U novelai -d novel_ai << 'EOF'
+docker exec -i -e PGPASSWORD="$POSTGRES_PASSWORD" novelai-db psql -U novelai -d novel_ai << 'EOF'
 ALTER TYPE "AIVendor" ADD VALUE IF NOT EXISTS 'ZHIPU';
 ALTER TYPE "AIVendor" ADD VALUE IF NOT EXISTS 'MIMO';
 ALTER TABLE "ai_model_configs" ADD COLUMN IF NOT EXISTS "embeddingVendor" "AIVendor";
@@ -186,7 +186,7 @@ EOF
 
 **解决方案**：
 ```bash
-docker exec -i -e PGPASSWORD=password novelai-db psql -U novelai -d novel_ai << 'EOF'
+docker exec -i -e PGPASSWORD="$POSTGRES_PASSWORD" novelai-db psql -U novelai -d novel_ai << 'EOF'
 CREATE EXTENSION IF NOT EXISTS vector;
 EOF
 ```
@@ -201,13 +201,13 @@ EOF
 
 ```bash
 # 检查服务健康状态
-curl http://47.109.85.168:3200/api/health
+curl http://DEPLOY_SERVER:3200/api/health
 
 # 预期响应：
 # {"ok":true,"service":"novel-ai","checks":{"database":{"ok":true},"aiConfig":{"ok":true}}}
 
 # 创建测试项目
-curl -X POST http://47.109.85.168:3200/api/novel/projects \
+curl -X POST http://DEPLOY_SERVER:3200/api/novel/projects \
   -H 'Content-Type: application/json' \
   -d '{"title":"测试项目","genre":"玄幻","platform":"QIDIAN","lengthType":"LONG","corePitch":"测试"}'
 ```
@@ -216,10 +216,10 @@ curl -X POST http://47.109.85.168:3200/api/novel/projects \
 
 ```bash
 # 查看应用日志
-sshpass -p "密码" ssh root@47.109.85.168 "tail -30 /opt/novel-ai/app.log"
+sshpass -p "$SSH_PASSWORD" ssh root@DEPLOY_SERVER "tail -30 /opt/novel-ai/app.log"
 
 # 查看进程状态
-sshpass -p "密码" ssh root@47.109.85.168 "ps aux | grep node"
+sshpass -p "$SSH_PASSWORD" ssh root@DEPLOY_SERVER "ps aux | grep node"
 ```
 
 ## 七、注意事项

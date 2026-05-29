@@ -182,7 +182,7 @@ export function WorkflowArcPlanCard({ projectId, roadmap, confirmed, disabled, o
 
   return (
     <>
-      <Card className={`border-amber-200 bg-amber-50/60 dark:border-amber-900/40 dark:bg-amber-950/20 ${disabled ? 'opacity-60' : ''}`}>
+      <Card className={`border-l-4 border-l-amber-500 bg-amber-50/60 dark:bg-amber-950/20 overflow-hidden animate-card-enter ${disabled ? 'opacity-60' : ''}`}>
         <CardHeader>
           <div className="flex items-center justify-between gap-3">
             <div>

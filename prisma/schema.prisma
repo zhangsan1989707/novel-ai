@@ -24,6 +24,7 @@ model User {
   sessions         Session[]
   quota            UserQuota?
   virtualWriters   VirtualWriter[]
+  styleProfiles    StyleProfile[]
 
   @@map("users")
 }
@@ -109,6 +110,9 @@ model NovelProject {
   status             ProjectStatus            @default(DRAFT)
   coverImage         String?
   totalVolumes       Int                      @default(4)
+  styleProfileId  String?
+  styleStrength   Float    @default(0.5)
+  styleSafetyMode String   @default("SAFE_ABSTRACT")
   aiModelId          Int?
   creatorId          Int
   createdAt          DateTime                 @default(now())
@@ -144,8 +148,8 @@ model NovelProject {
   coverDesigns       CoverDesign[]
   pipelineJobs       GenerationJob[]
   chapters           NovelChapter[]
-  aiModelConfig      AIModelConfig?           @relation(fields: [aiModelId], references: [id])
-  creator            User                     @relation(fields: [creatorId], references: [id])
+  aiModelConfig      AIModelConfig?           @relation(fields: [aiModelId], references: [id], onDelete: SetNull)
+  creator            User                     @relation(fields: [creatorId], references: [id], onDelete: Restrict)
   plotlines          Plotline[]
   maintenanceTasks   ProjectMaintenanceTask[]
   researchRefs       ResearchRef[]
@@ -154,6 +158,7 @@ model NovelProject {
   sourceNovel        SourceNovel?
   storyEvents        StoryEvent[]
   storyState         StoryState?
+  styleProfile       StyleProfile?             @relation(fields: [styleProfileId], references: [id])
   villains           Villain[]
   volumeSummaries    VolumeSummary[]
   worldState         WorldState?
@@ -161,6 +166,11 @@ model NovelProject {
   @@index([creatorId])
   @@index([status])
   @@index([creatorId, status])
+  @@index([pipelineJobId])
+  @@index([workflowStage])
+  @@index([styleProfileId])
+  @@index([projectMode])
+  @@index([createdAt])
   @@map("novel_projects")
 }
 
@@ -193,6 +203,7 @@ model NovelChapter {
   @@unique([projectId, chapterNumber])
   @@index([projectId])
   @@index([projectId, status])
+  @@index([status])
   @@map("novel_chapters")
 }
 
@@ -214,6 +225,7 @@ model ChapterCommit {
 
   @@index([projectId])
   @@index([projectId, chapterNo])
+  @@index([status])
   @@map("chapter_commits")
 }
 
@@ -240,8 +252,11 @@ model VirtualWriter {
   chapters           NovelChapter[]
   creator            User             @relation(fields: [creatorId], references: [id])
   documents          WriterDocument[]
+  styleProfiles      StyleProfile[]
 
   @@index([creatorId])
+  @@index([isPublic])
+  @@index([trainingStatus])
   @@map("virtual_writers")
 }
 
@@ -259,6 +274,7 @@ model WriterDocument {
   virtualWriter   VirtualWriter  @relation(fields: [virtualWriterId], references: [id], onDelete: Cascade)
 
   @@index([virtualWriterId])
+  @@index([status])
   @@map("writer_documents")
 }
 
@@ -332,16 +348,46 @@ model AnalysisTask {
 }
 
 model SourceNovel {
-  id           String       @id @default(cuid())
-  projectId    Int          @unique
+  id           String         @id @default(cuid())
+  projectId    Int            @unique
   originalText String
   wordCount    Int
   sourceName   String?
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
-  project      NovelProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  project      NovelProject   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  styleProfiles StyleProfile[]
 
   @@map("source_novels")
+}
+
+model StyleProfile {
+  id              String             @id @default(cuid())
+  name            String
+  description     String?
+  sourceType      String             @default("USER_UPLOADED")
+  riskLevel       String             @default("MEDIUM")
+  authorLabel     String?
+  displayLabel    String
+  profileJson     Json
+  promptCard      String?            @db.Text
+  sampleStats     Json?
+  sourceNovelId   String?
+  virtualWriterId Int?
+  creatorId       Int
+  isPublic        Boolean            @default(false)
+  tags            String[]           @default([])
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  projects        NovelProject[]
+  creator         User               @relation(fields: [creatorId], references: [id])
+  sourceNovel     SourceNovel?        @relation(fields: [sourceNovelId], references: [id])
+  virtualWriter   VirtualWriter?      @relation(fields: [virtualWriterId], references: [id])
+
+  @@index([creatorId])
+  @@index([sourceType])
+  @@index([isPublic])
+  @@map("style_profiles")
 }
 
 model Character {
@@ -363,10 +409,19 @@ model Character {
   creatorId     Int?
   isPublic      Boolean       @default(false)
   tags          String[]      @default([])
+  speechStyle      String?
+  vocabularyLevel  String?
+  sentencePattern  String?
+  catchphraseStyle String?
+  dialogueExamples String[]    @default([])
+  voiceNotes       String?
   creator       User?         @relation("CharacterCreator", fields: [creatorId], references: [id])
   project       NovelProject  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId])
+  @@index([creatorId])
+  @@index([name])
+  @@index([role])
   @@map("characters")
 }
 
@@ -387,6 +442,7 @@ model Plotline {
   @@index([projectId])
   @@index([status])
   @@index([projectId, status, plantedAt])
+  @@index([type])
   @@map("plotlines")
 }
 
@@ -419,6 +475,7 @@ model StoryEvent {
   @@index([projectId])
   @@index([chapterNo])
   @@index([projectId, createdAt])
+  @@index([eventType])
   @@map("story_events")
 }
 
@@ -439,6 +496,8 @@ model AgentLog {
 
   @@index([projectId, chapterNo])
   @@index([createdAt])
+  @@index([agentType])
+  @@index([status])
   @@map("agent_logs")
 }
 
@@ -514,6 +573,7 @@ model Notification {
 
   @@index([userId, isRead])
   @@index([userId, createdAt])
+  @@index([createdAt])
   @@map("notifications")
 }
 
@@ -539,7 +599,7 @@ model UserQuota {
   isLocked       Boolean  @default(false)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
-  user           User     @relation(fields: [userId], references: [id])
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_quotas")
 }
@@ -564,6 +624,8 @@ model AIUsage {
 
   @@index([userId, usageMonth])
   @@index([projectId])
+  @@index([userId])
+  @@index([createdAt])
   @@map("ai_usages")
 }
 
@@ -580,6 +642,7 @@ model MarketTrend {
   createdAt      DateTime @default(now())
 
   @@index([platform, genre, rankDate])
+  @@index([rankDate])
   @@map("market_trends")
 }
 
@@ -600,6 +663,8 @@ model MarketBook {
 
   @@index([platform, genre])
   @@index([platform, rankDate])
+  @@index([rankPosition])
+  @@index([rankDate])
   @@map("market_books")
 }
 
@@ -715,6 +780,8 @@ model GenerationJob {
 
   @@index([projectId])
   @@index([status])
+  @@index([type])
+  @@index([projectId, status])
   @@map("generation_jobs")
 }
 
@@ -819,6 +886,9 @@ model Villain {
   project      NovelProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId])
+  @@index([arcNumber])
+  @@index([tier])
+  @@index([lifecycle])
   @@map("villains")
 }
 

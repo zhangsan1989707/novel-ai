@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { exportNovel, exportForPlatform } from '@/lib/export/service'
+import { exportNovel, exportForPlatform, loadProjectForExport } from '@/lib/export/service'
 import { ExportFormat } from '@/lib/export/types'
 import type { PlatformKey } from '@/lib/export/adapters/index'
 import AdmZip from 'adm-zip'
@@ -15,7 +15,58 @@ const exportSchema = z.object({
   format: z.enum(['txt', 'md', 'json', 'epub']).default('txt'),
   includeMetadata: z.boolean().default(true),
   includeChapterTitles: z.boolean().default(true),
+  view: z.enum(['file', 'data']).default('file'),
 })
+
+function parseProjectId(paramsValue: string) {
+  const projectId = parseInt(paramsValue, 10)
+  if (Number.isNaN(projectId)) {
+    return null
+  }
+
+  return projectId
+}
+
+function escapeXml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;')
+}
+
+function buildExportDataResponse(project: NonNullable<Awaited<ReturnType<typeof loadProjectForExport>>>) {
+  return {
+    id: project.id,
+    title: project.title,
+    outline: project.outline,
+    bookBlueprint: project.bookBlueprint,
+    storyState: project.storyState,
+    worldState: (project as { worldState?: unknown }).worldState ?? null,
+    arcPlans: project.arcPlans,
+    chapters: project.chapters.map((chapter) => ({
+      chapterNumber: chapter.chapterNumber,
+      title: chapter.title,
+      content: chapter.content,
+    })),
+  }
+}
+
+async function handleDataView(projectId: number) {
+  const project = await loadProjectForExport(projectId)
+  if (!project) {
+    return NextResponse.json(
+      { success: false, error: { code: 'NOT_FOUND', message: '项目不存在' } },
+      { status: 404 }
+    )
+  }
+
+  return NextResponse.json({
+    success: true,
+    data: buildExportDataResponse(project),
+  })
+}
 
 /**
  * POST /api/novel/projects/[projectId]/export
@@ -25,9 +76,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   let projectIdNum: number | null = null
   try {
     const { projectId } = await params
-    projectIdNum = parseInt(projectId, 10)
+    projectIdNum = parseProjectId(projectId)
 
-    if (isNaN(projectIdNum)) {
+    if (projectIdNum === null) {
       return NextResponse.json(
         { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
         { status: 400 }
@@ -37,12 +88,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const body = await request.json()
 
     const validPlatforms = ['qidian', 'fanqie', 'feilu', 'jinjiang', 'qimao', 'epub', 'generic'] as const
-    const platform = body.platform
-    if (platform && !validPlatforms.includes(platform)) {
+    const platform = body.platform as string | undefined
+    if (platform && !validPlatforms.includes(platform as typeof validPlatforms[number])) {
       return NextResponse.json(
         { success: false, error: { code: 'INVALID_PLATFORM', message: `不支持的平台: ${platform}` } },
         { status: 400 }
       )
+    }
+
+    const parsedView = z.enum(['file', 'data']).default('file').safeParse(body.view)
+    const view = parsedView.success ? parsedView.data : 'file'
+    if (view === 'data') {
+      return handleDataView(projectIdNum)
     }
 
     if (platform && platform !== 'generic') {
@@ -228,13 +285,4 @@ async function exportEpub(projectId: number): Promise<NextResponse> {
       { status: 500 }
     )
   }
-}
-
-function escapeXml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;')
 }

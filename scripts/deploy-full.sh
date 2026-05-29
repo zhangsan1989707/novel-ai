@@ -12,10 +12,10 @@ set -e
 # --------------------------
 # 配置项
 # --------------------------
-SERVER="root@47.109.85.168"
+SERVER="root@DEPLOY_SERVER"
 DEPLOY_DIR="/opt/novel-ai"
 PROJECT_DIR=$(cd "$(dirname "$0")/.." && pwd)
-SSH_PASSWORD_FILE="$PROJECT_DIR/.deploy-password"
+SSH_PASSWORD_FILE="${NOVELAI_SSH_PASSWORD_FILE:-$PROJECT_DIR/.deploy-password}"
 
 # --------------------------
 # 函数定义
@@ -205,7 +205,7 @@ verify_deployment() {
     fi
     
     echo ""
-    echo "📍 访问地址: http://47.109.85.168:3200"
+    echo "📍 访问地址: http://DEPLOY_SERVER:3200"
 }
 
 # --------------------------
@@ -226,5 +226,5 @@ verify_deployment
 
 echo ""
 echo "🎉 部署流程完成！"
-echo "📍 访问地址: http://47.109.85.168:3200"
+echo "📍 访问地址: http://DEPLOY_SERVER:3200"
 echo "📝 日志文件: $DEPLOY_DIR/app.log"

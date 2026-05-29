@@ -7,6 +7,7 @@ import { batchUpdateCharacterProfiles } from '@/lib/memory/character-memory'
 import * as storyState from './story-state'
 import type { ChapterCommitPayload } from './chapter-commit'
 import { indexChapterContent } from './rag-vector'
+import { resolveCommittedChapterTitle } from './chapter-metadata'
 
 export type ProjectionStatusMap = Record<string, string>
 
@@ -15,7 +16,7 @@ export interface ChapterProjectionContext {
   chapterNo: number
   commitId: string
   commitStatus: string
-  chapter: Pick<NovelChapter, 'id' | 'generationPrompt' | 'summary'>
+  chapter: Pick<NovelChapter, 'id' | 'title' | 'generationPrompt' | 'summary'>
   payload: ChapterCommitPayload
 }
 
@@ -110,7 +111,7 @@ export async function runChapterProjectionWriters(
     await prisma.novelChapter.update({
       where: { id: context.chapter.id },
       data: {
-        title: context.payload.chapterTitle,
+        title: resolveCommittedChapterTitle(context.chapterNo, context.payload.chapterTitle, context.chapter.title),
         content: normalizedContent,
         summary: context.payload.summaryData?.summary || context.chapter.summary || '',
         status: chapterReady ? 'COMPLETED' : 'REVIEWING',

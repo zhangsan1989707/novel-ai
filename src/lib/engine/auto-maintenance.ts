@@ -56,7 +56,7 @@ const globalState = globalThis as typeof globalThis & {
   __novelAiMaintenanceWorkerState?: MaintenanceWorkerState
 }
 
-const TASK_STALE_MS = 45_000
+const TASK_STALE_MS = 300_000
 
 function getState(): MaintenanceWorkerState {
   if (!globalState.__novelAiMaintenanceWorkerState) {
@@ -400,6 +400,13 @@ async function runTask(task: ProjectMaintenanceTaskRecord): Promise<Record<strin
   }
 }
 
+async function touchTaskLock(taskId: string): Promise<void> {
+  await prisma.projectMaintenanceTask.updateMany({
+    where: { id: taskId, status: 'RUNNING' },
+    data: { lockedAt: now() },
+  })
+}
+
 async function drainQueue(): Promise<void> {
   const state = getState()
   if (state.draining) return
@@ -409,6 +416,10 @@ async function drainQueue(): Promise<void> {
     while (true) {
       const task = await claimNextTask()
       if (!task) break
+
+      const heartbeat = setInterval(() => {
+        void touchTaskLock(task.id)
+      }, 20_000)
 
       try {
         const result = await runTask(task)
@@ -420,6 +431,8 @@ async function drainQueue(): Promise<void> {
           projectId: task.projectId,
           taskType: task.taskType,
         })
+      } finally {
+        clearInterval(heartbeat)
       }
     }
   } finally {
@@ -465,7 +478,7 @@ export async function ensureProjectMaintenanceQueued(
     input.ragDocumentCount === 0 &&
     (input.completedChapters > 0 || input.chapterSummaryCount > 0 || input.volumeSummaryCount > 0 || input.bookSummaryCount > 0)
   ) {
-    if (latestRagTask?.status === 'FAILED') {
+    if (latestRagTask?.status === 'FAILED' || latestRagTask?.status === 'COMPLETED') {
       return
     }
     await queueRagRebuild(projectId, { source: 'project_detail', reason: 'rag_missing' })

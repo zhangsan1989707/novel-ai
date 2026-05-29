@@ -3,7 +3,7 @@
 set -e
 
 # 配置
-SERVER="root@47.109.85.168"
+SERVER="root@DEPLOY_SERVER"
 IMAGE_NAME="novel-ai-app"
 IMAGE_TAG="latest"
 PROJECT_DIR=$(cd "$(dirname "$0")/.." && pwd)
@@ -17,7 +17,7 @@ if ! command -v sshpass &> /dev/null; then
 fi
 
 # 密码 (用于自动化)
-SSH_PASSWORD="Sfpy5NN;e"
+SSH_PASSWORD="${NOVELAI_SSH_PASSWORD:-$(cat .deploy-password 2>/dev/null || true)}"
 
 # 1. 生成版本信息
 echo "📝 生成版本信息..."
@@ -76,4 +76,4 @@ EOF
 
 echo ""
 echo "✅ 快速部署完成！"
-echo "📍 访问地址: http://47.109.85.168:3200"
+echo "📍 访问地址: http://DEPLOY_SERVER:3200"

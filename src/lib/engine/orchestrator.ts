@@ -30,6 +30,8 @@ import type {
   AgentType,
 } from './types'
 import { normalizePopularFictionProfile, scorePopularFictionChapter } from './popular-fiction'
+import type { StyleProfilePromptCard } from '@/types/style'
+import { buildSeedOutlineFromChapterState, extractChapterPlanningSeed } from './chapter-metadata'
 
 const MAX_RETRY_COUNT = 3
 
@@ -116,7 +118,7 @@ export async function runChapterGenerationPipeline(
   // 获取项目信息
   const project = await prisma.novelProject.findUnique({
     where: { id: projectId },
-    include: { aiModelConfig: true, bookBlueprint: true },
+    include: { aiModelConfig: true, bookBlueprint: true, styleProfile: true },
   })
 
   if (!project) {
@@ -127,8 +129,29 @@ export async function runChapterGenerationPipeline(
     (project.bookBlueprint as unknown as { popularFictionProfile?: unknown } | null)?.popularFictionProfile
   )
 
-  // 初始化故事状态
-  if (!isRetry) {
+  // 加载风格画像
+  let styleProfilePromptCard: StyleProfilePromptCard | null = null
+  if (project.styleProfile && project.styleProfile.promptCard) {
+    const sp = project.styleProfile
+    const profileData = sp.profileJson as Record<string, unknown>
+    styleProfilePromptCard = {
+      displayLabel: sp.displayLabel,
+      prose: formatStyleSection(profileData, 'prose'),
+      vocabulary: formatStyleSection(profileData, 'vocabulary'),
+      sentence: formatStyleSection(profileData, 'sentence'),
+      rhetoric: formatStyleSection(profileData, 'rhetoric'),
+      narrative: formatStyleSection(profileData, 'narrative'),
+      plot: formatStyleSection(profileData, 'plot'),
+      character: formatStyleSection(profileData, 'character'),
+      mustDo: ((profileData.generationGuide as Record<string, unknown> | undefined)?.mustDo as string[]) || [],
+      avoid: ((profileData.generationGuide as Record<string, unknown> | undefined)?.avoid as string[]) || [],
+      riskLevel: (sp.riskLevel as 'LOW' | 'MEDIUM' | 'HIGH') || 'LOW',
+      safetyMode: (project.styleSafetyMode as 'SAFE_ABSTRACT' | 'STRICT_PUBLIC_DOMAIN' | 'USER_LICENSED') || 'SAFE_ABSTRACT',
+    }
+  }
+
+  const state = await storyState.getStoryState(projectId)
+  if (!state) {
     await storyState.initStoryState(projectId, project.totalVolumes * 25)
   }
   const directorContext = isRetry ? null : await directChapter(chapterNo, projectId).catch(() => null)
@@ -192,35 +215,11 @@ export async function runChapterGenerationPipeline(
     if (isRetry) {
       const retryChapter = await prisma.novelChapter.findUnique({
         where: { id: chapter.id },
-        select: { chapterOutline: true },
+        select: { title: true, summary: true, chapterOutline: true },
       })
-      outline = (retryChapter?.chapterOutline as unknown as ChapterOutline) || {
-        chapterTitle: `第${chapterNo}章`,
-        chapterGoal: '继续推进故事发展',
-        mainConflict: '当前核心矛盾',
-        keyScenes: [
-          { scene: '开场：快速进入本章情节', characters: ['主角'], emotion: '推进' },
-          { scene: '发展：推进核心矛盾', characters: ['主角', '关键角色'], emotion: '对抗' },
-          { scene: '收尾：留下悬念', characters: ['主角'], emotion: '悬念' },
-        ],
-        ending: '留下新的悬念，为下一章铺垫',
-        foreshadows: [],
-        resolvedPlotlines: [],
-      }
+      outline = buildSeedOutlineFromChapterState(chapterNo, retryChapter)
     } else if (speedMode === 'fast') {
-      outline = {
-        chapterTitle: `第${chapterNo}章`,
-        chapterGoal: '继续推进故事发展',
-        mainConflict: '当前核心矛盾',
-        keyScenes: [
-          { scene: '开场：快速进入本章情节', characters: ['主角'], emotion: '推进' },
-          { scene: '发展：推进核心矛盾', characters: ['主角', '关键角色'], emotion: '对抗' },
-          { scene: '收尾：留下悬念', characters: ['主角'], emotion: '悬念' },
-        ],
-        ending: '留下新的悬念，为下一章铺垫',
-        foreshadows: [],
-        resolvedPlotlines: [],
-      }
+      outline = buildSeedOutlineFromChapterState(chapterNo, chapter)
     } else {
       await runPhase('planner', async () => {
         emit({ type: 'start', data: { chapterId: chapter.id, agent: 'planner' } })
@@ -311,6 +310,9 @@ export async function runChapterGenerationPipeline(
           provider: await getRoleProvider('writer'),
           maxTokens: estimateMaxTokensForTargetWordCount(chapterTargetWordCount),
           popularFictionProfile,
+          styleProfilePromptCard,
+          styleStrength: project.styleStrength,
+          styleSafetyMode: (project.styleSafetyMode as 'SAFE_ABSTRACT' | 'STRICT_PUBLIC_DOMAIN' | 'USER_LICENSED') || 'SAFE_ABSTRACT',
         },
         (token) => {
           draftContent += token
@@ -382,8 +384,9 @@ export async function runChapterGenerationPipeline(
         await storyState.updateChapterProgress(projectId, chapterNo)
       })
     } else {
+      const seed = extractChapterPlanningSeed(chapterNo, chapter)
       summaryData = {
-        summary: `第${chapterNo}章（快速模式生成）`,
+        summary: seed.summary,
         keyEvents: [],
         emotionalTone: null,
         plantedPlotlines: [],
@@ -610,24 +613,18 @@ export async function runChapterGenerationPipeline(
         return runChapterGenerationPipeline(projectId, chapterNo, emit, { speedMode, _retryMemoryPack: memoryPack })
       }
     } else {
-      const popularScore = scorePopularFictionChapter({
-        content: polishedContent,
-        outline,
-        profile: popularFictionProfile,
-      })
       validationReport = {
-        result: 'pass',
-        score: 85,
+        result: 'skipped',
+        score: -1,
         issues: [],
         characterUpdates: {},
         newPlotlines: [],
         resolvedPlotlines: [],
-        popularFiction: popularScore,
         qualityMetrics: {
-          logicScore: 85,
-          characterScore: 85,
-          emotionScore: 85,
-          styleScore: 85,
+          logicScore: -1,
+          characterScore: -1,
+          emotionScore: -1,
+          styleScore: -1,
         },
       }
       reviewedContent = polishedContent
@@ -731,4 +728,16 @@ export async function getChapterGenerationStatus(
     validationReport: chapter.validationReport as EngineValidationReport | null,
     lastAgentType: chapter.lastAgentType as AgentType | null,
   }
+}
+
+function formatStyleSection(profileData: Record<string, unknown>, section: string): string {
+  const data = profileData[section] as Record<string, unknown> | undefined
+  if (!data) return ''
+  return Object.entries(data)
+    .filter(([, v]) => v !== undefined && v !== null && v !== '')
+    .map(([k, v]) => {
+      if (Array.isArray(v)) return `${k}: ${v.join('、')}`
+      return `${k}: ${v}`
+    })
+    .join('\n')
 }
