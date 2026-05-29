@@ -6,7 +6,7 @@ import { BlueprintConsole } from '@/components/project'
 import { WorkflowBlueprintCard } from '@/components/project/WorkflowBlueprintCard'
 import { WorkflowArcPlanCard } from '@/components/project/WorkflowArcPlanCard'
 import { CharacterPanel, AnalysisWorkbench } from '@/components/ai'
-import { BookOpen, Users, Search, Rocket, Wrench, Play, Download, Repeat } from 'lucide-react'
+import { BookOpen, Users, Search, Rocket, Wrench, Play, Download, Repeat, Wand2 } from 'lucide-react'
 import { formatDisplayDate } from '@/lib/helpers'
 import { getMinimumChapterWordCount } from '@/lib/ai/chapter-quality'
 import type { GenerationSpeedMode } from '@/lib/ai/speed-mode'
@@ -87,6 +87,7 @@ export default function ProjectDetailPage({ initialProject }: { initialProject: 
     pipeline,
     maintenanceActive,
     maintenanceFailed,
+    openBatchDeslop: () => openModal('batchDeslop'),
   })
 
   const continuousModeRef = useRef(continuousMode)
@@ -94,22 +95,30 @@ export default function ProjectDetailPage({ initialProject }: { initialProject: 
     continuousModeRef.current = continuousMode
   }, [continuousMode])
 
-  const pipelineRef = useRef(pipeline)
-  useEffect(() => {
-    pipelineRef.current = pipeline
-  }, [pipeline])
+  const prevPipelineStatusRef = useRef<string | null>(null)
 
   useEffect(() => {
-    if (!continuousMode || !pipeline) return
+    if (!pipeline) {
+      prevPipelineStatusRef.current = null
+      return
+    }
+
+    const prevStatus = prevPipelineStatusRef.current
+    prevPipelineStatusRef.current = pipeline.status
+
+    if (!continuousModeRef.current) return
 
     if (pipeline.status !== 'COMPLETED') {
       setContinuousWaiting(false)
       return
     }
 
-    const allArcsComplete = project?.arcPlans?.every(
-      (arc: { isCompleted?: boolean }) => arc.isCompleted
-    )
+    if (prevStatus === 'COMPLETED') return
+
+    const arcs = project?.arcPlans
+    const allArcsComplete = arcs && arcs.length > 0
+      ? arcs.every((arc: { isCompleted?: boolean }) => arc.isCompleted)
+      : false
 
     if (allArcsComplete) {
       toast.success('全书已全部生成完毕')
@@ -145,7 +154,7 @@ export default function ProjectDetailPage({ initialProject }: { initialProject: 
     }, 2000)
 
     return () => clearTimeout(timer)
-  }, [pipeline?.status, pipeline?.updatedAt, continuousMode, projectId, project?.arcPlans, selectedSpeedMode])
+  }, [pipeline?.status, pipeline?.updatedAt, projectId, project?.arcPlans, selectedSpeedMode])
 
   const handleRetryMaintenance = async () => {
     setMaintenanceRetrying(true)
@@ -445,6 +454,12 @@ ${ch.content || ''}
                             {nextStepState.ctaLabel}
                           </Button>
                         )}
+                        {nextStepState.ctaAction === 'batchDeslop' && (
+                          <Button variant="primary" size="sm" onClick={() => openModal('batchDeslop')} className="gap-1.5">
+                            <Wand2 className="h-4 w-4" />
+                            {nextStepState.ctaLabel}
+                          </Button>
+                        )}
                         {nextStepState.ctaAction === 'blueprint' && (
                           <Button
                             variant="primary"
@@ -593,6 +608,17 @@ ${ch.content || ''}
                             </Badge>
                           )}
                         </CardTitle>
+                        {completedChapters > 0 && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openModal('batchDeslop')}
+                            className="gap-1.5"
+                          >
+                            <Wand2 className="h-4 w-4" />
+                            批量去AI味
+                          </Button>
+                        )}
                       </div>
                     </CardHeader>
                     <CardContent>
