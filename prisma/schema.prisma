@@ -148,8 +148,8 @@ model NovelProject {
   coverDesigns       CoverDesign[]
   pipelineJobs       GenerationJob[]
   chapters           NovelChapter[]
-  aiModelConfig      AIModelConfig?           @relation(fields: [aiModelId], references: [id])
-  creator            User                     @relation(fields: [creatorId], references: [id])
+  aiModelConfig      AIModelConfig?           @relation(fields: [aiModelId], references: [id], onDelete: SetNull)
+  creator            User                     @relation(fields: [creatorId], references: [id], onDelete: Restrict)
   plotlines          Plotline[]
   maintenanceTasks   ProjectMaintenanceTask[]
   researchRefs       ResearchRef[]
@@ -599,7 +599,7 @@ model UserQuota {
   isLocked       Boolean  @default(false)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
-  user           User     @relation(fields: [userId], references: [id])
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_quotas")
 }

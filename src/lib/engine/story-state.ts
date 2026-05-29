@@ -277,3 +277,33 @@ export async function getStoryEventHistory(
     createdAt: e.createdAt,
   }))
 }
+
+export async function verifyStoryState(projectId: number): Promise<{
+  ok: boolean
+  issues: string[]
+}> {
+  const issues: string[] = []
+
+  const state = await prisma.storyState.findUnique({ where: { projectId } })
+  if (!state) {
+    issues.push('StoryState 未初始化')
+  } else {
+    if (state.currentChapter === null || state.currentChapter === undefined) {
+      issues.push('currentChapter 为 null')
+    }
+    if (state.totalPlanned === null || state.totalPlanned === undefined) {
+      issues.push('totalPlanned 为 null')
+    }
+  }
+
+  const world = await prisma.worldState.findUnique({ where: { projectId } })
+  if (!world) {
+    issues.push('WorldState 未初始化')
+  } else {
+    if (world.mapLevel === null || world.mapLevel === undefined) {
+      issues.push('mapLevel 为 null')
+    }
+  }
+
+  return { ok: issues.length === 0, issues }
+}

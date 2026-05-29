@@ -416,7 +416,7 @@ export function ReviewPanel({ projectId, chapters = [] }: ReviewPanelProps) {
                       const config = REVIEWER_CONFIG[review.reviewer]
                       const Icon = config?.icon || BarChart3
                       return (
-                        <div key={idx} className="space-y-1">
+                        <div key={`${review.reviewer}-${idx}`} className="space-y-1">
                           <div className="flex items-center justify-between text-sm">
                             <div className="flex items-center gap-1.5">
                               <Icon className={`h-3.5 w-3.5 ${config?.color || ''}`} />
@@ -442,7 +442,7 @@ export function ReviewPanel({ projectId, chapters = [] }: ReviewPanelProps) {
                   const config = REVIEWER_CONFIG[review.reviewer]
                   const Icon = config?.icon || BarChart3
                   return (
-                    <div key={idx} className={`p-3 rounded-lg ${config?.bgColor || 'bg-gray-50 dark:bg-gray-800/50'}`}>
+                    <div key={`${review.reviewer}-detail-${idx}`} className={`p-3 rounded-lg ${config?.bgColor || 'bg-gray-50 dark:bg-gray-800/50'}`}>
                       <div className="flex items-center gap-1.5 text-sm font-medium mb-3">
                         <Icon className={`h-4 w-4 ${config?.color || ''}`} />
                         {review.reviewer}

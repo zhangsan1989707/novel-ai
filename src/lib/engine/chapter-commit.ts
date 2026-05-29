@@ -165,8 +165,8 @@ export async function recordAndApplyChapterCommit(
       },
     })
 
-    const result = await applyChapterCommit(commit.id)
-    return result
+    const commitRecord = toCommitRecord(commit)
+    return applyChapterCommit(commitRecord.id)
   })
 }
 

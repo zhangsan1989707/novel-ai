@@ -290,7 +290,7 @@ export function ContinuationPanel({
               <label className="text-xs text-gray-500">未回收伏笔 ({context.unresolvedForeshadowing.length})</label>
               <div className="max-h-32 overflow-y-auto space-y-1">
                 {context.unresolvedForeshadowing.slice(0, 5).map((f, i) => (
-                  <div key={i} className="text-sm p-2 bg-white dark:bg-gray-800 rounded border">
+                  <div key={`${f.setup?.slice(0, 10)}-${i}`} className="text-sm p-2 bg-white dark:bg-gray-800 rounded border">
                     <span className={`text-xs px-1.5 py-0.5 rounded ${
                       f.importance === 'major' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'
                     }`}>
@@ -363,7 +363,7 @@ export function ContinuationPanel({
               <label className="text-xs text-gray-500">最近章节摘要</label>
               <div className="max-h-32 overflow-y-auto space-y-1">
                 {context.recentChapterSummaries.map((s, i) => (
-                  <div key={i} className="text-xs p-2 bg-white dark:bg-gray-800 rounded">
+                  <div key={`${s.chapterNo}-${i}`} className="text-xs p-2 bg-white dark:bg-gray-800 rounded">
                     第{s.chapterNo}章: {s.summary?.slice(0, 50)}...
                   </div>
                 ))}

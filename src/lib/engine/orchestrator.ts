@@ -635,24 +635,18 @@ export async function runChapterGenerationPipeline(
         return runChapterGenerationPipeline(projectId, chapterNo, emit, { speedMode, _retryMemoryPack: memoryPack })
       }
     } else {
-      const popularScore = scorePopularFictionChapter({
-        content: polishedContent,
-        outline,
-        profile: popularFictionProfile,
-      })
       validationReport = {
-        result: 'pass',
-        score: 85,
+        result: 'skipped',
+        score: -1,
         issues: [],
         characterUpdates: {},
         newPlotlines: [],
         resolvedPlotlines: [],
-        popularFiction: popularScore,
         qualityMetrics: {
-          logicScore: 85,
-          characterScore: 85,
-          emotionScore: 85,
-          styleScore: 85,
+          logicScore: -1,
+          characterScore: -1,
+          emotionScore: -1,
+          styleScore: -1,
         },
       }
       reviewedContent = polishedContent
