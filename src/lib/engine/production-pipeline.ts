@@ -33,6 +33,7 @@ import type { PopularFictionProfile } from './popular-fiction'
 import type { ChapterOutline, BlueprintOutput, ArcPlanOutput, PlotlineGuard, ResumePlan } from './pipeline-types'
 import { STRATEGY_PREFIXES, STAGE_BATCH_RANGES } from './pipeline-types'
 import { isJobPaused, resolveResumePlan } from './pipeline-checkpoint'
+import { normalizeChapterTitle } from './chapter-metadata'
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
@@ -585,7 +586,7 @@ async function planChapterBatch(
     .filter(item => item.chapterNumber >= startChapter && item.chapterNumber <= endChapter)
     .map(item => ({
       chapterNumber: item.chapterNumber,
-      title: item.title || `第${item.chapterNumber}章`,
+      title: normalizeChapterTitle(item.chapterNumber, item.title) || `第${item.chapterNumber}章`,
       summary: item.summary || item.title || `第${item.chapterNumber}章剧情推进`,
     }))
 

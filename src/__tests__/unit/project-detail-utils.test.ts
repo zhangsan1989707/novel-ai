@@ -159,5 +159,19 @@ describe('project-detail utils', () => {
       expect(groups).toHaveLength(1)
       expect(groups[0].chapters).toHaveLength(2)
     })
+
+    it('derives chapter groups from chapter ranges when arc relations are absent', () => {
+      const project = {
+        chapters: [makeChapter(1, 1), makeChapter(2, 2), makeChapter(3, 3)],
+        arcPlans: [
+          { arcNumber: 1, name: 'Arc 1', startChapter: 1, endChapter: 2 },
+          { arcNumber: 2, name: 'Arc 2', startChapter: 3, endChapter: 6 },
+        ],
+      }
+      const groups = groupChaptersByArc(project)
+      expect(groups).toHaveLength(2)
+      expect(groups[0].chapters.map(chapter => chapter.chapterNumber)).toEqual([1, 2])
+      expect(groups[1].chapters.map(chapter => chapter.chapterNumber)).toEqual([3])
+    })
   })
 })

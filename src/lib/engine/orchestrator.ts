@@ -31,6 +31,7 @@ import type {
 } from './types'
 import { normalizePopularFictionProfile, scorePopularFictionChapter } from './popular-fiction'
 import type { StyleProfilePromptCard } from '@/types/style'
+import { buildSeedOutlineFromChapterState, extractChapterPlanningSeed } from './chapter-metadata'
 
 const MAX_RETRY_COUNT = 3
 
@@ -214,35 +215,11 @@ export async function runChapterGenerationPipeline(
     if (isRetry) {
       const retryChapter = await prisma.novelChapter.findUnique({
         where: { id: chapter.id },
-        select: { chapterOutline: true },
+        select: { title: true, summary: true, chapterOutline: true },
       })
-      outline = (retryChapter?.chapterOutline as unknown as ChapterOutline) || {
-        chapterTitle: `第${chapterNo}章`,
-        chapterGoal: '继续推进故事发展',
-        mainConflict: '当前核心矛盾',
-        keyScenes: [
-          { scene: '开场：快速进入本章情节', characters: ['主角'], emotion: '推进' },
-          { scene: '发展：推进核心矛盾', characters: ['主角', '关键角色'], emotion: '对抗' },
-          { scene: '收尾：留下悬念', characters: ['主角'], emotion: '悬念' },
-        ],
-        ending: '留下新的悬念，为下一章铺垫',
-        foreshadows: [],
-        resolvedPlotlines: [],
-      }
+      outline = buildSeedOutlineFromChapterState(chapterNo, retryChapter)
     } else if (speedMode === 'fast') {
-      outline = {
-        chapterTitle: `第${chapterNo}章`,
-        chapterGoal: '继续推进故事发展',
-        mainConflict: '当前核心矛盾',
-        keyScenes: [
-          { scene: '开场：快速进入本章情节', characters: ['主角'], emotion: '推进' },
-          { scene: '发展：推进核心矛盾', characters: ['主角', '关键角色'], emotion: '对抗' },
-          { scene: '收尾：留下悬念', characters: ['主角'], emotion: '悬念' },
-        ],
-        ending: '留下新的悬念，为下一章铺垫',
-        foreshadows: [],
-        resolvedPlotlines: [],
-      }
+      outline = buildSeedOutlineFromChapterState(chapterNo, chapter)
     } else {
       await runPhase('planner', async () => {
         emit({ type: 'start', data: { chapterId: chapter.id, agent: 'planner' } })
@@ -407,8 +384,9 @@ export async function runChapterGenerationPipeline(
         await storyState.updateChapterProgress(projectId, chapterNo)
       })
     } else {
+      const seed = extractChapterPlanningSeed(chapterNo, chapter)
       summaryData = {
-        summary: `第${chapterNo}章（快速模式生成）`,
+        summary: seed.summary,
         keyEvents: [],
         emotionalTone: null,
         plantedPlotlines: [],

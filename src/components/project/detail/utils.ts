@@ -26,23 +26,36 @@ export function formatDuration(durationMs?: number) {
 interface ArcPlan {
   arcNumber: number
   name: string
+  startChapter?: number
+  endChapter?: number | null
   chapters?: ProjectChapter[]
 }
 
 export function groupChaptersByArc(project: { chapters: ProjectChapter[]; arcPlans?: ArcPlan[] }) {
   const groups: Array<{ arcName: string; arcNumber: number; chapters: ProjectChapter[] }> = []
+  const assignedChapterIds = new Set<number>()
 
   if (project.arcPlans?.length) {
     for (const arc of project.arcPlans) {
+      const rangedChapters = typeof arc.startChapter === 'number'
+        ? project.chapters.filter(chapter => {
+            if (assignedChapterIds.has(chapter.id)) return false
+            if (chapter.chapterNumber < arc.startChapter!) return false
+            if (typeof arc.endChapter === 'number' && chapter.chapterNumber > arc.endChapter) return false
+            return true
+          })
+        : []
+      const chapters = arc.chapters?.length ? arc.chapters : rangedChapters
+      chapters.forEach(chapter => assignedChapterIds.add(chapter.id))
+
       groups.push({
         arcName: arc.name,
         arcNumber: arc.arcNumber,
-        chapters: arc.chapters?.length ? arc.chapters : [],
+        chapters,
       })
     }
   }
 
-  const assignedChapterIds = new Set(groups.flatMap(group => group.chapters.map(chapter => chapter.id)))
   const remainingChapters = project.chapters.filter(chapter => !assignedChapterIds.has(chapter.id))
 
   if (remainingChapters.length > 0) {

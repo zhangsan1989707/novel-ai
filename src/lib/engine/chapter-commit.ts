@@ -143,31 +143,8 @@ export async function recordAndApplyChapterCommit(
   payload: ChapterCommitPayload,
   source: string = 'pipeline'
 ): Promise<ChapterCommitRecord> {
-  return prisma.$transaction(async (tx) => {
-    const commit = await tx.chapterCommit.create({
-      data: {
-        projectId,
-        chapterId,
-        chapterNo: payload.chapterNo,
-        source,
-        status: 'accepted',
-        payload: payload as unknown as Prisma.InputJsonValue,
-        projectionStatus: {
-          chapter: 'pending',
-          version: 'pending',
-          summary: 'pending',
-          plotlines: 'pending',
-          characters: 'pending',
-          story: 'pending',
-          project: 'pending',
-          audit: 'pending',
-        } as unknown as Prisma.InputJsonValue,
-      },
-    })
-
-    const commitRecord = toCommitRecord(commit)
-    return applyChapterCommit(commitRecord.id)
-  })
+  const commit = await createChapterCommit(projectId, chapterId, payload, source)
+  return applyChapterCommit(commit.id)
 }
 
 export async function replayChapterCommit(commitId: string): Promise<ChapterCommitRecord> {
