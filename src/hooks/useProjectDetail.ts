@@ -194,6 +194,7 @@ type ModalKey =
   | 'plotAnalysis'
   | 'review'
   | 'deslop'
+  | 'batchDeslop'
   | 'export'
 
 export function useProjectDetail(initialProject: ProjectDetail | null) {
@@ -223,6 +224,7 @@ export function useProjectDetail(initialProject: ProjectDetail | null) {
     plotAnalysis: false,
     review: false,
     deslop: false,
+    batchDeslop: false,
     export: false,
   })
 

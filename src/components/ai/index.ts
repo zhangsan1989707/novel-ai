@@ -31,6 +31,7 @@ export { MarketScanPanel } from './MarketScanPanel'
 export { CoverGenerator } from './CoverGenerator'
 // Deslop
 export { DeslopPanel } from './DeslopPanel'
+export { BatchDeslopPanel } from './BatchDeslopPanel'
 // Short Story
 export { ShortStoryPanel } from './ShortStoryPanel'
 // Story Steering

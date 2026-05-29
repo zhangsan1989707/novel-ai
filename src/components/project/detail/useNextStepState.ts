@@ -16,6 +16,7 @@ interface UseNextStepStateParams {
   pipeline: PipelineStatus | null
   maintenanceActive: boolean
   maintenanceFailed: boolean
+  openBatchDeslop?: () => void
 }
 
 export function useNextStepState({
@@ -23,9 +24,25 @@ export function useNextStepState({
   pipeline,
   maintenanceActive,
   maintenanceFailed,
+  openBatchDeslop,
 }: UseNextStepStateParams): NextStepState | null {
   if (!project?.preflight) {
     return null
+  }
+
+  const fastModeCompleted = pipeline?.status === 'COMPLETED' && pipeline?.speedMode === 'fast'
+  const hasCompletedChapters = (project.chapters || []).some(c => c.status === 'COMPLETED' && c.content)
+  const hasReviewingChapters = (project.chapters || []).some(c => c.status === 'REVIEWING')
+
+  if (fastModeCompleted && hasCompletedChapters && openBatchDeslop) {
+    return {
+      badgeVariant: 'warning',
+      badgeLabel: '建议处理',
+      title: '快速验收已完成生成，建议进行去AI味处理',
+      description: `当前共有 ${project.chapters.filter(c => c.status === 'COMPLETED' && c.content).length} 章已完成。快速验收模式跳过了去AI味和对抗审查环节，建议批量处理以提升文本质量、降低平台AI检测风险。${hasReviewingChapters ? `另有 ${project.chapters.filter(c => c.status === 'REVIEWING').length} 章待审稿需要单独处理。` : ''}`,
+      ctaLabel: '一键批量去AI味',
+      ctaAction: 'batchDeslop',
+    }
   }
 
   if (!project.preflight.hasModel) {

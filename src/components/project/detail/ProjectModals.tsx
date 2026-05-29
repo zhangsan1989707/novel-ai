@@ -3,11 +3,11 @@
 import { Button, Modal, Badge, toast } from '@/components/ui'
 import { BookOpen } from 'lucide-react'
 import { ProjectBaseInfoForm } from '@/components/project'
-import { ResearchPanel, ReviewPanel, DeslopPanel, ExportPanel, AnalysisWorkbench, CoverGenerator } from '@/components/ai'
+import { ResearchPanel, ReviewPanel, DeslopPanel, BatchDeslopPanel, ExportPanel, AnalysisWorkbench, CoverGenerator } from '@/components/ai'
 import type { ProjectChapter } from '@/hooks/useProjectDetail'
 import { chapterStatusMap } from './constants'
 
-type ModalKey = 'edit' | 'delete' | 'toolbox' | 'chapterPreview' | 'research' | 'cover' | 'plotAnalysis' | 'review' | 'deslop' | 'export'
+type ModalKey = 'edit' | 'delete' | 'toolbox' | 'chapterPreview' | 'research' | 'cover' | 'plotAnalysis' | 'review' | 'deslop' | 'batchDeslop' | 'export'
 
 interface ProjectModalsProps {
   projectId: number
@@ -209,6 +209,20 @@ export function ProjectModals({
         className="max-w-4xl"
       >
         <DeslopPanel projectId={projectId} />
+      </Modal>
+
+      <Modal
+        open={modals.batchDeslop}
+        onClose={() => closeModal('batchDeslop')}
+        title="批量去AI味"
+        description={`选择已完成章节进行批量处理。共 ${project.chapters.filter(c => c.status === 'COMPLETED' && c.content).length} 章可处理。`}
+        className="max-w-3xl"
+      >
+        <BatchDeslopPanel
+          projectId={projectId}
+          chapters={project.chapters}
+          onCompleted={fetchProject}
+        />
       </Modal>
 
       <Modal
