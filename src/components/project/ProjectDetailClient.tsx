@@ -436,14 +436,19 @@ ${ch.content || ''}
           <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
             <div className="xl:col-span-9 space-y-6">
               {nextStepState && (
-                <Card>
+                <Card className={`border-l-4 overflow-hidden animate-card-enter ${
+                  nextStepState.badgeVariant === 'warning' ? 'border-l-amber-500 bg-amber-50/50 dark:bg-amber-950/15' :
+                  nextStepState.badgeVariant === 'danger' ? 'border-l-red-500 bg-red-50/50 dark:bg-red-950/15' :
+                  nextStepState.badgeVariant === 'primary' ? 'border-l-blue-500 bg-blue-50/50 dark:bg-blue-950/15' :
+                  'border-l-gray-400 bg-gray-50/50 dark:bg-gray-900/30'
+                }`}>
                   <CardContent className="p-4">
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                      <div>
-                        <Badge variant={nextStepState.badgeVariant}>
+                      <div className="flex-1 min-w-0">
+                        <Badge variant={nextStepState.badgeVariant} className="mb-2">
                           {nextStepState.badgeLabel}
                         </Badge>
-                        <h2 className="mt-2 text-lg font-semibold text-gray-900 dark:text-white">{nextStepState.title}</h2>
+                        <h2 className="text-base font-semibold text-gray-900 dark:text-white">{nextStepState.title}</h2>
                         <p className="mt-1 text-sm text-gray-600 dark:text-gray-300 leading-relaxed max-w-3xl">
                           {nextStepState.description}
                         </p>
@@ -514,13 +519,18 @@ ${ch.content || ''}
                     />
                   )}
 
-                  <Card className="border-green-200 bg-green-50/70 dark:border-green-900/40 dark:bg-green-950/20">
+                  <Card className="border-l-4 border-l-emerald-500 bg-emerald-50/70 dark:bg-emerald-950/15 overflow-hidden animate-card-enter">
                     <CardContent className="p-5">
                       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                        <div>
-                          <div className="text-sm font-medium text-green-700 dark:text-green-300">生成控制</div>
-                          <h2 className="mt-1 text-lg font-semibold text-gray-900 dark:text-white">选择生产节奏后启动流水线</h2>
-                          <div className="mt-2 rounded-lg border border-green-200 bg-white/80 px-3 py-2 text-xs text-green-800 dark:border-green-900/50 dark:bg-slate-950/30 dark:text-green-200">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-emerald-500/15">
+                              <Rocket className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                            </div>
+                            <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">生成控制</span>
+                          </div>
+                          <h2 className="text-base font-semibold text-gray-900 dark:text-white">选择生产节奏后启动流水线</h2>
+                          <div className="mt-2 rounded-lg border border-emerald-200/60 bg-white/70 px-3 py-2 text-xs text-emerald-800 dark:border-emerald-900/40 dark:bg-slate-950/40 dark:text-emerald-200">
                             当前模式：{speedModeLabels[selectedSpeedMode]}。{getSpeedModeDescription(selectedSpeedMode)}
                           </div>
                           {continuousWaiting && pipeline?.status === 'COMPLETED' && (
@@ -593,11 +603,13 @@ ${ch.content || ''}
                     />
                   )}
 
-                  <Card>
+                  <Card className="border-l-4 border-l-blue-400 overflow-hidden animate-card-enter">
                     <CardHeader>
                       <div className="flex items-center justify-between">
                         <CardTitle className="flex items-center gap-2 text-base">
-                          <BookOpen className="h-5 w-5 text-blue-600" />
+                          <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-blue-500/10">
+                            <BookOpen className="h-4 w-4 text-blue-600" />
+                          </div>
                           章节目录
                           <Badge variant="secondary">
                             {completedChapters}/{project.chapters.length} 已完成

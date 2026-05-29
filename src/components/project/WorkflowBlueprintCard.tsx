@@ -210,7 +210,7 @@ export function WorkflowBlueprintCard({ projectId, blueprint, confirmed, confirm
 
   return (
     <>
-      <Card className="border-blue-200 bg-blue-50/60 dark:border-blue-900/40 dark:bg-blue-950/20">
+      <Card className="border-l-4 border-l-blue-500 bg-blue-50/60 dark:bg-blue-950/20 overflow-hidden animate-card-enter">
         <CardHeader>
           <div className="flex items-center justify-between gap-3">
             <div>
