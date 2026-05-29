@@ -483,6 +483,16 @@ ${ch.content || ''}
                     </CardContent>
                   </Card>
 
+                  {pipeline && (
+                    <PipelineControlPanel
+                      pipeline={pipeline}
+                      activeSpeedMode={activeSpeedMode}
+                      handlePausePipeline={handlePausePipeline}
+                      handleResumePipeline={handleResumePipeline}
+                      handleRecoverPipeline={handleRecoverPipeline}
+                    />
+                  )}
+
                   <Card>
                     <CardHeader>
                       <div className="flex items-center justify-between">
@@ -530,17 +540,6 @@ ${ch.content || ''}
                       />
                     </CardContent>
                   </Card>
-
-
-                  {pipeline && (
-                    <PipelineControlPanel
-                      pipeline={pipeline}
-                      activeSpeedMode={activeSpeedMode}
-                      handlePausePipeline={handlePausePipeline}
-                      handleResumePipeline={handleResumePipeline}
-                      handleRecoverPipeline={handleRecoverPipeline}
-                    />
-                  )}
                 </>
               )}
 
