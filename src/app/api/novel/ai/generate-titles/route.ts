@@ -116,6 +116,15 @@ export async function POST(request: NextRequest) {
     // 评分排序
     const ranked = rankCandidates(rawCandidates, input.platform, input.genre)
 
+    // 去重：移除重复标题
+    const seen = new Set<string>()
+    const deduped = ranked.filter(candidate => {
+      const normalized = candidate.title.toLowerCase().trim()
+      if (seen.has(normalized)) return false
+      seen.add(normalized)
+      return true
+    })
+
     // 当前标题评估
     let currentTitleScore = null
     if (body.currentTitle) {
@@ -130,9 +139,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: {
-        candidates: ranked.slice(0, 10),
-        workingTitle: ranked[ranked.length - 1]?.title || '',
-        recommendation: ranked[0],
+        candidates: deduped.slice(0, 10),
+        workingTitle: deduped[deduped.length - 1]?.title || '',
+        recommendation: deduped[0],
         currentTitleScore,
       },
     })
