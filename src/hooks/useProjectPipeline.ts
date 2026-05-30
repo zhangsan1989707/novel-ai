@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef } from 'react'
 import { toast } from '@/components/ui'
 import type { PipelineRuntimeState } from '@/lib/engine/pipeline-runtime'
 import type { GenerationSpeedMode } from '@/lib/ai/speed-mode'
@@ -48,6 +48,7 @@ export function useProjectPipeline(options: {
   const onFailedRef = useRef(onFailed)
   const pollAbortRef = useRef<AbortController | null>(null)
   const setSelectedChapterNumberRef = useRef(setSelectedChapterNumber)
+  const applySnapshotRef = useRef<(snapshot: PipelineStatus) => void>(() => {})
 
   useEffect(() => {
     onCompletedRef.current = onCompleted
@@ -59,34 +60,36 @@ export function useProjectPipeline(options: {
     setSelectedChapterNumberRef.current = setSelectedChapterNumber
   })
 
-  const applyPipelineSnapshot = useCallback((nextPipeline: PipelineStatus) => {
-    const nextStatus = nextPipeline.status
-    const prevStatus = lastPipelineStatusRef.current
-    const nextUpdatedAt = nextPipeline.updatedAt || ''
+  useLayoutEffect(() => {
+    applySnapshotRef.current = (nextPipeline: PipelineStatus) => {
+      const nextStatus = nextPipeline.status
+      const prevStatus = lastPipelineStatusRef.current
+      const nextUpdatedAt = nextPipeline.updatedAt || ''
 
-    if (nextUpdatedAt && lastSnapshotUpdatedAtRef.current) {
-      if (nextUpdatedAt < lastSnapshotUpdatedAtRef.current) return
-    }
-    if (nextUpdatedAt) {
-      lastSnapshotUpdatedAtRef.current = nextUpdatedAt
-    }
+      if (nextUpdatedAt && lastSnapshotUpdatedAtRef.current) {
+        if (nextUpdatedAt < lastSnapshotUpdatedAtRef.current) return
+      }
+      if (nextUpdatedAt) {
+        lastSnapshotUpdatedAtRef.current = nextUpdatedAt
+      }
 
-    setPipeline(nextPipeline)
-    lastPipelineStatusRef.current = nextStatus
+      setPipeline(nextPipeline)
+      lastPipelineStatusRef.current = nextStatus
 
-    const nextLiveChapterNumber = nextPipeline.runtime?.currentChapter?.chapterNumber || null
-    if (nextStatus === 'RUNNING' && nextLiveChapterNumber) {
-      setSelectedChapterNumberRef.current(() => nextLiveChapterNumber)
-    }
+      const nextLiveChapterNumber = nextPipeline.runtime?.currentChapter?.chapterNumber || null
+      if (nextStatus === 'RUNNING' && nextLiveChapterNumber) {
+        setSelectedChapterNumberRef.current(() => nextLiveChapterNumber)
+      }
 
-    if (nextStatus === 'COMPLETED' && prevStatus !== 'COMPLETED') {
-      toast.success(`AI 生成完成，共生成 ${nextPipeline.totalChapters} 章`)
-      onCompletedRef.current?.()
-    } else if (nextStatus === 'FAILED' && prevStatus !== 'FAILED') {
-      toast.error(nextPipeline.error || 'AI 生成失败')
-      onFailedRef.current?.()
+      if (nextStatus === 'COMPLETED' && prevStatus !== 'COMPLETED') {
+        toast.success(`AI 生成完成，共生成 ${nextPipeline.totalChapters} 章`)
+        onCompletedRef.current?.()
+      } else if (nextStatus === 'FAILED' && prevStatus !== 'FAILED') {
+        toast.error(nextPipeline.error || 'AI 生成失败')
+        onFailedRef.current?.()
+      }
     }
-  }, [])
+  })
 
   useEffect(() => {
     let timer: ReturnType<typeof setInterval> | null = null
@@ -104,7 +107,7 @@ export function useProjectPipeline(options: {
         })
         const data = await res.json()
         if (data.success) {
-          applyPipelineSnapshot(data.data)
+          applySnapshotRef.current(data.data)
         }
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') return
@@ -120,7 +123,7 @@ export function useProjectPipeline(options: {
       if (timer) clearInterval(timer)
       pollAbortRef.current?.abort()
     }
-  }, [projectId, applyPipelineSnapshot])
+  }, [projectId])
 
   useEffect(() => {
     if (pipelineStreamRef.current) {
@@ -134,7 +137,7 @@ export function useProjectPipeline(options: {
     eventSource.addEventListener('pipeline', (event) => {
       try {
         const snapshot = JSON.parse((event as MessageEvent).data) as PipelineStatus
-        applyPipelineSnapshot(snapshot)
+        applySnapshotRef.current(snapshot)
       } catch {
       }
     })
@@ -152,7 +155,7 @@ export function useProjectPipeline(options: {
         pipelineStreamRef.current = null
       }
     }
-  }, [projectId, applyPipelineSnapshot])
+  }, [projectId])
 
   const handleStartPipeline = async ({
     hasBoundModel,
