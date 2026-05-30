@@ -53,7 +53,6 @@ const DEFAULT_PRICING = {
     output: 2.0,
     defaultModel: 'mimo-v2.5',
     models: {
-      'mimo-v2-flash': { input: 1.0, output: 2.0 },
       'mimo-v2.5': { input: 1.0, output: 2.0 },
       'mimo-v2.5-pro': { input: 1.0, output: 2.0 }
     }

@@ -18,16 +18,16 @@ export type GenerationRole =
 
 const mimoModelByMode: Record<GenerationSpeedMode, Record<GenerationRole, string>> = {
   fast: {
-    blueprint: 'mimo-v2-flash',
-    arc_plan: 'mimo-v2-flash',
-    planner: 'mimo-v2-flash',
+    blueprint: 'mimo-v2.5',
+    arc_plan: 'mimo-v2.5',
+    planner: 'mimo-v2.5',
     writer: 'mimo-v2.5',
     polisher: 'mimo-v2.5',
-    reviewer: 'mimo-v2-flash',
+    reviewer: 'mimo-v2.5',
     revision: 'mimo-v2.5',
-    validator: 'mimo-v2-flash',
+    validator: 'mimo-v2.5',
     deslopper: 'mimo-v2.5',
-    summarizer: 'mimo-v2-flash',
+    summarizer: 'mimo-v2.5',
     stream: 'mimo-v2.5',
   },
   balanced: {
@@ -38,9 +38,9 @@ const mimoModelByMode: Record<GenerationSpeedMode, Record<GenerationRole, string
     polisher: 'mimo-v2.5',
     reviewer: 'mimo-v2.5',
     revision: 'mimo-v2.5',
-    validator: 'mimo-v2-flash',
+    validator: 'mimo-v2.5',
     deslopper: 'mimo-v2.5',
-    summarizer: 'mimo-v2-flash',
+    summarizer: 'mimo-v2.5',
     stream: 'mimo-v2.5',
   },
   quality: {

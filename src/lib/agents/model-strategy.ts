@@ -24,7 +24,7 @@ const modelTierMap: Record<ModelTier, ModelConfig[]> = {
   [ModelTier.HAIKU]: [
     { vendor: AIVendor.ANTHROPIC, modelId: 'claude-haiku-4', description: '轻量检查', costPerMillionInput: 0.8, costPerMillionOutput: 4 },
     { vendor: AIVendor.DEEPSEEK, modelId: 'deepseek-chat', description: '经济检查', costPerMillionInput: 0.27, costPerMillionOutput: 1.1 },
-    { vendor: AIVendor.MIMO, modelId: 'mimo-v2-flash', description: '轻量检查', costPerMillionInput: 1.0, costPerMillionOutput: 2.0 },
+    { vendor: AIVendor.MIMO, modelId: 'mimo-v2.5', description: '轻量检查', costPerMillionInput: 1.0, costPerMillionOutput: 2.0 },
   ],
 }
 

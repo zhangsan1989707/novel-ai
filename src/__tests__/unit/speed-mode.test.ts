@@ -16,15 +16,15 @@ describe('generation speed mode strategy', () => {
   })
 
   it('maps MiMo roles to fast models', () => {
-    expect(resolveMiMoModelId('fast', 'planner')).toBe('mimo-v2-flash')
+    expect(resolveMiMoModelId('fast', 'planner')).toBe('mimo-v2.5')
     expect(resolveMiMoModelId('fast', 'writer')).toBe('mimo-v2.5')
-    expect(resolveMiMoModelId('fast', 'summarizer')).toBe('mimo-v2-flash')
+    expect(resolveMiMoModelId('fast', 'summarizer')).toBe('mimo-v2.5')
   })
 
   it('maps MiMo roles to balanced models', () => {
     expect(resolveMiMoModelId('balanced', 'blueprint')).toBe('mimo-v2.5')
     expect(resolveMiMoModelId('balanced', 'writer')).toBe('mimo-v2.5')
-    expect(resolveMiMoModelId('balanced', 'validator')).toBe('mimo-v2-flash')
+    expect(resolveMiMoModelId('balanced', 'validator')).toBe('mimo-v2.5')
   })
 
   it('maps quality mode to MiMo pro for all text roles', () => {
