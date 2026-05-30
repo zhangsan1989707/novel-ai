@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Button, Progress } from '@/components/ui'
 import { Sparkles, Square, RefreshCw, Wand2 } from 'lucide-react'
-import { countChineseWords } from '@/lib/utils'
+import { countChineseWords, formatLargeNumber } from '@/lib/utils'
 import { ChapterQualityPanel } from './ChapterQualityPanel'
 import { useChapterGeneration } from '@/hooks/use-chapter-generation'
 
@@ -128,7 +128,7 @@ export function StreamViewer({
           {/* 进度 */}
           <div className="flex items-center gap-2">
             <span className="text-sm text-gray-500">
-              {state.wordCount.toLocaleString()} / {settings.targetWordCount.toLocaleString()} 字
+              {formatLargeNumber(state.wordCount)} / {formatLargeNumber(settings.targetWordCount)} 字
             </span>
             <span className="text-sm font-medium">{Math.round(state.progress)}%</span>
           </div>
@@ -292,7 +292,7 @@ export function StreamViewer({
             {state.status === 'complete' && '已完成'}
             {state.status === 'error' && '出错'}
           </span>
-          <span>当前字数：{state.wordCount.toLocaleString()}</span>
+          <span>当前字数：{formatLargeNumber(state.wordCount)}</span>
         </div>
       )}
     </div>

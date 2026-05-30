@@ -5,7 +5,7 @@ import { Button, Textarea } from '@/components/ui'
 import { Sparkles, Square, Play, ArrowRight, BookOpen, RefreshCw } from 'lucide-react'
 import { toast } from '@/components/ui/Toast'
 import { ContinuationMode, EndingDirection } from '@/types'
-import { countChineseWords } from '@/lib/utils'
+import { countChineseWords, formatLargeNumber } from '@/lib/utils'
 
 // ============================================
 // Types
@@ -475,7 +475,7 @@ export function ContinuationPanel({
         )}
         {generationState.wordCount > 0 && (
           <span className="text-sm text-gray-500">
-            {generationState.wordCount.toLocaleString()} 字
+            {formatLargeNumber(generationState.wordCount)} 字
           </span>
         )}
       </div>

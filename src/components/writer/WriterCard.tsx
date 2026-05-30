@@ -3,6 +3,7 @@
 import { Button, Badge, Card, CardContent } from '@/components/ui'
 import { WriterType, TrainingStatus } from '@/types'
 import { Edit2, Trash2, FileText, Sparkles, Upload } from 'lucide-react'
+import { formatLargeNumber } from '@/lib/utils'
 
 interface VirtualWriter {
   id: number
@@ -98,7 +99,7 @@ export function WriterCard({
             <div className="text-xs text-gray-500">章节</div>
           </div>
           <div className="text-center p-2 bg-gray-50 dark:bg-gray-800 rounded">
-            <div className="font-medium">{writer.totalWordCount.toLocaleString()}</div>
+            <div className="font-medium">{formatLargeNumber(writer.totalWordCount)}</div>
             <div className="text-xs text-gray-500">字数</div>
           </div>
         </div>

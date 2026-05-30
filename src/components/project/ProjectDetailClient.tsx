@@ -9,6 +9,7 @@ import { CharacterPanel, AnalysisWorkbench } from '@/components/ai'
 import { BookOpen, Users, Search, Rocket, Wrench, Play, Download, Repeat, Wand2, Square } from 'lucide-react'
 import { formatDisplayDate } from '@/lib/helpers'
 import { getMinimumChapterWordCount } from '@/lib/ai/chapter-quality'
+import { formatWordCount } from '@/lib/utils'
 import type { GenerationSpeedMode } from '@/lib/ai/speed-mode'
 import type { BlueprintConsoleSnapshot } from '@/lib/engine/blueprint-console'
 import { useProjectDetail, type ProjectChapter } from '@/hooks/useProjectDetail'
@@ -258,7 +259,7 @@ ${ch.content || ''}
   const getReviewingReason = useCallback((chapter: ProjectChapter) => {
     const minimumWordCount = getMinimumChapterWordCount(project?.chapterWordCount || 3000, chapter.chapterNumber)
     if ((chapter.wordCount || 0) < minimumWordCount) {
-      return `当前仅 ${(chapter.wordCount || 0).toLocaleString()} 字，低于最低要求 ${minimumWordCount.toLocaleString()} 字，需要补写或重写后再保存。`
+      return `当前仅 ${formatWordCount(chapter.wordCount || 0)} 字，低于最低要求 ${formatWordCount(minimumWordCount)} 字，需要补写或重写后再保存。`
     }
 
     return '这章已被标记为待审稿，说明 AI 结果没有被系统直接视为稳定成稿。建议打开章节检查正文后，再决定是手工修订还是重新生成。'
@@ -602,6 +603,7 @@ ${ch.content || ''}
                     <PipelineControlPanel
                       pipeline={pipeline}
                       activeSpeedMode={activeSpeedMode}
+                      estimatedTotalChapters={estimatedTotalChapters}
                       handlePausePipeline={handlePausePipeline}
                       handleResumePipeline={handleResumePipeline}
                       handleRecoverPipeline={handleRecoverPipeline}

@@ -2,6 +2,7 @@
 
 import { Badge, Button, ExpandableList } from '@/components/ui'
 import { BookOpen, Eye, ChevronDown, Rocket } from 'lucide-react'
+import { formatLargeNumber } from '@/lib/utils'
 import type { PipelineRuntimeState } from '@/lib/engine/pipeline-runtime'
 import type { ProjectChapter } from '@/hooks/useProjectDetail'
 
@@ -144,7 +145,7 @@ export function ProjectChapterDirectory({
 
                       <div className="flex shrink-0 items-center gap-2">
                         <span className="text-xs text-gray-500">
-                          {(chapter.wordCount || 0).toLocaleString()} 字
+                          {formatLargeNumber(chapter.wordCount || 0)} 字
                         </span>
                         <Badge variant={chapterBadgeVariant} className="text-xs">
                           {chapterBadgeLabel}

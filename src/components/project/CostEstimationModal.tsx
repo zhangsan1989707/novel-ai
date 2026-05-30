@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Button, Modal, Card, CardContent } from '@/components/ui'
 import { DollarSign, AlertCircle, Sparkles, CheckCircle2 } from 'lucide-react'
+import { formatLargeNumber } from '@/lib/utils'
 
 interface CostEstimation {
   estimatedInputTokens: number
@@ -129,11 +130,11 @@ export function CostEstimationModal({
                   <div className="border-t border-dashed pt-2">
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-gray-600 dark:text-gray-400">预估输入 tokens</span>
-                      <span className="font-medium">{estimation.estimatedInputTokens.toLocaleString()}</span>
+                      <span className="font-medium">{formatLargeNumber(estimation.estimatedInputTokens)}</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-gray-600 dark:text-gray-400">预估输出 tokens</span>
-                      <span className="font-medium">{estimation.estimatedOutputTokens.toLocaleString()}</span>
+                      <span className="font-medium">{formatLargeNumber(estimation.estimatedOutputTokens)}</span>
                     </div>
                   </div>
                   

@@ -6,6 +6,7 @@ import { ProjectBaseInfoForm } from '@/components/project'
 import { ResearchPanel, ReviewPanel, DeslopPanel, BatchDeslopPanel, ExportPanel, AnalysisWorkbench, CoverGenerator } from '@/components/ai'
 import type { ProjectChapter } from '@/hooks/useProjectDetail'
 import { chapterStatusMap } from './constants'
+import { formatLargeNumber } from '@/lib/utils'
 
 type ModalKey = 'edit' | 'delete' | 'toolbox' | 'chapterPreview' | 'research' | 'cover' | 'plotAnalysis' | 'review' | 'deslop' | 'batchDeslop' | 'export'
 
@@ -62,7 +63,7 @@ export function ProjectModals({
                 {chapterStatusMap[previewChapter.status].label}
               </Badge>
               <span className="text-sm text-gray-500">
-                {(previewChapter.wordCount || 0).toLocaleString()} 字
+                {formatLargeNumber(previewChapter.wordCount || 0)} 字
               </span>
             </div>
 

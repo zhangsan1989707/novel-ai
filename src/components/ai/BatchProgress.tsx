@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Button, Modal } from '@/components/ui'
 import { Loader2, CheckCircle, AlertCircle } from 'lucide-react'
+import { formatLargeNumber } from '@/lib/utils'
 
 interface BatchProgressOptions {
   chapterIds?: number[]
@@ -270,7 +271,7 @@ export function BatchProgress({
                 第{currentChapter.chapterNumber}章 {currentChapter.title || '无标题'}
               </span>
               <span className="text-sm text-gray-500">
-                {(currentChapter.wordCount || 0).toLocaleString()} 字
+                {(formatLargeNumber(currentChapter.wordCount || 0))} 字
               </span>
             </div>
             <div className="h-32 overflow-y-auto text-sm text-gray-600 dark:text-gray-300 whitespace-pre-wrap bg-white dark:bg-gray-900 p-2 rounded border">
@@ -307,7 +308,7 @@ export function BatchProgress({
               </div>
 
               <span className="text-xs text-gray-500">
-                {chapter.wordCount > 0 ? `${(chapter.wordCount || 0).toLocaleString()} 字` : ''}
+                {chapter.wordCount > 0 ? `${formatLargeNumber(chapter.wordCount || 0)} 字` : ''}
               </span>
             </div>
           ))}

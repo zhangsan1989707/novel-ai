@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { cn } from '@/lib/utils'
+import { cn, formatLargeNumber } from '@/lib/utils'
 import { Badge } from '@/components/ui/Badge'
 import { Progress } from '@/components/ui/Progress'
 import { Users, AlertTriangle, TrendingUp, BookOpen } from 'lucide-react'
@@ -57,13 +57,6 @@ const stageColors = {
   development: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300',
   climax: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
   resolution: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
-}
-
-function formatWordCount(count: number): string {
-  if (count >= 10000) {
-    return `${(count / 10000).toFixed(1)}万`
-  }
-  return count.toLocaleString()
 }
 
 export function RealtimeAnalysisPanel({
@@ -261,10 +254,10 @@ export function RealtimeAnalysisPanel({
         <div className="space-y-2">
           <div className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">
-              {formatWordCount(data.wordCountProgress.current)}
+              {formatLargeNumber(data.wordCountProgress.current)}
             </span>
             <span className="text-muted-foreground">
-              {formatWordCount(data.wordCountProgress.target)}
+              {formatLargeNumber(data.wordCountProgress.target)}
             </span>
           </div>
           <Progress value={data.wordCountProgress.percentage} className="h-2" />

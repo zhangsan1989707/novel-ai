@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react'
 import { Button, Badge, Progress, toast } from '@/components/ui'
 import { Wand2, Loader2, CheckCircle2, XCircle, ChevronDown, ChevronUp } from 'lucide-react'
 import type { ProjectChapter } from '@/hooks/useProjectDetail'
+import { formatLargeNumber } from '@/lib/utils'
 
 type Strictness = 'light' | 'medium' | 'heavy'
 
@@ -136,7 +137,7 @@ export function BatchDeslopPanel({ projectId, chapters, onCompleted }: BatchDesl
                     />
                     <span className="flex-1 text-sm">第{chapter.chapterNumber}章 {chapter.title}</span>
                     <Badge variant="secondary" className="text-xs">
-                      {(chapter.wordCount || 0).toLocaleString()}字
+                      {formatLargeNumber(chapter.wordCount || 0)}字
                     </Badge>
                   </label>
                 ))}

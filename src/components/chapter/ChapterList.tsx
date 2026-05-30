@@ -7,6 +7,7 @@ import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, v
 import { CSS } from '@dnd-kit/utilities'
 import { Button, Badge, Input, Modal, ChaptersEmptyState, ExpandableList } from '@/components/ui'
 import { GripVertical, Plus, Pencil, Trash2, Sparkles } from 'lucide-react'
+import { formatLargeNumber } from '@/lib/utils'
 import type { ChapterStatus } from '@/types'
 
 interface Chapter {
@@ -79,7 +80,7 @@ function SortableItem({ id, chapter, onEdit, onDelete, onGenerate }: SortableIte
           <span className="font-medium truncate">{chapter.title || '无标题'}</span>
         </div>
         <div className="flex items-center gap-3 mt-1 text-xs text-gray-400">
-          <span>{chapter.wordCount.toLocaleString()} 字</span>
+          <span>{formatLargeNumber(chapter.wordCount)} 字</span>
           <Badge variant={statusMap[chapter.status].variant} className="text-xs">
             {statusMap[chapter.status].label}
           </Badge>

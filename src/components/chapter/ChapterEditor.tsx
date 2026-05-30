@@ -10,7 +10,7 @@ import { ChapterQualityPanel } from '@/components/ai/ChapterQualityPanel'
 import { AntiDetectPanel } from '@/components/ai/AntiDetectPanel'
 import { RevisionPanel, type RevisionType } from '@/components/ai'
 import { formatDisplayDateTime } from '@/lib/helpers'
-import { countChineseWords } from '@/lib/utils'
+import { countChineseWords, formatLargeNumber } from '@/lib/utils'
 
 interface ChapterEditorProps {
   projectId: number
@@ -250,7 +250,7 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
                     {statusInfo.label}
                   </span>
                   <span>/</span>
-                  <span>{wordCount.toLocaleString()} 字</span>
+                  <span>{formatLargeNumber(wordCount)} 字</span>
                 </div>
               </div>
             </div>
@@ -364,7 +364,7 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
               <div className="flex items-center gap-3 border-b border-gray-100 px-5 py-3 dark:border-gray-800">
                 <FileText className="h-4 w-4 text-gray-400" />
                 <h2 className="font-medium text-gray-900 dark:text-white">正文内容</h2>
-                <span className="ml-auto text-xs text-gray-400">{wordCount.toLocaleString()} 字</span>
+                <span className="ml-auto text-xs text-gray-400">{formatLargeNumber(wordCount)} 字</span>
               </div>
 
               {isEditing ? (
@@ -380,7 +380,7 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
                   />
                   <div className="flex items-center justify-between border-t border-gray-100 px-5 py-3 dark:border-gray-800">
                     <span className="text-sm text-gray-500">
-                      字数: {wordCount.toLocaleString()}
+                      字数: {formatLargeNumber(wordCount)}
                     </span>
                     <div className="flex items-center gap-2">
                       <Button variant="outline" size="sm" onClick={handleCancelEdit} className="gap-1.5">
@@ -413,7 +413,7 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
                   )}
                   <div className="flex items-center justify-between border-t border-gray-100 px-5 py-3 dark:border-gray-800">
                     <span className="text-sm text-gray-500">
-                      字数: {wordCount.toLocaleString()}
+                      字数: {formatLargeNumber(wordCount)}
                     </span>
                     <span className="text-sm text-gray-400">
                       最后更新: {chapter.updatedAt ? formatDisplayDateTime(chapter.updatedAt) : '-'}
@@ -437,7 +437,7 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
                 </div>
                 <div className="rounded-md bg-gray-50 p-3 dark:bg-gray-950">
                   <p className="mb-1 text-xs text-gray-400">章节字数</p>
-                  <p className="text-lg font-semibold text-gray-900 dark:text-white">{wordCount.toLocaleString()}</p>
+                  <p className="text-lg font-semibold text-gray-900 dark:text-white">{formatLargeNumber(wordCount)}</p>
                 </div>
               </div>
               {chapter.lastGeneratedTime && (

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import * as d3 from 'd3'
-import { cn } from '@/lib/utils'
+import { cn, formatLargeNumber } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
 
 interface ChapterRhythmData {
@@ -117,7 +117,7 @@ export function ChapterRhythmHeatmap({
             .style('top', `${event.pageY - 10}px`)
             .html(`
               <div class="font-medium">第${d.chapterNo}章 ${d.title}</div>
-              <div class="text-xs mt-1">字数: ${d.wordCount.toLocaleString()}</div>
+              <div class="text-xs mt-1">字数: ${formatLargeNumber(d.wordCount)}</div>
               <div class="text-xs">情绪强度: ${d.emotionalIntensity}</div>
               <div class="text-xs">关键事件: ${d.keyEventCount}个</div>
             `)
@@ -195,7 +195,7 @@ export function ChapterRhythmHeatmap({
             .style('top', `${event.pageY - 10}px`)
             .html(`
               <div class="font-medium">第${d.chapterNo}章 ${d.title}</div>
-              <div class="text-xs mt-1">字数: ${d.wordCount.toLocaleString()}</div>
+              <div class="text-xs mt-1">字数: ${formatLargeNumber(d.wordCount)}</div>
               <div class="text-xs">情绪强度: ${d.emotionalIntensity}</div>
             `)
         })
@@ -262,7 +262,7 @@ export function ChapterRhythmHeatmap({
       <div className="flex items-center justify-between mb-4">
         <div className="text-sm text-muted-foreground">
           共 {data.length} 章 | 平均字数{' '}
-          {Math.round(data.reduce((sum, d) => sum + d.wordCount, 0) / data.length).toLocaleString()} | 平均情绪{' '}
+          {formatLargeNumber(Math.round(data.reduce((sum, d) => sum + d.wordCount, 0) / data.length))} | 平均情绪{' '}
           {Math.round(data.reduce((sum, d) => sum + d.emotionalIntensity, 0) / data.length)}
         </div>
         <div className="flex gap-2">

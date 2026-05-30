@@ -6,7 +6,7 @@ import { Button, Card, CardContent, Badge, Progress, toast, ErrorBoundary } from
 import { ChapterQualityPanel } from '@/components/ai/ChapterQualityPanel'
 import { ArrowLeft, RefreshCw, Save, Sparkles, Square, Wand2 } from 'lucide-react'
 import { ChapterStatus } from '@/types'
-import { countChineseWords } from '@/lib/utils'
+import { countChineseWords, formatLargeNumber } from '@/lib/utils'
 import { useChapterGeneration } from '@/hooks/use-chapter-generation'
 
 interface Chapter {
@@ -254,7 +254,7 @@ export function ChapterGenerateClient({ projectId, chapterId, initialChapter }: 
 
               <div className="flex items-center gap-2">
                 <span className="text-sm text-slate-500">
-                  {chapter.wordCount.toLocaleString()} / {settings.targetWordCount.toLocaleString()} 字
+                  {formatLargeNumber(chapter.wordCount)} / {formatLargeNumber(settings.targetWordCount)} 字
                 </span>
                 {chapter.content && chapter.content.length > 100 ? (
                   <Button

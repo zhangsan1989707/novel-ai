@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react'
 import { ArrowDown, ArrowUp, Combine, Scissors, Trash2, TriangleAlert } from 'lucide-react'
 import type { ChapterReviewItem } from '@/lib/analysis/chapter-utils'
+import { formatLargeNumber } from '@/lib/utils'
 
 interface AnalyzeChapterPreparationProps {
   chapters: ChapterReviewItem[]
@@ -34,7 +35,7 @@ export function AnalyzeChapterPreparation({
           </p>
         </div>
         <div className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/20 dark:text-amber-200">
-          {chapters.length} 章 · {totalWords.toLocaleString()} 字 · {warningCount} 个告警
+          {chapters.length} 章 · {formatLargeNumber(totalWords)} 字 · {warningCount} 个告警
         </div>
       </div>
 
@@ -51,7 +52,7 @@ export function AnalyzeChapterPreparation({
             <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
               <div className="min-w-0 flex-1">
                 <div className="mb-2 text-xs font-medium text-gray-500 dark:text-gray-400">
-                  第{chapter.chapterNumber}章 · {chapter.wordCount.toLocaleString()} 字
+                  第{chapter.chapterNumber}章 · {formatLargeNumber(chapter.wordCount)} 字
                 </div>
                 <input
                   value={chapter.title}

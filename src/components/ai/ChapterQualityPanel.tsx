@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { Button, Card, CardContent, CardHeader, CardTitle, Badge } from '@/components/ui'
+import { formatLargeNumber } from '@/lib/utils'
 import { 
   Sparkles, 
   Loader2, 
@@ -341,7 +342,7 @@ export function ChapterQualityPanel({
             <CardContent>
               <div className="grid grid-cols-4 gap-3 text-center">
                 <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-2">
-                  <p className="text-lg font-bold">{report.statistics.totalWords.toLocaleString()}</p>
+                  <p className="text-lg font-bold">{formatLargeNumber(report.statistics.totalWords)}</p>
                   <p className="text-xs text-gray-500">总字数</p>
                 </div>
                 <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-2">

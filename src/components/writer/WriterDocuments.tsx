@@ -5,6 +5,7 @@ import { Button, Badge, Progress } from '@/components/ui'
 import { Upload, FileText, Trash2, RefreshCw, CheckCircle, XCircle, Clock } from 'lucide-react'
 import { DocumentStatus } from '@/types'
 import { formatDisplayDate } from '@/lib/helpers'
+import { formatLargeNumber } from '@/lib/utils'
 
 interface WriterDocument {
   id: number
@@ -111,7 +112,7 @@ export function WriterDocuments({ writerId, documents, onUpload, onDelete }: Wri
                     </div>
                     <div className="flex items-center gap-3 text-xs text-gray-500 mt-1">
                       <span>{formatFileSize(doc.fileSize)}</span>
-                      <span>{doc.wordCount.toLocaleString()} 字</span>
+                      <span>{formatLargeNumber(doc.wordCount)} 字</span>
                       {doc.processedAt && (
                         <span>处理于 {formatDisplayDate(doc.processedAt)}</span>
                       )}

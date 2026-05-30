@@ -3,6 +3,7 @@
 import { Badge, Button, Progress, Card, CardContent } from '@/components/ui'
 import { Target, Users, Clock, ChevronRight, ChevronDown } from 'lucide-react'
 import { formatDisplayDate } from '@/lib/helpers'
+import { formatLargeNumber } from '@/lib/utils'
 import type { ProjectDetail } from '@/hooks/useProjectDetail'
 
 interface ProjectSidebarProps {
@@ -57,11 +58,11 @@ export function ProjectSidebar({
 
             <div className="mt-3 grid grid-cols-4 gap-2 text-center">
               <div>
-                <p className="text-sm font-bold">{project.currentWordCount.toLocaleString()}</p>
+                <p className="text-sm font-bold">{formatLargeNumber(project.currentWordCount)}</p>
                 <p className="text-xs text-gray-500">当前</p>
               </div>
               <div>
-                <p className="text-sm font-bold">{effectiveTargetWordCount?.toLocaleString() || '-'}</p>
+                <p className="text-sm font-bold">{effectiveTargetWordCount ? formatLargeNumber(effectiveTargetWordCount) : '-'}</p>
                 <p className="text-xs text-gray-500">目标</p>
               </div>
               <div>

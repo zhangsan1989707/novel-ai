@@ -10,6 +10,7 @@ import { speedModeLabels } from './constants'
 interface PipelineControlPanelProps {
   pipeline: PipelineStatus
   activeSpeedMode: GenerationSpeedMode
+  estimatedTotalChapters: number | null
   handlePausePipeline: () => Promise<void>
   handleResumePipeline: () => Promise<void>
   handleRecoverPipeline: (action: 'continue' | 'retry_chapter' | 'retry_batch', chapterNumber?: number) => Promise<void>
@@ -19,6 +20,7 @@ interface PipelineControlPanelProps {
 export function PipelineControlPanel({
   pipeline,
   activeSpeedMode,
+  estimatedTotalChapters,
   handlePausePipeline,
   handleResumePipeline,
   handleRecoverPipeline,
@@ -48,12 +50,12 @@ export function PipelineControlPanel({
             <div className="font-medium">{getPipelineStatusLabel(pipeline.status)}</div>
           </div>
           <div>
-            <div className="text-xs text-gray-500">当前章节</div>
-            <div className="font-medium">{pipeline.currentChapter || '-'}</div>
+            <div className="text-xs text-gray-500">下一章</div>
+            <div className="font-medium">{pipeline.nextChapterNumber || '-'}</div>
           </div>
           <div>
-            <div className="text-xs text-gray-500">总章节</div>
-            <div className="font-medium">{pipeline.totalChapters || '-'}</div>
+            <div className="text-xs text-gray-500">目标章节</div>
+            <div className="font-medium">{estimatedTotalChapters?.toLocaleString() || '-'}</div>
           </div>
           <div>
             <div className="text-xs text-gray-500">速度模式</div>

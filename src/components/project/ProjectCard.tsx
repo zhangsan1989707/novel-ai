@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { Card, CardContent, Badge, Progress, Button } from '@/components/ui'
 import { Pencil, Trash2, BookOpen, Clock, Sparkles } from 'lucide-react'
 import { formatDisplayDate } from '@/lib/helpers'
+import { formatLargeNumber } from '@/lib/utils'
 import type { ProjectStatus } from '@/types'
 
 interface ProjectCardProps {
@@ -106,8 +107,8 @@ export function ProjectCard({ project, onEdit, onDelete }: ProjectCardProps) {
           <div className="mb-3">
             <Progress value={progress} size="sm" />
             <div className="mt-1 flex justify-between text-xs text-gray-500">
-              <span>{project.currentWordCount.toLocaleString()} 字</span>
-              <span>{project.targetWordCount.toLocaleString()} 字</span>
+              <span>{formatLargeNumber(project.currentWordCount)} 字</span>
+              <span>{formatLargeNumber(project.targetWordCount)} 字</span>
             </div>
           </div>
         )}
@@ -116,7 +117,7 @@ export function ProjectCard({ project, onEdit, onDelete }: ProjectCardProps) {
         <div className="flex items-center justify-between text-xs text-gray-400">
           <div className="flex items-center gap-3">
             <span>{project._count?.chapters || 0} 章</span>
-            <span>{project.currentWordCount.toLocaleString()} 字</span>
+            <span>{formatLargeNumber(project.currentWordCount)} 字</span>
           </div>
           <div className="flex items-center gap-1">
             <Clock className="h-3 w-3" />

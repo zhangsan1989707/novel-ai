@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Button, Card, CardContent, CardHeader, CardTitle, Badge } from '@/components/ui'
 import { BookOpen, Play, Eye, Check, Trash2 } from 'lucide-react'
+import { formatLargeNumber } from '@/lib/utils'
 
 // ============================================
 // Types
@@ -102,7 +103,7 @@ export function ContinuationResults({
                 <span className="font-medium">{chapter.title || '无标题'}</span>
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-sm text-gray-500">{(chapter.wordCount || 0).toLocaleString()} 字</span>
+                <span className="text-sm text-gray-500">{formatLargeNumber(chapter.wordCount || 0)} 字</span>
                 <Badge variant="success" className="text-xs">
                   已完成
                 </Badge>
