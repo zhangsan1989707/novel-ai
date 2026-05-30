@@ -6,8 +6,10 @@ import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, us
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { Button, Badge, Input, Modal, ChaptersEmptyState, ExpandableList } from '@/components/ui'
-import { GripVertical, Plus, Pencil, Trash2, Sparkles } from 'lucide-react'
+import { GripVertical, Plus, Pencil, Trash2, Sparkles, Eye, Clock, Hash, Loader2 } from 'lucide-react'
 import { formatLargeNumber } from '@/lib/utils'
+import { formatChapterStatus, formatTimeAgo } from '@/lib/format-labels'
+import { ChapterDrawer } from './ChapterDrawer'
 import type { ChapterStatus } from '@/types'
 
 interface Chapter {
@@ -18,6 +20,7 @@ interface Chapter {
   status: ChapterStatus
   summary?: string
   sortOrder: number
+  updatedAt?: string
 }
 
 const INITIAL_VISIBLE_CHAPTERS = 12
@@ -29,22 +32,16 @@ interface ChapterListProps {
   onOpenGenerator?: () => void
 }
 
-const statusMap: Record<ChapterStatus, { label: string; variant: 'default' | 'primary' | 'secondary' | 'success' | 'warning' | 'danger' }> = {
-  DRAFT: { label: '草稿', variant: 'default' },
-  GENERATING: { label: '生成中', variant: 'primary' },
-  COMPLETED: { label: '已完成', variant: 'success' },
-  REVIEWING: { label: '审核中', variant: 'warning' },
-}
-
 interface SortableItemProps {
   id: number
   chapter: Chapter
   onEdit: () => void
   onDelete: () => void
   onGenerate: () => void
+  onView: () => void
 }
 
-function SortableItem({ id, chapter, onEdit, onDelete, onGenerate }: SortableItemProps) {
+function SortableItem({ id, chapter, onEdit, onDelete, onGenerate, onView }: SortableItemProps) {
   const {
     attributes,
     listeners,
@@ -60,38 +57,76 @@ function SortableItem({ id, chapter, onEdit, onDelete, onGenerate }: SortableIte
     opacity: isDragging ? 0.5 : 1,
   }
 
+  const isGenerating = chapter.status === 'GENERATING'
+  const summary = chapter.summary || ''
+  const truncatedSummary = summary.length > 120 ? summary.slice(0, 120) + '...' : summary
+
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className="flex items-center gap-3 p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:border-gray-300 dark:hover:border-gray-600 hover:shadow-sm transition-all duration-150"
+      className="group flex items-start gap-3 p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:border-blue-300 dark:hover:border-blue-600 hover:shadow-sm transition-all duration-150 cursor-pointer"
+      onClick={onView}
     >
       <button
-        className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600"
+        className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 mt-1 shrink-0"
+        onClick={e => e.stopPropagation()}
         {...attributes}
         {...listeners}
       >
         <GripVertical className="h-5 w-5" />
       </button>
 
-      <div className="flex-1 min-w-0 cursor-pointer" onClick={onEdit}>
-        <div className="flex items-center gap-2">
-          <span className="text-gray-500 text-sm">第{chapter.chapterNumber}章</span>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-gray-500 text-sm font-medium">第{chapter.chapterNumber}章</span>
           <span className="font-medium truncate">{chapter.title || '无标题'}</span>
+          {isGenerating && (
+            <Badge variant="primary" className="text-xs gap-1">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              生成中
+            </Badge>
+          )}
+          {!isGenerating && (
+            <Badge variant={chapter.status === 'COMPLETED' ? 'success' : chapter.status === 'REVIEWING' ? 'warning' : 'default'} className="text-xs">
+              {formatChapterStatus(chapter.status)}
+            </Badge>
+          )}
         </div>
-        <div className="flex items-center gap-3 mt-1 text-xs text-gray-400">
-          <span>{formatLargeNumber(chapter.wordCount)} 字</span>
-          <Badge variant={statusMap[chapter.status].variant} className="text-xs">
-            {statusMap[chapter.status].label}
-          </Badge>
+        
+        <div className="flex items-center gap-4 text-xs text-gray-400 mb-2">
+          <span className="flex items-center gap-1">
+            <Hash className="h-3 w-3" />
+            {formatLargeNumber(chapter.wordCount)}字
+          </span>
+          {chapter.updatedAt && (
+            <span className="flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              {formatTimeAgo(chapter.updatedAt)}
+            </span>
+          )}
         </div>
+
+        {truncatedSummary && (
+          <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2 leading-relaxed">
+            {truncatedSummary}
+          </p>
+        )}
       </div>
 
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
         <Button
           size="sm"
           variant="ghost"
-          onClick={onGenerate}
+          onClick={e => { e.stopPropagation(); onView() }}
+          title="查看全文"
+        >
+          <Eye className="h-4 w-4" />
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={e => { e.stopPropagation(); onGenerate() }}
           title="AI生成"
         >
           <Sparkles className="h-4 w-4" />
@@ -99,7 +134,7 @@ function SortableItem({ id, chapter, onEdit, onDelete, onGenerate }: SortableIte
         <Button
           size="sm"
           variant="ghost"
-          onClick={onEdit}
+          onClick={e => { e.stopPropagation(); onEdit() }}
           title="编辑"
         >
           <Pencil className="h-4 w-4" />
@@ -107,7 +142,7 @@ function SortableItem({ id, chapter, onEdit, onDelete, onGenerate }: SortableIte
         <Button
           size="sm"
           variant="ghost"
-          onClick={onDelete}
+          onClick={e => { e.stopPropagation(); onDelete() }}
           className="hover:text-red-500"
           title="删除"
         >
@@ -124,6 +159,7 @@ export function ChapterList({ projectId, chapters: initialChapters, onChaptersCh
   const [showNewModal, setShowNewModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null)
+  const [drawerChapterId, setDrawerChapterId] = useState<number | null>(null)
   const [newChapterTitle, setNewChapterTitle] = useState('')
   const [newChapterNumber, setNewChapterNumber] = useState(1)
   const [nextNumber, setNextNumber] = useState(1)
@@ -201,9 +237,13 @@ export function ChapterList({ projectId, chapters: initialChapters, onChaptersCh
       })
       const data = await res.json()
       if (data.success) {
+        const newChapter = data.data
+        const updatedChapters = [...chapters, newChapter].sort((a, b) => a.chapterNumber - b.chapterNumber)
+        setChapters(updatedChapters)
+        onChaptersChange?.(updatedChapters)
         setShowNewModal(false)
         setNewChapterTitle('')
-        router.push(`/projects/${projectId}/chapters/${data.data.id}`)
+        setNewChapterNumber(nextNumber + 1)
       }
     } catch (error) {
       console.error('创建章节失败:', error)
@@ -223,8 +263,9 @@ export function ChapterList({ projectId, chapters: initialChapters, onChaptersCh
       })
       const data = await res.json()
       if (data.success) {
-        setChapters(chapters.filter((c) => c.id !== selectedChapter.id))
-        onChaptersChange?.(chapters.filter((c) => c.id !== selectedChapter.id))
+        const updatedChapters = chapters.filter(c => c.id !== selectedChapter.id)
+        setChapters(updatedChapters)
+        onChaptersChange?.(updatedChapters)
         setShowDeleteModal(false)
         setSelectedChapter(null)
       }
@@ -235,103 +276,106 @@ export function ChapterList({ projectId, chapters: initialChapters, onChaptersCh
     }
   }
 
+  if (chapters.length === 0) {
+    return <ChaptersEmptyState onOpenGenerator={onOpenGenerator} />
+  }
+
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="font-medium">章节列表</h3>
-        <Button size="sm" onClick={() => setShowNewModal(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          新建章节
-        </Button>
-      </div>
-
-      {chapters.length === 0 ? (
-        <ChaptersEmptyState
-          onCreate={() => setShowNewModal(true)}
-          onGenerate={onOpenGenerator || (() => {})}
-        />
-      ) : (
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={handleDragEnd}
+    <>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext
+          items={chapters.map(c => c.id)}
+          strategy={verticalListSortingStrategy}
         >
-          <SortableContext
-            items={chapters.map((c) => c.id)}
-            strategy={verticalListSortingStrategy}
-          >
-            <ExpandableList
-              items={chapters}
-              initialVisibleCount={INITIAL_VISIBLE_CHAPTERS}
-              className="space-y-2"
-              buttonClassName="gap-1.5"
-              collapsedLabel={(hiddenCount) => `展开剩余 ${hiddenCount} 章`}
-              expandedLabel="收起目录"
-              getKey={(chapter) => chapter.id}
-              renderItem={(chapter) => (
-                <SortableItem
-                  id={chapter.id}
-                  chapter={chapter}
-                  onEdit={() => router.push(`/projects/${projectId}/chapters/${chapter.id}`)}
-                  onDelete={() => {
-                    setSelectedChapter(chapter)
-                    setShowDeleteModal(true)
-                  }}
-                  onGenerate={() => router.push(`/projects/${projectId}/chapters/${chapter.id}/generate`)}
-                />
-              )}
-            />
-          </SortableContext>
-        </DndContext>
-      )}
+          <ExpandableList
+            items={chapters}
+            initialCount={INITIAL_VISIBLE_CHAPTERS}
+            renderItem={(chapter) => (
+              <SortableItem
+                key={chapter.id}
+                id={chapter.id}
+                chapter={chapter}
+                onEdit={() => router.push(`/projects/${projectId}/chapters/${chapter.id}`)}
+                onDelete={() => {
+                  setSelectedChapter(chapter)
+                  setShowDeleteModal(true)
+                }}
+                onGenerate={() => router.push(`/projects/${projectId}/chapters/${chapter.id}/generate`)}
+                onView={() => setDrawerChapterId(chapter.id)}
+              />
+            )}
+          />
+        </SortableContext>
+      </DndContext>
 
-      {/* 新建章节 Modal */}
+      {/* 新建章节弹窗 */}
       <Modal
-        open={showNewModal}
+        isOpen={showNewModal}
         onClose={() => setShowNewModal(false)}
         title="新建章节"
       >
         <div className="space-y-4">
-          <Input
-            label="章节编号"
-            type="number"
-            value={newChapterNumber}
-            onChange={(e) => setNewChapterNumber(parseInt(e.target.value) || 1)}
-            min={1}
-          />
-          <Input
-            label="章节标题"
-            placeholder="请输入章节标题"
-            value={newChapterTitle}
-            onChange={(e) => setNewChapterTitle(e.target.value)}
-          />
-          <div className="flex justify-end gap-3">
+          <div>
+            <label className="block text-sm font-medium mb-1">章节号</label>
+            <Input
+              type="number"
+              value={newChapterNumber}
+              onChange={(e) => setNewChapterNumber(Number(e.target.value))}
+              min={1}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">章节标题</label>
+            <Input
+              value={newChapterTitle}
+              onChange={(e) => setNewChapterTitle(e.target.value)}
+              placeholder="输入章节标题"
+            />
+          </div>
+          <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setShowNewModal(false)}>
               取消
             </Button>
-            <Button onClick={handleCreate} loading={creating}>
-              创建
+            <Button onClick={handleCreate} disabled={!newChapterTitle.trim() || creating}>
+              {creating ? '创建中...' : '创建'}
             </Button>
           </div>
         </div>
       </Modal>
 
-      {/* 删除确认 Modal */}
+      {/* 删除确认弹窗 */}
       <Modal
-        open={showDeleteModal}
+        isOpen={showDeleteModal}
         onClose={() => setShowDeleteModal(false)}
-        title="删除章节"
-        description={`确定要删除"${selectedChapter?.title}"吗？此操作不可撤销。`}
+        title="确认删除"
       >
-        <div className="flex justify-end gap-3">
-          <Button variant="outline" onClick={() => setShowDeleteModal(false)}>
-            取消
-          </Button>
-          <Button variant="danger" onClick={handleDelete} loading={loading}>
-            删除
-          </Button>
+        <div className="space-y-4">
+          <p>确定要删除第{selectedChapter?.chapterNumber}章《{selectedChapter?.title}》吗？此操作不可撤销。</p>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setShowDeleteModal(false)}>
+              取消
+            </Button>
+            <Button variant="danger" onClick={handleDelete} disabled={loading}>
+              {loading ? '删除中...' : '删除'}
+            </Button>
+          </div>
         </div>
       </Modal>
-    </div>
+
+      {/* 章节详情抽屉 */}
+      {drawerChapterId && (
+        <ChapterDrawer
+          projectId={projectId}
+          chapterId={drawerChapterId}
+          chapters={chapters.map(c => ({ id: c.id, chapterNumber: c.chapterNumber, title: c.title }))}
+          onClose={() => setDrawerChapterId(null)}
+          onNavigate={(id) => setDrawerChapterId(id)}
+        />
+      )}
+    </>
   )
 }

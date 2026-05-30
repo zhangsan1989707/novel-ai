@@ -57,7 +57,7 @@ function normalizeRecoveryTarget(value: unknown): JobRecoveryTarget | null {
 export async function createJob(
   projectId: number,
   type: string = 'FULL_PIPELINE',
-  speedMode: GenerationSpeedMode = 'balanced'
+  speedMode: GenerationSpeedMode = 'FINAL_POLISH'
 ): Promise<number> {
   const job = await prisma.generationJob.create({
     data: {

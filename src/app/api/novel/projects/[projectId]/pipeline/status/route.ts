@@ -41,6 +41,9 @@ export async function GET(
       ? firstIncomplete.chapterNumber
       : (completedChapterCount > 0 ? completedChapterCount + 1 : 1)
 
+    // 从项目获取目标章节数，而不是从 chapters 表
+    const totalChapters = project.totalVolumes * 25 || 300
+
     let jobId = project.pipelineJobId
     if (!jobId) {
       const latestJob = await prisma.generationJob.findFirst({
@@ -58,7 +61,8 @@ export async function GET(
           currentStep: '',
           progress: 0,
           currentChapter: 0,
-          totalChapters: 0,
+          totalChapters,
+          completedChapters: completedChapterCount,
           actualChapterCount,
           nextChapterNumber,
           runtime: sanitizePipelineRuntime(undefined),
@@ -78,7 +82,8 @@ export async function GET(
           currentStep: '',
           progress: 0,
           currentChapter: 0,
-          totalChapters: 0,
+          totalChapters,
+          completedChapters: completedChapterCount,
           actualChapterCount,
           nextChapterNumber,
           runtime: sanitizePipelineRuntime(undefined),
@@ -86,27 +91,34 @@ export async function GET(
       })
     }
 
-    const totalSteps = 8
-    const stepProgress = totalSteps > 0 ? (job.stepIndex / totalSteps) * 100 : 0
+    // 计算真实进度：已完成章节数 / 总章节数
+    const chapterProgress = totalChapters > 0 ? Math.round((completedChapterCount / totalChapters) * 100) : 0
     const payload = job.payload && typeof job.payload === 'object'
       ? job.payload as Record<string, unknown>
       : {}
     const runtime = sanitizePipelineRuntime(payload.runtime)
+
+    // 如果任务正在运行，使用运行时的当前章节进度作为额外信息
+    const currentChapterProgress = runtime.currentChapter ? 
+      Math.round((runtime.currentChapter.currentWordCount / runtime.currentChapter.targetWordCount) * 100) : 0
 
     return NextResponse.json({
       success: true,
       data: {
         status: job.status,
         currentStep: job.currentStep || '',
-        progress: Math.round(stepProgress),
+        progress: chapterProgress, // 使用章节完成进度，而不是步骤进度
         currentChapter: job.currentChapter,
-        totalChapters: job.totalChapters,
+        totalChapters,
+        completedChapters: completedChapterCount,
         actualChapterCount,
         nextChapterNumber,
+        currentChapterProgress, // 当前章节的字数进度
         error: job.errorMessage || undefined,
         pipelineJobId: job.id,
         speedMode: normalizeGenerationSpeedMode(payload.speedMode || runtime.speedMode),
         runtime,
+        lastHeartbeatAt: runtime.lastEventAt || null,
         updatedAt: job.updatedAt.toISOString(),
       },
     })

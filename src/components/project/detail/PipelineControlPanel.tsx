@@ -1,11 +1,12 @@
 'use client'
 
 import { Button, Card, CardContent, CardHeader, CardTitle, Progress } from '@/components/ui'
-import { Layers, Pause, Play, Loader2, Square, RotateCcw } from 'lucide-react'
+import { Layers, Pause, Play, Loader2, Square, RotateCcw, Clock, Activity, BookOpen, Zap } from 'lucide-react'
 import type { GenerationSpeedMode } from '@/lib/ai/speed-mode'
 import type { PipelineStatus } from '@/hooks/useProjectPipeline'
 import { getPipelineStatusLabel, getPipelineStepLabel } from './utils'
 import { speedModeLabels } from './constants'
+import { useState, useEffect } from 'react'
 
 interface PipelineControlPanelProps {
   pipeline: PipelineStatus
@@ -18,6 +19,68 @@ interface PipelineControlPanelProps {
   handleRestartPipeline: () => void
 }
 
+// 阶段权重映射，用于计算当前章节进度
+const phaseWeights: Record<string, number> = {
+  'chapter_contract': 5,
+  'writing': 10,
+  'word_count_check': 65,
+  'truncation_check': 75,
+  'quality_gate': 85,
+  'repairing': 92,
+  'committing': 98,
+  'completed': 100,
+}
+
+// 阶段中文名映射
+const phaseLabels: Record<string, string> = {
+  'planning': '章节策划',
+  'chapter_contract': '构建章节契约',
+  'writing': '正文生成',
+  'word_count_check': '字数校验',
+  'truncation_check': '截断检测',
+  'quality_gate': '质量门禁',
+  'repairing': '内容修复',
+  'committing': '保存入库',
+  'completed': '已完成',
+  'failed': '生成失败',
+}
+
+function formatTimeAgo(dateString: string | null | undefined): string {
+  if (!dateString) return '-'
+  const date = new Date(dateString)
+  const now = new Date()
+  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000)
+  
+  if (seconds < 5) return '刚刚'
+  if (seconds < 60) return `${seconds} 秒前`
+  if (seconds < 3600) return `${Math.floor(seconds / 60)} 分钟前`
+  return `${Math.floor(seconds / 3600)} 小时前`
+}
+
+function formatDuration(startTime: string | undefined): string {
+  if (!startTime) return '-'
+  const start = new Date(startTime)
+  const now = new Date()
+  const seconds = Math.floor((now.getTime() - start.getTime()) / 1000)
+  
+  if (seconds < 60) return `${seconds} 秒`
+  const minutes = Math.floor(seconds / 60)
+  const remainSeconds = seconds % 60
+  return `${minutes} 分 ${remainSeconds} 秒`
+}
+
+// 检测是否卡住
+function getStaleStatus(lastHeartbeatAt: string | null | undefined): 'normal' | 'warning' | 'stale' {
+  if (!lastHeartbeatAt) return 'normal'
+  const lastHeartbeat = new Date(lastHeartbeatAt)
+  const now = new Date()
+  const secondsSinceLastHeartbeat = (now.getTime() - lastHeartbeat.getTime()) / 1000
+  
+  if (secondsSinceLastHeartbeat > 180) return 'stale'
+  if (secondsSinceLastHeartbeat > 60) return 'warning'
+  return 'normal'
+}
+
 export function PipelineControlPanel({
   pipeline,
   activeSpeedMode,
@@ -28,9 +91,30 @@ export function PipelineControlPanel({
   handleCancelPipeline,
   handleRestartPipeline,
 }: PipelineControlPanelProps) {
+  const [currentTime, setCurrentTime] = useState(new Date())
+  
+  // 每秒更新时间，用于刷新"多久前"显示
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000)
+    return () => clearInterval(timer)
+  }, [])
+
   if (!pipeline.status || pipeline.status === 'IDLE') {
     return null
   }
+
+  const runtime = pipeline.runtime
+  const currentChapterRuntime = runtime?.currentChapter
+  const staleStatus = getStaleStatus(pipeline.lastHeartbeatAt)
+  const totalChapters = pipeline.totalChapters || estimatedTotalChapters || 300
+  const completedChapters = pipeline.completedChapters || 0
+  const currentChapterNo = pipeline.currentChapter || currentChapterRuntime?.chapterNumber || 0
+  const currentWordCount = currentChapterRuntime?.currentWordCount || 0
+  const targetWordCount = currentChapterRuntime?.targetWordCount || 3000
+  const currentPhase = currentChapterRuntime?.currentPhase || pipeline.currentStep || ''
+  const chapterProgress = currentChapterRuntime 
+    ? Math.round((currentWordCount / targetWordCount) * 100)
+    : pipeline.currentChapterProgress || 0
 
   return (
     <Card>
@@ -38,39 +122,110 @@ export function PipelineControlPanel({
         <CardTitle className="flex items-center gap-2 text-base">
           <Layers className="h-5 w-5 text-blue-600" />
           流水线状态
+          {staleStatus === 'warning' && (
+            <span className="ml-2 text-sm text-yellow-600">⚠️ 可能卡住</span>
+          )}
+          {staleStatus === 'stale' && (
+            <span className="ml-2 text-sm text-red-600">❌ 任务卡住</span>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-300">
-          <div>阶段：{getPipelineStepLabel(pipeline.currentStep)}</div>
-          <div>进度：{pipeline.progress}%</div>
+        {/* 整本书进度 */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-sm">
+            <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
+              <BookOpen className="h-4 w-4" />
+              <span>整本生成进度</span>
+            </div>
+            <div className="font-medium">
+              {completedChapters} / {totalChapters} 章
+            </div>
+          </div>
+          <Progress value={pipeline.progress} max={100} size="sm" />
+          <div className="text-xs text-gray-500 text-right">{pipeline.progress}%</div>
         </div>
-        <Progress value={pipeline.progress} max={100} size="sm" />
+
+        {/* 当前章节信息 */}
+        {pipeline.status === 'RUNNING' && currentChapterNo > 0 && (
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-900/40 dark:bg-blue-950/20">
+            <div className="flex items-center justify-between mb-2">
+              <div className="font-medium text-blue-800 dark:text-blue-200">
+                第 {currentChapterNo} 章
+              </div>
+              <div className="text-sm text-blue-600 dark:text-blue-300">
+                {getPipelineStepLabel(currentPhase)}
+              </div>
+            </div>
+            
+            {/* 当前章节字数进度 */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-600 dark:text-gray-300">当前字数</span>
+                <span className="font-mono">
+                  {currentWordCount.toLocaleString()} / {targetWordCount.toLocaleString()}
+                </span>
+              </div>
+              <Progress value={chapterProgress} max={100} size="sm" />
+            </div>
+            
+            {/* 当前阶段步骤 */}
+            <div className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+              <div className="flex items-center gap-2">
+                <Zap className="h-4 w-4" />
+                <span>{phaseLabels[currentPhase] || getPipelineStepLabel(currentPhase)}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 详细状态信息 */}
         <div className="grid grid-cols-2 gap-3 text-sm text-gray-600 dark:text-gray-300 md:grid-cols-4">
           <div>
             <div className="text-xs text-gray-500">状态</div>
             <div className="font-medium">{getPipelineStatusLabel(pipeline.status)}</div>
           </div>
           <div>
-            <div className="text-xs text-gray-500">下一章</div>
-            <div className="font-medium">{pipeline.nextChapterNumber || '-'}</div>
-          </div>
-          <div>
-            <div className="text-xs text-gray-500">目标章节</div>
-            <div className="font-medium">{estimatedTotalChapters?.toLocaleString() || '-'}</div>
-          </div>
-          <div>
             <div className="text-xs text-gray-500">速度模式</div>
             <div className="font-medium">{speedModeLabels[activeSpeedMode]}</div>
           </div>
+          <div>
+            <div className="text-xs text-gray-500 flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              最近心跳
+            </div>
+            <div className="font-medium">
+              {formatTimeAgo(pipeline.lastHeartbeatAt)}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 flex items-center gap-1">
+              <Activity className="h-3 w-3" />
+              运行时长
+            </div>
+            <div className="font-medium">
+              {pipeline.status === 'RUNNING' ? formatDuration(runtime?.currentChapter?.startedAt) : '-'}
+            </div>
+          </div>
         </div>
 
+        {/* 错误信息 */}
         {pipeline.error && (
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-200">
+            <div className="font-medium mb-1">错误信息</div>
             {pipeline.error}
           </div>
         )}
 
+        {/* 卡住提示 */}
+        {staleStatus === 'stale' && (
+          <div className="rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-700 dark:border-orange-900/40 dark:bg-orange-950/20 dark:text-orange-200">
+            <div className="font-medium mb-1">任务可能卡住</div>
+            超过 3 分钟没有收到心跳响应，建议重试当前章节或停止任务。
+          </div>
+        )}
+
+        {/* 操作按钮 */}
         <div className="flex flex-wrap gap-2">
           {(pipeline.status === 'RUNNING' || pipeline.status === 'PENDING') && (
             <Button variant="danger" size="sm" onClick={handleCancelPipeline} className="gap-1.5">
@@ -82,6 +237,12 @@ export function PipelineControlPanel({
             <Button variant="outline" size="sm" onClick={handlePausePipeline} className="gap-1.5">
               <Pause className="h-4 w-4" />
               暂停
+            </Button>
+          )}
+          {pipeline.status === 'RUNNING' && staleStatus !== 'normal' && (
+            <Button variant="outline" size="sm" onClick={() => handleRecoverPipeline('retry_chapter', currentChapterNo)} className="gap-1.5">
+              <RotateCcw className="h-4 w-4" />
+              重试当前章节
             </Button>
           )}
           {pipeline.status === 'PAUSED' && (

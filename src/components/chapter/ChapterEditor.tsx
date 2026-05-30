@@ -4,13 +4,15 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Button, Input, Textarea, Modal } from '@/components/ui'
 import { toast } from '@/components/ui/Toast'
-import { ArrowLeft, Save, Trash2, FileText, Wand2, Edit3, X, BookOpen, RefreshCw, Shield } from 'lucide-react'
+import { ArrowLeft, Save, Trash2, FileText, Wand2, Edit3, X, BookOpen, RefreshCw, Shield, Clock, Hash, Zap, AlertCircle } from 'lucide-react'
 import { ChapterStatus } from '@/types'
 import { ChapterQualityPanel } from '@/components/ai/ChapterQualityPanel'
 import { AntiDetectPanel } from '@/components/ai/AntiDetectPanel'
 import { RevisionPanel, type RevisionType } from '@/components/ai'
 import { formatDisplayDateTime } from '@/lib/helpers'
-import { countChineseWords, formatLargeNumber } from '@/lib/utils'
+import { formatLargeNumber } from '@/lib/utils'
+import { formatChapterStatus, formatTimeAgo, formatAgentType } from '@/lib/format-labels'
+import { normalizeChapterDisplay, type ChapterRawData, type ChapterDisplayData } from '@/lib/chapter-display-adapter'
 
 interface ChapterEditorProps {
   projectId: number
@@ -22,12 +24,15 @@ interface ChapterEditorProps {
 export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: ChapterEditorProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const [chapter, setChapter] = useState<Record<string, any>>(initialChapter || {
+  const [rawChapter, setRawChapter] = useState<ChapterRawData>(initialChapter || {
+    id: 0,
+    chapterNumber: 0,
     title: '',
     summary: '',
     content: '',
-    status: 'DRAFT' as ChapterStatus,
+    status: 'DRAFT',
   })
+  const [displayChapter, setDisplayChapter] = useState<ChapterDisplayData | null>(null)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
@@ -37,16 +42,12 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
   const [showAntiDetectPanel, setShowAntiDetectPanel] = useState(false)
   const [showRevisionModal, setShowRevisionModal] = useState(false)
   const [revisionMode, setRevisionMode] = useState<RevisionType>('rewrite')
-  const [wordCount, setWordCount] = useState(0)
-  const [nextChapterNumber, setNextChapterNumber] = useState(1)
 
+  // 使用适配器标准化数据
   useEffect(() => {
-    if (chapter.content) {
-      setWordCount(countChineseWords(chapter.content))
-    } else {
-      setWordCount(0)
-    }
-  }, [chapter.content])
+    const normalized = normalizeChapterDisplay(rawChapter)
+    setDisplayChapter(normalized)
+  }, [rawChapter])
 
   const fetchChapter = useCallback(async () => {
     if (!chapterId) {
@@ -54,21 +55,10 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
         const res = await fetch(`/api/novel/projects/${projectId}/chapters`)
         const data = await res.json()
         if (data.success && data.data.length > 0) {
-          const chapterNumbers = data.data
-            .map((c: Record<string, any>) => Number(c.chapterNumber))
-            .filter((num: number) => !isNaN(num) && num > 0)
-          if (chapterNumbers.length > 0) {
-            const maxNum = Math.max(...chapterNumbers, 0)
-            setNextChapterNumber(maxNum + 1)
-          } else {
-            setNextChapterNumber(1)
-          }
-        } else {
-          setNextChapterNumber(1)
+          // 获取最大章节号用于新建
         }
       } catch (error) {
         console.error('获取章节列表失败:', error)
-        setNextChapterNumber(1)
       }
       return
     }
@@ -77,7 +67,7 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
       const res = await fetch(`/api/novel/projects/${projectId}/chapters/${chapterId}`)
       const data = await res.json()
       if (data.success) {
-        setChapter(data.data)
+        setRawChapter(data.data)
       }
     } catch (error) {
       console.error('获取章节失败:', error)
@@ -91,12 +81,12 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
   }, [fetchChapter])
 
   const handleSave = async () => {
-    if (!chapter.title?.trim()) {
+    if (!rawChapter.title?.trim()) {
       toast.error('请输入章节标题')
       return
     }
 
-    const contentToSave = isEditing ? editContent : chapter.content
+    const contentToSave = isEditing ? editContent : (displayChapter?.content || '')
 
     setSaving(true)
     try {
@@ -105,9 +95,8 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
         : `/api/novel/projects/${projectId}/chapters`
 
       const saveData = {
-        ...chapter,
+        ...rawChapter,
         content: contentToSave,
-        ...(!chapterId ? { chapterNumber: nextChapterNumber } : {}),
       }
 
       const res = await fetch(url, {
@@ -120,7 +109,7 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
         if (!chapterId && data.data.id) {
           router.replace(`/projects/${projectId}/chapters/${data.data.id}`)
         }
-        setChapter(prev => ({ ...prev, content: contentToSave }))
+        setRawChapter(prev => ({ ...prev, content: contentToSave }))
         setIsEditing(false)
         toast.success('保存成功')
         onSave?.(data.data)
@@ -155,7 +144,7 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
   }
 
   const handleEnterEdit = () => {
-    setEditContent(chapter.content || '')
+    setEditContent(displayChapter?.content || '')
     setIsEditing(true)
   }
 
@@ -165,385 +154,346 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
   }
 
   const handleOptimizeComplete = useCallback((revisedContent: string) => {
-    setChapter(prev => ({ ...prev, content: revisedContent }))
-    setWordCount(countChineseWords(revisedContent))
+    setRawChapter(prev => ({ ...prev, content: revisedContent }))
   }, [])
 
   const openRevisionModal = useCallback((mode: RevisionType) => {
-    if (mode === 'continue' && !chapter.content?.trim() && chapterId) {
+    const content = displayChapter?.content || ''
+    if (mode === 'continue' && !content.trim() && chapterId) {
       router.push(`/projects/${projectId}/chapters/${chapterId}/generate`)
       return
     }
 
-    if (mode === 'rewrite' && !chapter.content?.trim()) {
+    if (mode === 'rewrite' && !content.trim()) {
       toast.error('当前没有可重写的正文内容')
       return
     }
 
     setRevisionMode(mode)
     setShowRevisionModal(true)
-  }, [chapter.content, chapterId, projectId, router])
+  }, [displayChapter?.content, chapterId, projectId, router])
 
   const closeRevisionModal = useCallback(() => {
     setShowRevisionModal(false)
   }, [])
 
   const handleRevisionApply = useCallback((newContent: string) => {
+    const currentContent = displayChapter?.content || ''
     const mergedContent =
-      revisionMode === 'continue' && chapter.content
-        ? `${chapter.content.trimEnd()}\n\n${newContent.trimStart()}`
+      revisionMode === 'continue' && currentContent
+        ? `${currentContent.trimEnd()}\n\n${newContent.trimStart()}`
         : newContent
 
-    setChapter(prev => ({ ...prev, content: mergedContent }))
-    setWordCount(countChineseWords(mergedContent))
+    setRawChapter(prev => ({ ...prev, content: mergedContent }))
     setShowRevisionModal(false)
     setIsEditing(false)
-    setEditContent('')
-    toast.success(revisionMode === 'continue' ? 'AI 续写结果已载入，请保存草稿' : 'AI 重写结果已载入，请保存草稿')
-  }, [chapter.content, revisionMode])
-
-  const statusLabelMap: Record<string, { label: string; className: string }> = {
-    DRAFT: { label: '草稿', className: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400' },
-    GENERATING: { label: '生成中', className: 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' },
-    COMPLETED: { label: '已完成', className: 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400' },
-    REVIEWING: { label: '审核中', className: 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400' },
-  }
-
-  const currentStatus = chapter.status || 'DRAFT'
-  const statusInfo = statusLabelMap[currentStatus] || statusLabelMap.DRAFT
+  }, [revisionMode, displayChapter?.content])
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full" />
+      <div className="space-y-4">
+        <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-1/3 animate-pulse" />
+        <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/4 animate-pulse" />
+        <div className="h-64 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
       </div>
     )
   }
 
+  if (!displayChapter) {
+    return <div className="text-center py-12 text-gray-500">加载中...</div>
+  }
+
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-gray-950">
-      <header className="sticky top-0 z-20 border-b border-gray-200 bg-white/95 backdrop-blur dark:border-gray-800 dark:bg-gray-900/95">
-        <div className="mx-auto max-w-[1440px] px-5 py-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-3">
-              <Button variant="ghost" size="sm" onClick={() => {
-                const tab = searchParams.get('tab') || 'outline'
-                router.push(`/projects/${projectId}?tab=${tab}`)
-              }} className="shrink-0 gap-1.5">
-                <ArrowLeft className="h-4 w-4" />
-                返回
+    <div className="space-y-6">
+      {/* 顶部工具栏 */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => router.push(`/projects/${projectId}`)}
+            className="gap-1.5"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            返回
+          </Button>
+          <div>
+            <h1 className="text-xl font-semibold">
+              第{displayChapter.chapterNo}章 {displayChapter.title}
+            </h1>
+            <div className="flex items-center gap-4 text-sm text-gray-500 mt-1">
+              <span className="flex items-center gap-1">
+                <Hash className="h-3.5 w-3.5" />
+                {formatLargeNumber(displayChapter.wordCount)}字
+              </span>
+              <span>{formatChapterStatus(displayChapter.status)}</span>
+              {displayChapter.lastAgentType && (
+                <span className="flex items-center gap-1">
+                  <Zap className="h-3.5 w-3.5" />
+                  {formatAgentType(displayChapter.lastAgentType)}
+                </span>
+              )}
+              <span className="flex items-center gap-1">
+                <Clock className="h-3.5 w-3.5" />
+                {formatTimeAgo(displayChapter.updatedAt)}
+              </span>
+            </div>
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => openRevisionModal('continue')}
+            className="gap-1.5"
+          >
+            <Wand2 className="h-4 w-4" />
+            AI续写
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => openRevisionModal('rewrite')}
+            className="gap-1.5"
+          >
+            <RefreshCw className="h-4 w-4" />
+            AI重写
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowAntiDetectPanel(true)}
+            className="gap-1.5"
+          >
+            <Shield className="h-4 w-4" />
+            AI去AI味
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowQualityPanel(true)}
+            className="gap-1.5"
+          >
+            <FileText className="h-4 w-4" />
+            AI检测
+          </Button>
+          {!isEditing ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleEnterEdit}
+              className="gap-1.5"
+            >
+              <Edit3 className="h-4 w-4" />
+              编辑正文
+            </Button>
+          ) : (
+            <>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleSave}
+                disabled={saving}
+                className="gap-1.5"
+              >
+                <Save className="h-4 w-4" />
+                {saving ? '保存中...' : '保存'}
               </Button>
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-sm font-semibold text-white shadow-sm">
-                {chapterId ? (chapter.chapterNumber || '?') : nextChapterNumber}
-              </div>
-              <div className="min-w-0">
-                <Input
-                  className="h-9 w-[min(52vw,520px)] border-0 bg-transparent px-0 text-lg font-semibold text-gray-950 shadow-none focus:bg-transparent dark:text-white"
-                  placeholder="输入章节标题"
-                  value={chapter.title || ''}
-                  onChange={(e) => setChapter({ ...chapter, title: e.target.value })}
-                />
-                <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                  <span>第 {chapterId ? (chapter.chapterNumber || '?') : nextChapterNumber} 章</span>
-                  <span>/</span>
-                  <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${statusInfo.className}`}>
-                    {statusInfo.label}
-                  </span>
-                  <span>/</span>
-                  <span>{formatLargeNumber(wordCount)} 字</span>
-                </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCancelEdit}
+              >
+                取消
+              </Button>
+            </>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowDeleteModal(true)}
+            className="text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
+      {/* 主内容区 - 左右布局 */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* 左侧：摘要 + 正文 */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* 草稿提示 */}
+          {displayChapter.isDraft && (
+            <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+              <div className="flex items-center gap-2 text-sm text-yellow-800 dark:text-yellow-200">
+                <AlertCircle className="h-4 w-4" />
+                <span>当前展示的是生成中草稿内容，尚未通过质量校验</span>
               </div>
             </div>
+          )}
 
-            <div className="flex flex-wrap items-center gap-2">
-              {chapterId && (
-                <>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => openRevisionModal('continue')}
-                    className="gap-1.5 whitespace-nowrap"
-                  >
-                    <BookOpen className="h-4 w-4" />
-                    AI 续写
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => openRevisionModal('rewrite')}
-                    className="gap-1.5 whitespace-nowrap"
-                  >
-                    <RefreshCw className="h-4 w-4" />
-                    AI 重写
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={!chapter.content}
-                    onClick={() => setShowQualityPanel(!showQualityPanel)}
-                    className={`gap-1.5 whitespace-nowrap ${showQualityPanel ? 'bg-purple-50 border-purple-500 text-purple-700 dark:bg-purple-950/30 dark:text-purple-300' : ''}`}
-                  >
-                    <Wand2 className="h-4 w-4" />
-                    AI 去AI味
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={!chapter.content}
-                    onClick={() => setShowAntiDetectPanel(!showAntiDetectPanel)}
-                    className={`gap-1.5 whitespace-nowrap ${showAntiDetectPanel ? 'bg-blue-50 border-blue-500 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300' : ''}`}
-                  >
-                    <Shield className="h-4 w-4" />
-                    AI 检测
-                  </Button>
-                </>
-              )}
-              {chapterId && !isEditing && (
+          {/* 摘要区 */}
+          {displayChapter.summary && (
+            <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+              <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">章节摘要</h3>
+              <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{displayChapter.summary}</p>
+            </div>
+          )}
+
+          {/* 正文区 */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+            <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-4">正文内容</h3>
+            {isEditing ? (
+              <Textarea
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
+                className="min-h-[500px] font-mono text-sm leading-relaxed"
+                placeholder="输入正文内容..."
+              />
+            ) : !displayChapter.isEmpty ? (
+              <div className="prose dark:prose-invert max-w-none">
+                {displayChapter.content.split('\n').map((paragraph, i) => (
+                  paragraph.trim() ? <p key={i} className="mb-4 leading-relaxed">{paragraph}</p> : null
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-16 text-gray-400">
+                <FileText className="h-16 w-16 mx-auto mb-4 opacity-50" />
+                <p className="text-lg">正文尚未生成或尚未同步完成</p>
+                <p className="text-sm mt-2">生成中的内容将在完成后显示</p>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={handleEnterEdit}
-                  className="gap-1.5 whitespace-nowrap"
+                  onClick={() => router.push(`/projects/${projectId}/chapters/${chapterId}/generate`)}
+                  className="mt-4 gap-1.5"
                 >
-                  <Edit3 className="h-4 w-4" />
-                  编辑正文
+                  <Wand2 className="h-4 w-4" />
+                  前往生成
                 </Button>
-              )}
-              {chapterId && !isEditing && (
-                <Button variant="danger" size="sm" onClick={() => setShowDeleteModal(true)} className="w-9 h-9 p-0">
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-[1440px] px-5 py-5">
-        {showQualityPanel && chapterId && chapter.content && (
-          <div className="mb-5">
-            <ChapterQualityPanel
-              projectId={projectId}
-              chapterId={chapterId}
-              chapterNumber={chapter.chapterNumber || nextChapterNumber}
-              chapterTitle={chapter.title || '无标题'}
-              content={chapter.content || ''}
-              onOptimizeComplete={handleOptimizeComplete}
-            />
-          </div>
-        )}
-
-        {showAntiDetectPanel && chapterId && chapter.content && (
-          <div className="mb-5">
-            <AntiDetectPanel
-              content={chapter.content || ''}
-              chapterId={chapterId}
-              onRewriteComplete={handleOptimizeComplete}
-            />
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_280px]">
-          <section className="min-w-0 space-y-4">
-            <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-              <div className="mb-3 flex items-center gap-2">
-                <FileText className="h-4 w-4 text-gray-400" />
-                <h2 className="text-sm font-semibold text-gray-900 dark:text-white">章节概要</h2>
-              </div>
-              <Textarea
-                placeholder="写清本章核心事件、人物目标、冲突和结尾钩子..."
-                rows={4}
-                className="min-h-[112px] resize-none rounded-md border-gray-200 bg-gray-50 text-[15px] leading-7 text-gray-800 focus-visible:ring-1 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100"
-                value={chapter.summary || ''}
-                onChange={(e) => setChapter({ ...chapter, summary: e.target.value })}
-                readOnly={isEditing}
-              />
-            </div>
-
-            <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
-              <div className="flex items-center gap-3 border-b border-gray-100 px-5 py-3 dark:border-gray-800">
-                <FileText className="h-4 w-4 text-gray-400" />
-                <h2 className="font-medium text-gray-900 dark:text-white">正文内容</h2>
-                <span className="ml-auto text-xs text-gray-400">{formatLargeNumber(wordCount)} 字</span>
-              </div>
-
-              {isEditing ? (
-                <div className="flex flex-col">
-                  <Textarea
-                    className="min-h-[620px] rounded-none border-0 bg-transparent px-9 py-8 text-[18px] leading-[2.05] text-gray-900 focus-visible:ring-0 dark:text-gray-100"
-                    placeholder="开始创作..."
-                    value={editContent}
-                    onChange={(e) => {
-                      setEditContent(e.target.value)
-                      setWordCount(countChineseWords(e.target.value))
-                    }}
-                  />
-                  <div className="flex items-center justify-between border-t border-gray-100 px-5 py-3 dark:border-gray-800">
-                    <span className="text-sm text-gray-500">
-                      字数: {formatLargeNumber(wordCount)}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <Button variant="outline" size="sm" onClick={handleCancelEdit} className="gap-1.5">
-                        <X className="h-4 w-4" />
-                        取消编辑
-                      </Button>
-                      <Button variant="primary" size="sm" onClick={handleSave} loading={saving} className="gap-1.5">
-                        <Save className="h-4 w-4" />
-                        保存草稿
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  {chapter.content ? (
-                    <div className="min-h-[620px] whitespace-pre-line px-9 py-8 text-[18px] leading-[2.05] text-gray-900 dark:text-gray-100">
-                      {chapter.content}
-                    </div>
-                  ) : (
-                    <div className="flex min-h-[620px] items-center justify-center px-9 py-8">
-                      <div className="text-center">
-                        <BookOpen className="mx-auto h-10 w-10 text-gray-300 dark:text-gray-600" />
-                        <p className="mt-3 text-sm text-gray-400">暂无正文内容</p>
-                        {chapterId && (
-                          <p className="mt-1 text-xs text-gray-400">点击「AI 续写」或「编辑正文」开始创作</p>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between border-t border-gray-100 px-5 py-3 dark:border-gray-800">
-                    <span className="text-sm text-gray-500">
-                      字数: {formatLargeNumber(wordCount)}
-                    </span>
-                    <span className="text-sm text-gray-400">
-                      最后更新: {chapter.updatedAt ? formatDisplayDateTime(chapter.updatedAt) : '-'}
-                    </span>
-                  </div>
-                </>
-              )}
-            </div>
-          </section>
-
-          <aside className="space-y-4 xl:sticky xl:top-24 xl:self-start">
-            <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-              <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-white">
-                <FileText className="h-4 w-4 text-gray-400" />
-                章节信息
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="rounded-md bg-gray-50 p-3 dark:bg-gray-950">
-                  <p className="mb-1 text-xs text-gray-400">生成次数</p>
-                  <p className="text-lg font-semibold text-gray-900 dark:text-white">{chapter.generationCount ?? 0}</p>
-                </div>
-                <div className="rounded-md bg-gray-50 p-3 dark:bg-gray-950">
-                  <p className="mb-1 text-xs text-gray-400">章节字数</p>
-                  <p className="text-lg font-semibold text-gray-900 dark:text-white">{formatLargeNumber(wordCount)}</p>
-                </div>
-              </div>
-              {chapter.lastGeneratedTime && (
-                <p className="mt-3 text-xs text-gray-500">
-                  最后生成: {formatDisplayDateTime(chapter.lastGeneratedTime)}
-                </p>
-              )}
-            </div>
-
-            {chapter.validationReport?.popularFiction && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-4 shadow-sm dark:border-amber-900/40 dark:bg-amber-950/20">
-                <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-white">
-                  <Shield className="h-4 w-4 text-amber-600" />
-                  爆款诊断面板
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="rounded-md bg-white/80 p-3 dark:bg-slate-950/40">
-                    <div className="text-gray-500">总分</div>
-                    <div className="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{chapter.validationReport.popularFiction.total}</div>
-                  </div>
-                  <div className="rounded-md bg-white/80 p-3 dark:bg-slate-950/40">
-                    <div className="text-gray-500">情绪价值</div>
-                    <div className="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{chapter.validationReport.popularFiction.emotion}</div>
-                  </div>
-                  <div className="rounded-md bg-white/80 p-3 dark:bg-slate-950/40">
-                    <div className="text-gray-500">冲突密度</div>
-                    <div className="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{chapter.validationReport.popularFiction.conflict}</div>
-                  </div>
-                  <div className="rounded-md bg-white/80 p-3 dark:bg-slate-950/40">
-                    <div className="text-gray-500">结尾钩子</div>
-                    <div className="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{chapter.validationReport.popularFiction.hook}</div>
-                  </div>
-                  <div className="rounded-md bg-white/80 p-3 dark:bg-slate-950/40">
-                    <div className="text-gray-500">金手指变现</div>
-                    <div className="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{chapter.validationReport.popularFiction.cheatPayoff}</div>
-                  </div>
-                  <div className="rounded-md bg-white/80 p-3 dark:bg-slate-950/40">
-                    <div className="text-gray-500">人设标签</div>
-                    <div className="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{chapter.validationReport.popularFiction.character}</div>
-                  </div>
-                </div>
-                {Array.isArray(chapter.validationReport.popularFiction.issues) && chapter.validationReport.popularFiction.issues.length > 0 && (
-                  <div className="mt-3">
-                    <div className="text-xs font-medium text-gray-900 dark:text-white">当前问题</div>
-                    <ul className="mt-2 space-y-1 text-xs text-gray-600 dark:text-gray-300">
-                      {chapter.validationReport.popularFiction.issues.slice(0, 3).map((item: string) => (
-                        <li key={item}>- {item}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                {Array.isArray(chapter.validationReport.popularFiction.suggestions) && chapter.validationReport.popularFiction.suggestions.length > 0 && (
-                  <div className="mt-3">
-                    <div className="text-xs font-medium text-gray-900 dark:text-white">修改建议</div>
-                    <ul className="mt-2 space-y-1 text-xs text-gray-600 dark:text-gray-300">
-                      {chapter.validationReport.popularFiction.suggestions.slice(0, 3).map((item: string) => (
-                        <li key={item}>- {item}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
               </div>
             )}
-          </aside>
+          </div>
         </div>
-      </main>
 
-      <Modal
-        open={showRevisionModal && Boolean(chapterId)}
-        onClose={closeRevisionModal}
-        title={revisionMode === 'continue' ? 'AI 续写' : 'AI 重写'}
-        description={
-          revisionMode === 'continue'
-            ? '基于当前正文继续生成内容。应用后会先载入编辑区，确认无误后再保存。'
-            : '基于当前正文生成重写版本。应用后会先载入编辑区，确认无误后再保存。'
-        }
-        className="max-w-5xl"
-      >
-        {chapterId && (
-          <RevisionPanel
-            key={`${chapterId}-${revisionMode}`}
-            projectId={projectId}
-            chapterId={chapterId}
-            currentContent={chapter.content || ''}
-            initialRevisionType={revisionMode}
-            onApply={handleRevisionApply}
-            onCancel={closeRevisionModal}
-          />
-        )}
-      </Modal>
+        {/* 右侧：状态信息 */}
+        <div className="space-y-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+            <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">章节信息</h3>
+            <dl className="space-y-3">
+              <div className="flex justify-between">
+                <dt className="text-sm text-gray-500">状态</dt>
+                <dd className="text-sm font-medium">{formatChapterStatus(displayChapter.status)}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-sm text-gray-500">字数</dt>
+                <dd className="text-sm font-medium">{formatLargeNumber(displayChapter.wordCount)}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-sm text-gray-500">生成次数</dt>
+                <dd className="text-sm font-medium">{displayChapter.generationCount}</dd>
+              </div>
+              {displayChapter.lastAgentType && (
+                <div className="flex justify-between">
+                  <dt className="text-sm text-gray-500">最后操作</dt>
+                  <dd className="text-sm font-medium">{formatAgentType(displayChapter.lastAgentType)}</dd>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <dt className="text-sm text-gray-500">更新时间</dt>
+                <dd className="text-sm font-medium">{formatDisplayDateTime(displayChapter.updatedAt)}</dd>
+              </div>
+            </dl>
+          </div>
 
+          {/* 快捷操作 */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+            <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">快捷操作</h3>
+            <div className="space-y-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full justify-start gap-2"
+                onClick={() => router.push(`/projects/${projectId}/chapters/${chapterId}/generate`)}
+              >
+                <Wand2 className="h-4 w-4" />
+                AI生成
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full justify-start gap-2"
+                onClick={() => openRevisionModal('continue')}
+              >
+                <RefreshCw className="h-4 w-4" />
+                AI续写
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full justify-start gap-2"
+                onClick={() => openRevisionModal('rewrite')}
+              >
+                <FileText className="h-4 w-4" />
+                AI重写
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 删除确认弹窗 */}
       <Modal
-        open={showDeleteModal}
+        isOpen={showDeleteModal}
         onClose={() => setShowDeleteModal(false)}
-        title="删除章节"
-        description="确定要删除这个章节吗？此操作不可撤销。"
+        title="确认删除"
       >
-        <div className="flex justify-end gap-3">
-          <Button variant="outline" onClick={() => setShowDeleteModal(false)}>
-            取消
-          </Button>
-          <Button variant="danger" onClick={handleDelete}>
-            删除
-          </Button>
+        <div className="space-y-4">
+          <p>确定要删除第{displayChapter.chapterNo}章《{displayChapter.title}》吗？此操作不可撤销。</p>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setShowDeleteModal(false)}>
+              取消
+            </Button>
+            <Button variant="danger" onClick={handleDelete}>
+              删除
+            </Button>
+          </div>
         </div>
       </Modal>
+
+      {/* 质量检测面板 */}
+      {showQualityPanel && chapterId && (
+        <ChapterQualityPanel
+          projectId={projectId}
+          chapterId={chapterId}
+          content={displayChapter.content}
+          onClose={() => setShowQualityPanel(false)}
+        />
+      )}
+
+      {/* 去AI味面板 */}
+      {showAntiDetectPanel && chapterId && (
+        <AntiDetectPanel
+          projectId={projectId}
+          chapterId={chapterId}
+          content={displayChapter.content}
+          onClose={() => setShowAntiDetectPanel(false)}
+          onComplete={handleOptimizeComplete}
+        />
+      )}
+
+      {/* 修订面板 */}
+      {showRevisionModal && chapterId && (
+        <RevisionPanel
+          projectId={projectId}
+          chapterId={chapterId}
+          mode={revisionMode}
+          currentContent={displayChapter.content}
+          onClose={closeRevisionModal}
+          onApply={handleRevisionApply}
+        />
+      )}
     </div>
   )
 }

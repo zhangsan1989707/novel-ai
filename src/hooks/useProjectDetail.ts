@@ -210,7 +210,7 @@ export function useProjectDetail(initialProject: ProjectDetail | null) {
   const [loading, setLoading] = useState(!initialProject)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const [selectedSpeedMode, setSelectedSpeedMode] = useState<GenerationSpeedMode>('fast')
+  const [selectedSpeedMode, setSelectedSpeedMode] = useState<GenerationSpeedMode>('FAST_ACCEPTANCE')
   const [selectedChapterNumber, setSelectedChapterNumber] = useState<number | null>(null)
   const [chapterDirectoryTouched, setChapterDirectoryTouched] = useState(false)
 

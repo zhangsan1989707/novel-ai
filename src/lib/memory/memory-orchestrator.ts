@@ -16,7 +16,7 @@ export interface MemoryPackOptions {
   characterLimit?: number
   plotlineLimit?: number
   researchLimit?: number
-  speedMode?: 'fast' | 'balanced' | 'quality'
+  speedMode?: 'FAST_ACCEPTANCE' | 'FINAL_POLISH'
   /** 启用记忆衰减压缩（默认 true） */
   enableDecay?: boolean
 }

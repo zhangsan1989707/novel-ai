@@ -28,17 +28,12 @@ import type {
   ChapterSummaryData,
   SSEEvent,
   AgentType,
-  GenerationPhase,
 } from './types'
 import { normalizePopularFictionProfile, scorePopularFictionChapter } from './popular-fiction'
 import type { StyleProfilePromptCard } from '@/types/style'
 import { buildSeedOutlineFromChapterState, extractChapterPlanningSeed } from './chapter-metadata'
-import { createChapterContract, type ChapterGenerationContract } from './chapter-contract'
-import { runQualityGate, type QualityGateResult } from './quality-gate'
-import { expandChapter, compressChapter, continueChapter } from './chapter-repair'
 
 const MAX_RETRY_COUNT = 3
-const MAX_REPAIR_ATTEMPTS = 2
 
 interface GenerationResult {
   success: boolean
@@ -49,33 +44,6 @@ interface GenerationResult {
 }
 
 type SSEEmitter = (event: SSEEvent) => void
-
-// 进度上报辅助函数
-function emitProgress(
-  emit: SSEEmitter,
-  phase: GenerationPhase,
-  chapterNo: number,
-  totalChapters: number,
-  completedChapters: number,
-  currentWordCount: number,
-  targetWordCount: number,
-  message: string
-) {
-  emit({
-    type: 'progress',
-    data: {
-      phase,
-      chapterNo,
-      totalChapters,
-      completedChapters,
-      currentWordCount,
-      targetWordCount,
-      message,
-      lastHeartbeatAt: new Date().toISOString(),
-      timestamp: new Date().toISOString(),
-    },
-  })
-}
 
 function buildReviewSuggestion(review: {
   consensus: string
@@ -108,7 +76,7 @@ function buildReviewSuggestion(review: {
 
 /**
  * 章节生成流水线
- * 依次执行：策划 → 写作 → 润色 → 对抗审稿 → 校验 → 去 AI 味 → 摘要 → Quality Gate
+ * 依次执行：策划 → 写作 → 润色 → 对抗审稿 → 校验 → 去 AI 味 → 摘要
  */
 export async function runChapterGenerationPipeline(
   projectId: number,
@@ -119,22 +87,10 @@ export async function runChapterGenerationPipeline(
     _retryMemoryPack?: Awaited<ReturnType<typeof buildChapterMemoryPack>>
   }
 ): Promise<GenerationResult> {
-  const speedMode = options?.speedMode || 'FINAL_POLISH'
+  const speedMode = options?.speedMode || 'balanced'
   const isRetry = !!options?._retryMemoryPack
   const startTime = Date.now()
   let lastReportedWordCount = 0
-
-  // 获取项目总章节数
-  const projectInfo = await prisma.novelProject.findUnique({
-    where: { id: projectId },
-    select: { totalVolumes: true },
-  })
-  const totalChapters = (projectInfo?.totalVolumes || 12) * 25 || 300
-  
-  // 获取已完成章节数
-  const completedChaptersCount = await prisma.novelChapter.count({
-    where: { projectId, status: 'COMPLETED' },
-  })
 
   const providerCache = new Map<GenerationRole, Awaited<ReturnType<typeof AIService.createProvider>>>()
   const getRoleProvider = async (role: GenerationRole) => {
@@ -222,17 +178,6 @@ export async function runChapterGenerationPipeline(
     .join('\n\n')
   const summarizerMemoryContext = memoryPack.summarizerContext
 
-  // 创建章节生成契约
-  const contract = createChapterContract({
-    projectId,
-    chapterNo,
-    targetWordCount: chapterTargetWordCount,
-    mode: speedMode,
-  })
-
-  // 上报进度：开始生成
-  emitProgress(emit, 'chapter_contract', chapterNo, totalChapters, completedChaptersCount, 0, chapterTargetWordCount, `开始生成第 ${chapterNo} 章`)
-
   // 更新章节状态
   const chapter = await prisma.novelChapter.upsert({
     where: { projectId_chapterNumber: { projectId, chapterNumber: chapterNo } },
@@ -257,7 +202,6 @@ export async function runChapterGenerationPipeline(
         data: { status: ChapterStatus.REVIEWING },
       })
       emit({ type: 'error', data: { message: blocked.message || 'Hook 阻断了生成流程' } })
-      emitProgress(emit, 'failed', chapterNo, totalChapters, completedChaptersCount, 0, chapterTargetWordCount, blocked.message || 'Hook 阻断了生成流程')
       return { success: false, chapterId: chapter.id, error: blocked.message || 'Hook 阻断了生成流程' }
     }
     const warnings = startResults.filter(r => r.action === 'warn')
@@ -274,11 +218,10 @@ export async function runChapterGenerationPipeline(
         select: { title: true, summary: true, chapterOutline: true },
       })
       outline = buildSeedOutlineFromChapterState(chapterNo, retryChapter)
-    } else if (speedMode === 'FAST_ACCEPTANCE') {
+    } else if (speedMode === 'fast') {
       outline = buildSeedOutlineFromChapterState(chapterNo, chapter)
     } else {
       await runPhase('planner', async () => {
-        emitProgress(emit, 'planning', chapterNo, totalChapters, completedChaptersCount, 0, chapterTargetWordCount, '正在构建章节大纲')
         emit({ type: 'start', data: { chapterId: chapter.id, agent: 'planner' } })
 
         const plannerResult = await plannerAgent({
@@ -327,7 +270,7 @@ export async function runChapterGenerationPipeline(
       })
     }
 
-    if (speedMode === 'FAST_ACCEPTANCE') {
+    if (speedMode === 'fast') {
       await prisma.novelChapter.update({
         where: { id: chapter.id },
         data: {
@@ -335,14 +278,6 @@ export async function runChapterGenerationPipeline(
           lastAgentType: 'WRITER',
         },
       })
-    }
-
-    // 更新契约标题和摘要
-    if (outline.chapterTitle) {
-      contract.expectedTitle = outline.chapterTitle
-    }
-    if (outline.chapterGoal) {
-      contract.expectedSummary = outline.chapterGoal
     }
 
     // ========== Phase 1.5: 研究资料 ==========
@@ -354,7 +289,6 @@ export async function runChapterGenerationPipeline(
     let draftContent = ''
 
     await runPhase('writer', async () => {
-      emitProgress(emit, 'writing', chapterNo, totalChapters, completedChaptersCount, 0, chapterTargetWordCount, '正在生成正文内容')
       emit({ type: 'agent_switch', data: { agent: 'writer' } })
 
       await writerAgent(
@@ -387,23 +321,17 @@ export async function runChapterGenerationPipeline(
           if (currentWordCount >= lastReportedWordCount + 120) {
             lastReportedWordCount = currentWordCount
             emit({ type: 'wordCount', data: { count: currentWordCount } })
-            // 上报实时字数进度
-            emitProgress(emit, 'writing', chapterNo, totalChapters, completedChaptersCount, currentWordCount, chapterTargetWordCount, `正在生成正文：${currentWordCount} 字`)
           }
         }
       )
     })
 
-    const draftWordCount = countChineseWords(draftContent)
-    emitProgress(emit, 'writing', chapterNo, totalChapters, completedChaptersCount, draftWordCount, chapterTargetWordCount, `正文生成完成：${draftWordCount} 字`)
-
     // ========== Phase 3 + 7: 润色 + 摘要 并行 ==========
     let polishedContent = draftContent
     let summaryData!: ChapterSummaryData
 
-    if (speedMode === 'FINAL_POLISH') {
+    if (speedMode === 'quality') {
       emit({ type: 'agent_switch', data: { agent: 'polisher_summarizer' } })
-      emitProgress(emit, 'polishing', chapterNo, totalChapters, completedChaptersCount, draftWordCount, chapterTargetWordCount, '正在润色和生成摘要')
 
       polishedContent = ''
       const [, sd] = await Promise.all([
@@ -438,8 +366,7 @@ export async function runChapterGenerationPipeline(
         }),
       ])
       summaryData = sd
-    } else {
-      // FAST_ACCEPTANCE 模式只生成摘要
+    } else if (speedMode === 'balanced') {
       await runPhase('summarizer', async () => {
         emit({ type: 'agent_switch', data: { agent: 'summarizer' } })
 
@@ -456,14 +383,23 @@ export async function runChapterGenerationPipeline(
 
         await storyState.updateChapterProgress(projectId, chapterNo)
       })
+    } else {
+      const seed = extractChapterPlanningSeed(chapterNo, chapter)
+      summaryData = {
+        summary: seed.summary,
+        keyEvents: [],
+        emotionalTone: null,
+        plantedPlotlines: [],
+        resolvedPlotlines: [],
+      }
+      await storyState.updateChapterProgress(projectId, chapterNo)
     }
 
     // ========== Phase 4: 对抗审稿 Agent ==========
     let reviewedContent = polishedContent
 
-    if (speedMode === 'FINAL_POLISH') {
+    if (speedMode === 'quality') {
       await runPhase('reviewer', async () => {
-        emitProgress(emit, 'reviewing', chapterNo, totalChapters, completedChaptersCount, countChineseWords(polishedContent), chapterTargetWordCount, '正在对抗审稿')
         emit({ type: 'agent_switch', data: { agent: 'reviewer' } })
 
         try {
@@ -550,9 +486,8 @@ export async function runChapterGenerationPipeline(
     let validationReport: ValidatorValidationReport | null = null
     let finalContent = reviewedContent
 
-    if (speedMode === 'FINAL_POLISH') {
+    if (speedMode === 'quality') {
       emit({ type: 'agent_switch', data: { agent: 'validator_deslopper' } })
-      emitProgress(emit, 'validating', chapterNo, totalChapters, completedChaptersCount, countChineseWords(reviewedContent), chapterTargetWordCount, '正在校验和去 AI 味')
 
       const [validReport, deslopContent] = await Promise.all([
         runPhase('validator', async () => {
@@ -661,7 +596,6 @@ export async function runChapterGenerationPipeline(
               message: `校验失败超过${MAX_RETRY_COUNT}次，已标记人工审核`,
             },
           })
-          emitProgress(emit, 'failed', chapterNo, totalChapters, completedChaptersCount, failedWordCount, chapterTargetWordCount, `校验失败超过${MAX_RETRY_COUNT}次，已标记人工审核`)
 
           return {
             success: true,
@@ -696,104 +630,10 @@ export async function runChapterGenerationPipeline(
       reviewedContent = polishedContent
     }
 
-    // ========== Phase 8: Quality Gate 质量门禁 ==========
-    emitProgress(emit, 'quality_gate', chapterNo, totalChapters, completedChaptersCount, countChineseWords(finalContent), chapterTargetWordCount, '正在运行质量门禁检查')
-    
-    let qualityGateResult: QualityGateResult
-    let repairAttempts = 0
-    let contentToCheck = finalContent
-
-    // 获取 writer provider 用于修复
-    const writerProvider = await getRoleProvider('writer')
-
-    while (repairAttempts <= MAX_REPAIR_ATTEMPTS) {
-      qualityGateResult = runQualityGate({
-        content: contentToCheck,
-        contract,
-        finishReason: undefined, // TODO: 从 writer 获取 finishReason
-      })
-
-      if (qualityGateResult.canSave) {
-        emitProgress(emit, 'quality_gate', chapterNo, totalChapters, completedChaptersCount, countChineseWords(contentToCheck), chapterTargetWordCount, '质量门禁检查通过')
-        break
-      }
-
-      if (repairAttempts >= MAX_REPAIR_ATTEMPTS) {
-        // 修复次数用尽，标记为待审核
-        emit({
-          type: 'quality_gate_failed',
-          data: {
-            errors: qualityGateResult.errors,
-            message: `质量门禁未通过，已标记人工审核`,
-          },
-        })
-        emitProgress(emit, 'failed', chapterNo, totalChapters, completedChaptersCount, countChineseWords(contentToCheck), chapterTargetWordCount, '质量门禁未通过，已标记人工审核')
-
-        await prisma.novelChapter.update({
-          where: { id: chapter.id },
-          data: {
-            content: contentToCheck,
-            status: ChapterStatus.REVIEWING,
-            wordCount: countChineseWords(contentToCheck),
-            lastAgentType: 'VALIDATOR',
-          },
-        })
-
-        return {
-          success: true,
-          chapterId: chapter.id,
-          content: contentToCheck,
-          error: '质量门禁未通过，已标记人工审核',
-        }
-      }
-
-      // 需要修复
-      emitProgress(emit, 'repairing', chapterNo, totalChapters, completedChaptersCount, countChineseWords(contentToCheck), chapterTargetWordCount, `正在修复：${qualityGateResult.needsRepair === 'expand' ? '扩写' : qualityGateResult.needsRepair === 'compress' ? '压缩' : '续写'}`)
-      
-      let repairResult
-      if (qualityGateResult.needsRepair === 'expand') {
-        repairResult = await expandChapter({
-          content: contentToCheck,
-          targetWordCount: contract.targetWordCount,
-          currentWordCount: countChineseWords(contentToCheck),
-          chapterTitle: outline.chapterTitle,
-          chapterNo,
-          provider: writerProvider,
-        })
-      } else if (qualityGateResult.needsRepair === 'compress') {
-        repairResult = await compressChapter({
-          content: contentToCheck,
-          targetWordCount: contract.targetWordCount,
-          currentWordCount: countChineseWords(contentToCheck),
-          chapterTitle: outline.chapterTitle,
-          chapterNo,
-          provider: writerProvider,
-        })
-      } else if (qualityGateResult.needsRepair === 'continue') {
-        repairResult = await continueChapter({
-          content: contentToCheck,
-          targetWordCount: contract.targetWordCount,
-          currentWordCount: countChineseWords(contentToCheck),
-          chapterTitle: outline.chapterTitle,
-          chapterNo,
-          provider: writerProvider,
-        })
-      }
-
-      if (repairResult?.success) {
-        contentToCheck = repairResult.content
-        finalContent = repairResult.content
-        emitProgress(emit, 'repairing', chapterNo, totalChapters, completedChaptersCount, countChineseWords(contentToCheck), chapterTargetWordCount, `修复完成：${countChineseWords(contentToCheck)} 字`)
-      }
-
-      repairAttempts++
-    }
-
-    // Quality Gate 通过，保存章节
-    emitProgress(emit, 'committing', chapterNo, totalChapters, completedChaptersCount, countChineseWords(finalContent), chapterTargetWordCount, '正在保存章节到数据库')
-    
     const finalWordCount = countChineseWords(finalContent)
+    const polishedWordCount = countChineseWords(polishedContent)
     const minimumWordCount = getMinimumChapterWordCount(project.chapterWordCount || 3000, chapterNo)
+    const chapterReady = finalWordCount >= minimumWordCount
     emit({ type: 'wordCount', data: { count: finalWordCount } })
 
     await runPhase('db_write', async () => {
@@ -809,12 +649,12 @@ export async function runChapterGenerationPipeline(
         summaryData,
         validationReport: validationReport as unknown as EngineValidationReport | null,
         outline,
-        qualityStatus: 'completed',
-        warning: undefined,
+        qualityStatus: chapterReady ? 'completed' : 'reviewing',
+        warning: chapterReady ? undefined : buildChapterWordCountWarning(finalWordCount, project.chapterWordCount || 3000, chapterNo),
         targetWordCount: project.chapterWordCount || 3000,
         currentWordCount: finalWordCount,
         emotionalValue,
-        agentType: speedMode === 'FINAL_POLISH' ? 'POLISHER' : 'WRITER',
+        agentType: speedMode === 'quality' ? 'POLISHER' : 'WRITER',
         emittedAt: new Date().toISOString(),
       }, 'pipeline')
 
@@ -825,27 +665,14 @@ export async function runChapterGenerationPipeline(
       })
     })
 
-    // 章节完成
-    const newCompletedCount = completedChaptersCount + 1
-    emitProgress(emit, 'completed', chapterNo, totalChapters, newCompletedCount, finalWordCount, chapterTargetWordCount, `第 ${chapterNo} 章生成完成`)
-    emit({
-      type: 'chapter_completed',
-      data: {
-        chapterId: chapter.id,
-        chapterNo,
-        wordCount: finalWordCount,
-        completedChapters: newCompletedCount,
-        totalChapters,
-      },
-    })
-
     emit({
       type: 'done',
       data: {
         chapterId: chapter.id,
-        wordCount: finalWordCount,
+        wordCount: polishedWordCount,
         minimumWordCount,
-        qualityStatus: 'completed',
+        qualityStatus: chapterReady ? 'completed' : 'reviewing',
+        warning: chapterReady ? undefined : buildChapterWordCountWarning(finalWordCount, project.chapterWordCount || 3000, chapterNo),
         duration: Date.now() - startTime,
       },
     })
@@ -853,7 +680,7 @@ export async function runChapterGenerationPipeline(
     return {
       success: true,
       chapterId: chapter.id,
-      content: finalContent,
+      content: polishedContent,
       outline,
     }
 
@@ -866,7 +693,6 @@ export async function runChapterGenerationPipeline(
 
     const errorMessage = error instanceof Error ? error.message : '未知错误'
     emit({ type: 'error', data: { message: errorMessage } })
-    emitProgress(emit, 'failed', chapterNo, totalChapters, completedChaptersCount, 0, chapterTargetWordCount, `生成失败：${errorMessage}`)
 
     return {
       success: false,

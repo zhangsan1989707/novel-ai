@@ -11,7 +11,7 @@ interface RouteParams {
 async function readPipelineSnapshot(projectId: number) {
   const project = await prisma.novelProject.findUnique({
     where: { id: projectId },
-    select: { pipelineJobId: true },
+    select: { pipelineJobId: true, totalVolumes: true },
   })
 
   const chapters = await prisma.novelChapter.findMany({
@@ -25,6 +25,9 @@ async function readPipelineSnapshot(projectId: number) {
   const nextChapterNumber = firstIncomplete
     ? firstIncomplete.chapterNumber
     : (completedChapterCount > 0 ? completedChapterCount + 1 : 1)
+
+  // 从项目获取目标章节数
+  const totalChapters = (project?.totalVolumes || 12) * 25 || 300
 
   let jobId = project?.pipelineJobId || null
   if (!jobId) {
@@ -50,7 +53,8 @@ async function readPipelineSnapshot(projectId: number) {
         currentStep: '',
         progress: 0,
         currentChapter: 0,
-        totalChapters: 0,
+        totalChapters,
+        completedChapters: completedChapterCount,
         actualChapterCount,
         nextChapterNumber,
         runtime: sanitizePipelineRuntime(undefined),
@@ -59,23 +63,25 @@ async function readPipelineSnapshot(projectId: number) {
     }
 
     jobId = latestJob.id
-    const totalSteps = 8
     const payload = latestJob.payload && typeof latestJob.payload === 'object'
       ? latestJob.payload as Record<string, unknown>
       : {}
     const runtime = sanitizePipelineRuntime(payload.runtime)
+    
     return {
       status: latestJob.status,
       currentStep: latestJob.currentStep || '',
-      progress: Math.round((latestJob.stepIndex / totalSteps) * 100),
+      progress: totalChapters > 0 ? Math.round((completedChapterCount / totalChapters) * 100) : 0,
       currentChapter: latestJob.currentChapter,
-      totalChapters: latestJob.totalChapters,
+      totalChapters,
+      completedChapters: completedChapterCount,
       actualChapterCount,
       nextChapterNumber,
       error: latestJob.errorMessage || undefined,
       pipelineJobId: latestJob.id,
       speedMode: normalizeGenerationSpeedMode(payload.speedMode || runtime.speedMode),
       runtime,
+      lastHeartbeatAt: runtime.lastEventAt || null,
       updatedAt: latestJob.updatedAt.toISOString(),
     }
   }
@@ -101,7 +107,8 @@ async function readPipelineSnapshot(projectId: number) {
       currentStep: '',
       progress: 0,
       currentChapter: 0,
-      totalChapters: 0,
+      totalChapters,
+      completedChapters: completedChapterCount,
       actualChapterCount,
       nextChapterNumber,
       runtime: sanitizePipelineRuntime(undefined),
@@ -109,23 +116,25 @@ async function readPipelineSnapshot(projectId: number) {
     }
   }
 
-  const totalSteps = 8
   const payload = job.payload && typeof job.payload === 'object'
     ? job.payload as Record<string, unknown>
     : {}
   const runtime = sanitizePipelineRuntime(payload.runtime)
+  
   return {
     status: job.status,
     currentStep: job.currentStep || '',
-    progress: Math.round((job.stepIndex / totalSteps) * 100),
+    progress: totalChapters > 0 ? Math.round((completedChapterCount / totalChapters) * 100) : 0,
     currentChapter: job.currentChapter,
-    totalChapters: job.totalChapters,
+    totalChapters,
+    completedChapters: completedChapterCount,
     actualChapterCount,
     nextChapterNumber,
     error: job.errorMessage || undefined,
     pipelineJobId: job.id,
     speedMode: normalizeGenerationSpeedMode(payload.speedMode || runtime.speedMode),
     runtime,
+    lastHeartbeatAt: runtime.lastEventAt || null,
     updatedAt: job.updatedAt.toISOString(),
   }
 }

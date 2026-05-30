@@ -30,7 +30,7 @@ export function useNextStepState({
     return null
   }
 
-  const fastModeCompleted = pipeline?.status === 'COMPLETED' && pipeline?.speedMode === 'fast'
+  const fastModeCompleted = pipeline?.status === 'COMPLETED' && pipeline?.speedMode === 'FAST_ACCEPTANCE'
   const hasCompletedChapters = (project.chapters || []).some(c => c.status === 'COMPLETED' && c.content)
   const hasReviewingChapters = (project.chapters || []).some(c => c.status === 'REVIEWING')
 

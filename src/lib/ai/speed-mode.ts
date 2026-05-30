@@ -1,7 +1,18 @@
 import { AIVendor } from '@/types'
 
-export const generationSpeedModes = ['fast', 'balanced', 'quality'] as const
+// 新版生成模式：从三个简化为两个
+export const generationSpeedModes = ['FAST_ACCEPTANCE', 'FINAL_POLISH'] as const
 export type GenerationSpeedMode = typeof generationSpeedModes[number]
+
+// 兼容旧模式映射
+const legacyModeMap: Record<string, GenerationSpeedMode> = {
+  fast: 'FAST_ACCEPTANCE',
+  quick_acceptance: 'FAST_ACCEPTANCE',
+  balanced: 'FINAL_POLISH',
+  balanced_quality: 'FINAL_POLISH',
+  quality: 'FINAL_POLISH',
+  polished_quality: 'FINAL_POLISH',
+}
 
 export type GenerationRole =
   | 'blueprint'
@@ -17,7 +28,7 @@ export type GenerationRole =
   | 'stream'
 
 const mimoModelByMode: Record<GenerationSpeedMode, Record<GenerationRole, string>> = {
-  fast: {
+  FAST_ACCEPTANCE: {
     blueprint: 'mimo-v2.5',
     arc_plan: 'mimo-v2.5',
     planner: 'mimo-v2.5',
@@ -30,20 +41,7 @@ const mimoModelByMode: Record<GenerationSpeedMode, Record<GenerationRole, string
     summarizer: 'mimo-v2.5',
     stream: 'mimo-v2.5',
   },
-  balanced: {
-    blueprint: 'mimo-v2.5',
-    arc_plan: 'mimo-v2.5',
-    planner: 'mimo-v2.5',
-    writer: 'mimo-v2.5',
-    polisher: 'mimo-v2.5',
-    reviewer: 'mimo-v2.5',
-    revision: 'mimo-v2.5',
-    validator: 'mimo-v2.5',
-    deslopper: 'mimo-v2.5',
-    summarizer: 'mimo-v2.5',
-    stream: 'mimo-v2.5',
-  },
-  quality: {
+  FINAL_POLISH: {
     blueprint: 'mimo-v2.5-pro',
     arc_plan: 'mimo-v2.5-pro',
     planner: 'mimo-v2.5-pro',
@@ -59,9 +57,16 @@ const mimoModelByMode: Record<GenerationSpeedMode, Record<GenerationRole, string
 }
 
 export function normalizeGenerationSpeedMode(value: unknown): GenerationSpeedMode {
-  return generationSpeedModes.includes(value as GenerationSpeedMode)
-    ? value as GenerationSpeedMode
-    : 'balanced'
+  if (typeof value === 'string') {
+    // 先检查是否已经是新模式
+    if (generationSpeedModes.includes(value as GenerationSpeedMode)) {
+      return value as GenerationSpeedMode
+    }
+    // 兼容旧模式
+    const mapped = legacyModeMap[value.toLowerCase()]
+    if (mapped) return mapped
+  }
+  return 'FINAL_POLISH'
 }
 
 export function resolveMiMoModelId(
@@ -81,7 +86,7 @@ export function resolveModelIdForRole(input: {
     return input.currentModelId
   }
 
-  return resolveMiMoModelId(input.speedMode || 'balanced', input.role)
+  return resolveMiMoModelId(input.speedMode || 'FINAL_POLISH', input.role)
 }
 
 export function estimateMaxTokensForTargetWordCount(targetWordCount: number): number {
@@ -90,13 +95,12 @@ export function estimateMaxTokensForTargetWordCount(targetWordCount: number): nu
 
 export function resolveEffectiveChapterWordCount(
   targetWordCount: number,
-  speedMode: GenerationSpeedMode = 'balanced'
+  speedMode: GenerationSpeedMode = 'FINAL_POLISH'
 ): number {
   const safeTarget = Math.max(1000, Math.floor(targetWordCount || 0))
   const multiplierByMode: Record<GenerationSpeedMode, number> = {
-    fast: 0.8,
-    balanced: 0.9,
-    quality: 1,
+    FAST_ACCEPTANCE: 0.8,
+    FINAL_POLISH: 1,
   }
 
   return Math.max(1000, Math.floor(safeTarget * multiplierByMode[speedMode]))

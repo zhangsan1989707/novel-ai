@@ -72,7 +72,7 @@ export function sanitizePipelineRuntime(value: unknown): PipelineRuntimeState {
 }
 
 function isSpeedMode(value: unknown): value is GenerationSpeedMode {
-  return value === 'fast' || value === 'balanced' || value === 'quality'
+  return value === 'FAST_ACCEPTANCE' || value === 'FINAL_POLISH'
 }
 
 export function archiveChapterRuntime(

@@ -11,12 +11,15 @@ export interface PipelineStatus {
   progress: number
   currentChapter: number
   totalChapters: number
+  completedChapters: number
   actualChapterCount: number
   nextChapterNumber: number
+  currentChapterProgress?: number
   error?: string
   pipelineJobId?: number
   speedMode?: GenerationSpeedMode
   runtime?: PipelineRuntimeState
+  lastHeartbeatAt?: string | null
   updatedAt?: string
 }
 
@@ -210,7 +213,8 @@ export function useProjectPipeline(options: {
           currentStep: 'BLUEPRINT',
           progress: 0,
           currentChapter: 0,
-          totalChapters: 0,
+          totalChapters: data.data.totalChapters || 300,
+          completedChapters: 0,
           actualChapterCount: 0,
           nextChapterNumber: 1,
           pipelineJobId: data.data.jobId,

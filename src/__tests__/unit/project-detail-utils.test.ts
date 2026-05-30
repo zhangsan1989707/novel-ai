@@ -46,14 +46,14 @@ describe('project-detail constants', () => {
   })
 
   it('speedModeOptions has 3 modes', () => {
-    expect(speedModeOptions).toHaveLength(3)
-    expect(speedModeOptions.map(o => o.value)).toEqual(['fast', 'balanced', 'quality'])
+    expect(speedModeOptions).toHaveLength(2)
+    expect(speedModeOptions.map(o => o.value)).toEqual(['FAST_ACCEPTANCE', 'FINAL_POLISH'])
   })
 
   it('speedModeLabels has correct labels', () => {
-    expect(speedModeLabels.fast).toBe('快速验收')
-    expect(speedModeLabels.balanced).toBe('均衡生成')
-    expect(speedModeLabels.quality).toBe('精修质量')
+    expect(speedModeLabels.FAST_ACCEPTANCE).toBe('快速验收')
+    expect(speedModeLabels.FINAL_POLISH).toBe('精修成稿')
+    
   })
 
   it('defaultSteeringValues has all required fields', () => {
@@ -68,7 +68,7 @@ describe('project-detail constants', () => {
 describe('project-detail utils', () => {
   describe('getSpeedModeDescription', () => {
     it('returns description for valid mode', () => {
-      expect(getSpeedModeDescription('fast')).toContain('跳过重型审稿链')
+      expect(getSpeedModeDescription('FAST_ACCEPTANCE')).toContain('跳过重型审稿链')
     })
 
     it('returns empty string for unknown mode', () => {

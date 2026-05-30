@@ -58,18 +58,18 @@ describe('pipeline worker tick', () => {
     mocks.findFirst.mockResolvedValue({
       id: 88,
       projectId: 12,
-      payload: { speedMode: 'fast' },
+      payload: { speedMode: 'FAST_ACCEPTANCE' },
     })
     const { runNextPipelineJob } = await import('@/lib/engine/pipeline-worker')
 
     const result = await runNextPipelineJob({ projectId: 12 })
 
-    expect(mocks.runProductionPipeline).toHaveBeenCalledWith(88, { speedMode: 'fast' })
+    expect(mocks.runProductionPipeline).toHaveBeenCalledWith(88, { speedMode: 'FAST_ACCEPTANCE' })
     expect(result).toEqual({
       status: 'processed',
       jobId: 88,
       projectId: 12,
-      speedMode: 'fast',
+      speedMode: 'FAST_ACCEPTANCE',
       failedStaleJobs: 2,
     })
   })
@@ -78,7 +78,7 @@ describe('pipeline worker tick', () => {
     mocks.findFirst.mockResolvedValue({
       id: 88,
       projectId: 12,
-      payload: { speedMode: 'fast' },
+      payload: { speedMode: 'FAST_ACCEPTANCE' },
     })
     mocks.updateMany.mockResolvedValue({ count: 0 })
     const { runNextPipelineJob } = await import('@/lib/engine/pipeline-worker')

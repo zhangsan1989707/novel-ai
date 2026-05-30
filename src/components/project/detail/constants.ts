@@ -54,26 +54,20 @@ export const speedModeOptions: Array<{
   description: string
 }> = [
   {
-    value: 'fast',
+    value: 'FAST_ACCEPTANCE',
     label: '快速验收',
     description: '跳过重型审稿链，适合批量出草稿和验证主链路。',
   },
   {
-    value: 'balanced',
-    label: '均衡生成',
-    description: '默认模式，正文质量与生成速度更适合日常写作。',
-  },
-  {
-    value: 'quality',
-    label: '精修质量',
-    description: '完整多 Agent 审稿、润色、去 AI 味，适合重点章节。',
+    value: 'FINAL_POLISH',
+    label: '精修成稿',
+    description: '完整多 Agent 审稿、润色、去 AI 味，适合定稿章节。',
   },
 ]
 
 export const speedModeLabels: Record<GenerationSpeedMode, string> = {
-  fast: '快速验收',
-  balanced: '均衡生成',
-  quality: '精修质量',
+  FAST_ACCEPTANCE: '快速验收',
+  FINAL_POLISH: '精修成稿',
 }
 
 export const defaultSteeringValues = {

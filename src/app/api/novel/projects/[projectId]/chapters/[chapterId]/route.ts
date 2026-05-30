@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { logError } from '@/lib/logger'
 import { countChapterWords, syncProjectChapterWordCount } from '@/lib/novel/chapter-word-count'
+import { sanitizePipelineRuntime } from '@/lib/engine/pipeline-runtime'
 
 // ============================================
 // Schema 验证
@@ -25,14 +26,55 @@ interface RouteParams {
 }
 
 /**
+ * 从运行时状态获取章节的实时内容
+ */
+async function getLiveContentFromRuntime(projectId: number, chapterNumber: number): Promise<string | null> {
+  try {
+    // 查找当前运行中的生成任务
+    const job = await prisma.generationJob.findFirst({
+      where: {
+        projectId,
+        status: { in: ['RUNNING', 'PENDING'] },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { payload: true },
+    })
+
+    if (!job?.payload) return null
+
+    const payload = job.payload as Record<string, unknown>
+    const runtime = sanitizePipelineRuntime(payload.runtime)
+
+    // 检查当前章节是否正在生成
+    if (runtime.currentChapter?.chapterNumber === chapterNumber) {
+      return runtime.currentChapter.liveContent || null
+    }
+
+    // 检查最近完成的章节
+    const recentChapter = runtime.recentChapters.find(
+      ch => ch.chapterNumber === chapterNumber
+    )
+    if (recentChapter) {
+      return recentChapter.liveContent || null
+    }
+
+    return null
+  } catch (error) {
+    console.error('获取运行时内容失败:', error)
+    return null
+  }
+}
+
+/**
  * GET /api/novel/projects/{projectId}/chapters/{chapterId}
- * 获取章节详情
+ * 获取章节详情（包含实时内容）
  */
 export async function GET(request: NextRequest, { params }: RouteParams) {
   let chapterIdNum: number | null = null
   try {
-    const { chapterId } = await params
+    const { projectId, chapterId } = await params
     chapterIdNum = parseInt(chapterId)
+    const projectIdNum = parseInt(projectId)
 
     if (isNaN(chapterIdNum)) {
       return NextResponse.json(
@@ -59,7 +101,20 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       )
     }
 
-    return NextResponse.json({ success: true, data: chapter })
+    // 如果章节正在生成中，尝试获取实时内容
+    let liveContent: string | null = null
+    if (chapter.status === 'GENERATING' && !isNaN(projectIdNum)) {
+      liveContent = await getLiveContentFromRuntime(projectIdNum, chapter.chapterNumber)
+    }
+
+    // 返回章节数据，包含实时内容
+    const responseData = {
+      ...chapter,
+      liveContent,
+      draftContent: null, // 预留字段，当前数据库无此字段
+    }
+
+    return NextResponse.json({ success: true, data: responseData })
   } catch (error) {
     logError(error instanceof Error ? error : new Error(String(error)), { type: 'get_chapter', chapterId: chapterIdNum })
     return NextResponse.json(

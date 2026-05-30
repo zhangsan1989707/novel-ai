@@ -179,7 +179,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           const provider = await AIService.createProvider({
             projectId: projectIdNum,
             usageType: 'CHAPTER_STREAM',
-            speedMode: 'balanced',
+            speedMode: 'FINAL_POLISH',
             generationRole: 'stream',
           })
 

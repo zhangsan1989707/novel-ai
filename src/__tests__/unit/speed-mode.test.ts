@@ -9,35 +9,38 @@ import {
 } from '@/lib/ai/speed-mode'
 
 describe('generation speed mode strategy', () => {
-  it('defaults unknown speed values to balanced', () => {
-    expect(normalizeGenerationSpeedMode(undefined)).toBe('balanced')
-    expect(normalizeGenerationSpeedMode('invalid')).toBe('balanced')
-    expect(normalizeGenerationSpeedMode('fast')).toBe('fast')
+  it('defaults unknown speed values to FINAL_POLISH', () => {
+    expect(normalizeGenerationSpeedMode(undefined)).toBe('FINAL_POLISH')
+    expect(normalizeGenerationSpeedMode('invalid')).toBe('FINAL_POLISH')
+    expect(normalizeGenerationSpeedMode('fast')).toBe('FAST_ACCEPTANCE')
   })
 
-  it('maps MiMo roles to fast models', () => {
-    expect(resolveMiMoModelId('fast', 'planner')).toBe('mimo-v2.5')
-    expect(resolveMiMoModelId('fast', 'writer')).toBe('mimo-v2.5')
-    expect(resolveMiMoModelId('fast', 'summarizer')).toBe('mimo-v2.5')
+  it('maps legacy modes to new modes', () => {
+    expect(normalizeGenerationSpeedMode('fast')).toBe('FAST_ACCEPTANCE')
+    expect(normalizeGenerationSpeedMode('quick_acceptance')).toBe('FAST_ACCEPTANCE')
+    expect(normalizeGenerationSpeedMode('balanced')).toBe('FINAL_POLISH')
+    expect(normalizeGenerationSpeedMode('balanced_quality')).toBe('FINAL_POLISH')
+    expect(normalizeGenerationSpeedMode('quality')).toBe('FINAL_POLISH')
+    expect(normalizeGenerationSpeedMode('polished_quality')).toBe('FINAL_POLISH')
   })
 
-  it('maps MiMo roles to balanced models', () => {
-    expect(resolveMiMoModelId('balanced', 'blueprint')).toBe('mimo-v2.5')
-    expect(resolveMiMoModelId('balanced', 'writer')).toBe('mimo-v2.5')
-    expect(resolveMiMoModelId('balanced', 'validator')).toBe('mimo-v2.5')
+  it('maps MiMo roles to FAST_ACCEPTANCE models', () => {
+    expect(resolveMiMoModelId('FAST_ACCEPTANCE', 'planner')).toBe('mimo-v2.5')
+    expect(resolveMiMoModelId('FAST_ACCEPTANCE', 'writer')).toBe('mimo-v2.5')
+    expect(resolveMiMoModelId('FAST_ACCEPTANCE', 'summarizer')).toBe('mimo-v2.5')
   })
 
-  it('maps quality mode to MiMo pro for all text roles', () => {
-    expect(resolveMiMoModelId('quality', 'writer')).toBe('mimo-v2.5-pro')
-    expect(resolveMiMoModelId('quality', 'reviewer')).toBe('mimo-v2.5-pro')
-    expect(resolveMiMoModelId('quality', 'deslopper')).toBe('mimo-v2.5-pro')
+  it('maps FINAL_POLISH mode to MiMo pro for all text roles', () => {
+    expect(resolveMiMoModelId('FINAL_POLISH', 'writer')).toBe('mimo-v2.5-pro')
+    expect(resolveMiMoModelId('FINAL_POLISH', 'reviewer')).toBe('mimo-v2.5-pro')
+    expect(resolveMiMoModelId('FINAL_POLISH', 'deslopper')).toBe('mimo-v2.5-pro')
   })
 
   it('does not override non-MiMo models', () => {
     expect(resolveModelIdForRole({
       vendor: AIVendor.DEEPSEEK,
       currentModelId: 'deepseek-chat',
-      speedMode: 'fast',
+      speedMode: 'FAST_ACCEPTANCE',
       role: 'writer',
     })).toBe('deepseek-chat')
   })
@@ -48,8 +51,7 @@ describe('generation speed mode strategy', () => {
   })
 
   it('reduces the chapter target word count according to the speed mode', () => {
-    expect(resolveEffectiveChapterWordCount(3000, 'fast')).toBe(2400)
-    expect(resolveEffectiveChapterWordCount(3000, 'balanced')).toBe(2700)
-    expect(resolveEffectiveChapterWordCount(3000, 'quality')).toBe(3000)
+    expect(resolveEffectiveChapterWordCount(3000, 'FAST_ACCEPTANCE')).toBe(2400)
+    expect(resolveEffectiveChapterWordCount(3000, 'FINAL_POLISH')).toBe(3000)
   })
 })

@@ -98,22 +98,10 @@ export interface ValidationReport {
   result: 'pass' | 'retry' | 'fail' | 'skipped'
   score: number  // 0-100, -1 表示跳过校验
   issues: ValidationIssue[]
-  characterUpdates: Record<string, Record<string, unknown>>
-  newPlotlines: string[]
-  resolvedPlotlines: string[]
-  popularFiction?: {
-    readability: number
-    emotion: number
-    cheatPayoff: number
-    conflict: number
-    hook: number
-    character: number
-    pacing: number
-    total: number
-    issues: string[]
-    suggestions: string[]
-  }
-  qualityMetrics?: {
+  characterUpdates: Record<string, unknown>
+  newPlotlines: unknown[]
+  resolvedPlotlines: unknown[]
+  qualityMetrics: {
     logicScore: number
     characterScore: number
     emotionScore: number
@@ -121,57 +109,71 @@ export interface ValidationReport {
   }
 }
 
-// 章节摘要
+// 章节摘要数据
 export interface ChapterSummaryData {
   summary: string
   keyEvents: string[]
   emotionalTone: string | null
-  plantedPlotlines: string[]
-  resolvedPlotlines: string[]
+  plantedPlotlines: unknown[]
+  resolvedPlotlines: unknown[]
 }
 
-// Agent 执行上下文
+// 生成阶段
+export type GenerationPhase = 
+  | 'planning'
+  | 'chapter_contract'
+  | 'writing'
+  | 'polishing'
+  | 'summarizing'
+  | 'reviewing'
+  | 'validating'
+  | 'deslopping'
+  | 'word_count_check'
+  | 'truncation_check'
+  | 'quality_gate'
+  | 'repairing'
+  | 'committing'
+  | 'completed'
+  | 'failed'
+
+// Agent 上下文
 export interface AgentContext {
   projectId: number
   chapterNo: number
-  projectTitle: string
-  genre?: string | null
-  writingStyle?: string | null
-  worldSetting?: string | null
-  powerSystem?: string | null
-  protagonistProfile?: string | null
-  antagonistSetting?: string | null
-  targetWordCount?: number | null
-}
-
-// 写作 Agent 输入
-export interface WriterInput {
-  outline: ChapterOutline
-  characterProfiles: CharacterProfile[]
-  recentSummaries: { chapterNo: number; summary: string }[]
-  styleGuide?: string | null
-}
-
-// 校验 Agent 输入
-export interface ValidatorInput {
-  newChapterContent: string
-  characterProfiles: CharacterProfile[]
-  recentSummaries: { chapterNo: number; summary: string }[]
-  worldSetting?: string | null
-  openPlotlines: PlotlineData[]
-}
-
-// Agent 执行结果
-export interface AgentResult {
-  success: boolean
-  content: string
-  tokenCount?: number
-  durationMs?: number
-  error?: string
+  projectTitle?: string
+  genre?: string
+  writingStyle?: string
+  worldSetting?: string
+  powerSystem?: string
+  protagonistProfile?: string
+  antagonistSetting?: string
 }
 
 // SSE 事件类型
 export interface SSEEvent {
-  type: 'start' | 'token' | 'agent_switch' | 'validation' | 'done' | 'error' | 'wordCount' | 'research' | 'hook_warning' | 'phase_timing'
+  type: 'start' | 'token' | 'agent_switch' | 'validation' | 'done' | 'error' | 'wordCount' | 'research' | 'hook_warning' | 'phase_timing' | 'progress' | 'chapter_completed' | 'heartbeat' | 'quality_gate_failed'
   data: Record<string, unknown>
+}
+
+// 进度事件数据
+export interface ProgressEventData {
+  phase: GenerationPhase
+  chapterNo: number
+  totalChapters: number
+  completedChapters: number
+  currentWordCount: number
+  targetWordCount: number
+  message: string
+  lastHeartbeatAt: string
+  timestamp: string
+}
+
+export interface ChapterCommitData {
+  projectId: number
+  chapterNo: number
+  content: string
+  outline: ChapterOutline
+  wordCount: number
+  summaryData: ChapterSummaryData
+  validationReport: ValidationReport | null
 }
