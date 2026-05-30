@@ -6,6 +6,7 @@ import { useForm, useWatch } from 'react-hook-form'
 import { Button, Input, Select, Textarea, toast } from '@/components/ui'
 import { Settings, AlertCircle, ChevronDown, ChevronUp, Sparkles, Wand2 } from 'lucide-react'
 import { AIVendor } from '@/types'
+import { TitleCandidatePanel } from '@/components/project/TitleCandidatePanel'
 import { InspirationPanel } from '@/components/inspiration'
 import type { HotInspiration } from '@/lib/inspiration/data'
 
@@ -373,6 +374,18 @@ export function ProjectForm({ defaultValues, onSubmit, onCancel, loading, submit
             AI 正在为你的小说生成书名...
           </p>
         )}
+
+        {/* 标题工厂 */}
+        <TitleCandidatePanel
+          currentTitle={formValues.title}
+          coreHook={formValues.corePitch || formValues.description || ''}
+          genre={formValues.genre}
+          channel={formValues.targetAudience === 'MALE' ? 'male' : formValues.targetAudience === 'FEMALE' ? 'female' : undefined}
+          protagonistIdentity={formValues.protagonistProfile}
+          conflict={formValues.antagonistSetting}
+          emotionalPromise={formValues.corePitch}
+          onSelectTitle={(title) => setValue('title', title)}
+        />
 
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
