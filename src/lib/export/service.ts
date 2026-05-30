@@ -14,6 +14,7 @@ import Epub from 'epub-gen'
 import * as fs from 'fs'
 import * as path from 'path'
 import * as os from 'os'
+import AdmZip from 'adm-zip'
 
 type ExportProject = Awaited<ReturnType<typeof loadProjectForExport>>
 type ExportChapter = NonNullable<ExportProject>['chapters'][number]
@@ -226,12 +227,17 @@ export async function exportNovel(
 
     // 如果需要压缩，创建 zip
     if (options.compress) {
-      // TODO: 实现 zip 压缩功能
-      // 可以使用 archiver 或 jszip 库
+      const zip = new AdmZip()
+      zip.addFile(fileName, Buffer.from(content, 'utf-8'))
+      const zipBuffer = zip.toBuffer()
+      const base64Content = zipBuffer.toString('base64')
+
       return {
         success: true,
         fileName: fileName.replace(/\.[^.]+$/, '.zip'),
-        error: '压缩功能待实现',
+        content: base64Content,
+        contentType: 'application/zip',
+        isBase64: true,
       }
     }
 
