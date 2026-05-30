@@ -18,7 +18,7 @@ type CacheEntry = {
 }
 
 const REQUEST_TIMEOUT_MS = 12000
-const CACHE_TTL_MS = 30 * 60 * 1000
+const CACHE_TTL_MS = 10 * 60 * 1000
 const SOURCE_LABELS = {
   qidian: '起点',
   fanqie: '番茄',
@@ -315,7 +315,7 @@ function aggregateSourceInspirations(source: keyof typeof SOURCE_LABELS, books: 
 
   return Array.from(grouped.entries())
     .sort((a, b) => b[1].length - a[1].length)
-    .slice(0, 3)
+    .slice(0, 6)
     .map(([genre, rows]) => buildInspirationFromBooks(source, genre, rows, dateLabel))
 }
 

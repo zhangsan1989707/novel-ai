@@ -182,6 +182,12 @@ function InspirationCard({ inspiration, onSelect, compact = false }: Inspiration
             <Badge variant={categoryColors[inspiration.category]} className="text-xs">
               {categoryLabels[inspiration.category]}
             </Badge>
+            {inspiration.id.startsWith('ai-') && (
+              <Badge variant="secondary" className="text-[10px] gap-0.5">
+                <Sparkles className="h-2.5 w-2.5" />
+                AI 创意
+              </Badge>
+            )}
             <div className="flex items-center gap-0.5 text-amber-500">
               <Flame className="h-3.5 w-3.5" />
               <span className="text-xs font-medium">{inspiration.hotScore}</span>
