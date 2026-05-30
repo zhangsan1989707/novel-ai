@@ -4,8 +4,7 @@ import { Button, Card, CardContent, CardHeader, CardTitle, Progress } from '@/co
 import { Layers, Pause, Play, Loader2, Square, RotateCcw, Clock, Activity, BookOpen, Zap } from 'lucide-react'
 import type { GenerationSpeedMode } from '@/lib/ai/speed-mode'
 import type { PipelineStatus } from '@/hooks/useProjectPipeline'
-import { getPipelineStatusLabel, getPipelineStepLabel } from './utils'
-import { speedModeLabels } from './constants'
+import { formatPipelineStatus, formatPipelineStep, formatAgentType, formatTimeAgo, formatDuration, speedModeLabels } from '@/lib/format-labels'
 import { useState, useEffect } from 'react'
 
 interface PipelineControlPanelProps {
@@ -31,11 +30,17 @@ const phaseWeights: Record<string, number> = {
   'completed': 100,
 }
 
-// 阶段中文名映射
+// 阶段中文名映射 - 同时支持阶段名和 agent 名
 const phaseLabels: Record<string, string> = {
-  'planning': '章节策划',
+  // 阶段名
+  'planning': '章节规划',
   'chapter_contract': '构建章节契约',
   'writing': '正文生成',
+  'polishing': '文风润色',
+  'summarizing': '摘要整理',
+  'reviewing': '内容复核',
+  'validating': '质量校验',
+  'deslopping': '去AI味',
   'word_count_check': '字数校验',
   'truncation_check': '截断检测',
   'quality_gate': '质量门禁',
@@ -43,30 +48,26 @@ const phaseLabels: Record<string, string> = {
   'committing': '保存入库',
   'completed': '已完成',
   'failed': '生成失败',
+  // Agent 名（小写）
+  'planner': '章节规划',
+  'writer': '正文写作',
+  'polisher': '文风润色',
+  'validator': '质量校验',
+  'summarizer': '摘要整理',
+  'reviewer': '内容复核',
+  'deslopper': '去AI味',
+  // 组合 Agent
+  'validator_deslopper': '校验+去AI味',
+  'polisher_summarizer': '润色+摘要',
+  'review_revision': '审稿修订',
 }
 
-function formatTimeAgo(dateString: string | null | undefined): string {
-  if (!dateString) return '-'
-  const date = new Date(dateString)
-  const now = new Date()
-  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000)
-  
-  if (seconds < 5) return '刚刚'
-  if (seconds < 60) return `${seconds} 秒前`
-  if (seconds < 3600) return `${Math.floor(seconds / 60)} 分钟前`
-  return `${Math.floor(seconds / 3600)} 小时前`
-}
-
-function formatDuration(startTime: string | undefined): string {
-  if (!startTime) return '-'
-  const start = new Date(startTime)
-  const now = new Date()
-  const seconds = Math.floor((now.getTime() - start.getTime()) / 1000)
-  
-  if (seconds < 60) return `${seconds} 秒`
-  const minutes = Math.floor(seconds / 60)
-  const remainSeconds = seconds % 60
-  return `${minutes} 分 ${remainSeconds} 秒`
+/**
+ * 格式化阶段/Agent 名称为中文
+ */
+function formatPhaseOrAgent(phase: string): string {
+  if (!phase) return '等待中'
+  return phaseLabels[phase] || phaseLabels[phase.toLowerCase()] || formatAgentType(phase) || phase
 }
 
 // 检测是否卡住
@@ -154,7 +155,7 @@ export function PipelineControlPanel({
                 第 {currentChapterNo} 章
               </div>
               <div className="text-sm text-blue-600 dark:text-blue-300">
-                {getPipelineStepLabel(currentPhase)}
+                {formatPhaseOrAgent(currentPhase)}
               </div>
             </div>
             
@@ -173,7 +174,7 @@ export function PipelineControlPanel({
             <div className="mt-2 text-sm text-gray-600 dark:text-gray-300">
               <div className="flex items-center gap-2">
                 <Zap className="h-4 w-4" />
-                <span>{phaseLabels[currentPhase] || getPipelineStepLabel(currentPhase)}</span>
+                <span>{formatPhaseOrAgent(currentPhase)}</span>
               </div>
             </div>
           </div>
@@ -183,7 +184,7 @@ export function PipelineControlPanel({
         <div className="grid grid-cols-2 gap-3 text-sm text-gray-600 dark:text-gray-300 md:grid-cols-4">
           <div>
             <div className="text-xs text-gray-500">状态</div>
-            <div className="font-medium">{getPipelineStatusLabel(pipeline.status)}</div>
+            <div className="font-medium">{formatPipelineStatus(pipeline.status)}</div>
           </div>
           <div>
             <div className="text-xs text-gray-500">速度模式</div>
@@ -239,10 +240,10 @@ export function PipelineControlPanel({
               暂停
             </Button>
           )}
-          {pipeline.status === 'RUNNING' && staleStatus !== 'normal' && (
+          {pipeline.status === 'RUNNING' && staleStatus !== 'normal' && currentChapterNo > 0 && (
             <Button variant="outline" size="sm" onClick={() => handleRecoverPipeline('retry_chapter', currentChapterNo)} className="gap-1.5">
               <RotateCcw className="h-4 w-4" />
-              重试当前章节
+              重试当前章
             </Button>
           )}
           {pipeline.status === 'PAUSED' && (
