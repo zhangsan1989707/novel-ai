@@ -21,6 +21,18 @@ export async function PATCH(
     const { getCurrentUserId } = await import('@/lib/auth')
     const userId = await getCurrentUserId()
 
+    // 验证通知是否属于当前用户
+    const existingNotification = await prisma.notification.findFirst({
+      where: {
+        id: notificationId,
+        userId: userId,
+      },
+    })
+
+    if (!existingNotification) {
+      return NextResponse.json({ error: '通知不存在或无权限访问' }, { status: 404 })
+    }
+
     const notification = await prisma.notification.update({
       where: { id: notificationId },
       data: {
