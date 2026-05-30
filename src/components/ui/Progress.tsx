@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { cn } from '@/lib/utils'
+import { cn, formatLargeNumber } from '@/lib/utils'
 
 interface ProgressProps {
   value: number
@@ -49,7 +49,7 @@ const Progress: React.FC<ProgressProps> = ({
       </div>
       {showLabel && (
         <span className="mt-1 block text-xs text-muted-foreground">
-          {value.toLocaleString()} / {max.toLocaleString()} ({percentage.toFixed(1)}%)
+          {formatLargeNumber(value)} / {formatLargeNumber(max)} ({percentage.toFixed(1)}%)
         </span>
       )}
     </div>

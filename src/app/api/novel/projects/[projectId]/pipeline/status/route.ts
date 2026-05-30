@@ -29,6 +29,14 @@ export async function GET(
 
     await failStaleRunningJobs({ projectId })
 
+    const chapters = await prisma.novelChapter.findMany({
+      where: { projectId },
+      select: { chapterNumber: true, status: true },
+      orderBy: { chapterNumber: 'desc' },
+    })
+    const actualChapterCount = chapters.length
+    const nextChapterNumber = chapters.length > 0 ? (chapters[0].chapterNumber + 1) : 1
+
     let jobId = project.pipelineJobId
     if (!jobId) {
       const latestJob = await prisma.generationJob.findFirst({
@@ -47,6 +55,8 @@ export async function GET(
           progress: 0,
           currentChapter: 0,
           totalChapters: 0,
+          actualChapterCount,
+          nextChapterNumber,
           runtime: sanitizePipelineRuntime(undefined),
         },
       })
@@ -65,6 +75,8 @@ export async function GET(
           progress: 0,
           currentChapter: 0,
           totalChapters: 0,
+          actualChapterCount,
+          nextChapterNumber,
           runtime: sanitizePipelineRuntime(undefined),
         },
       })
@@ -85,6 +97,8 @@ export async function GET(
         progress: Math.round(stepProgress),
         currentChapter: job.currentChapter,
         totalChapters: job.totalChapters,
+        actualChapterCount,
+        nextChapterNumber,
         error: job.errorMessage || undefined,
         pipelineJobId: job.id,
         speedMode: normalizeGenerationSpeedMode(payload.speedMode || runtime.speedMode),

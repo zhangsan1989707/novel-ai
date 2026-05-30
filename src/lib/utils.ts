@@ -40,3 +40,19 @@ export function formatWordCount(count: number): string {
   }
   return count.toLocaleString()
 }
+
+/**
+ * 通用大数字人可读格式化
+ * 100000000 → 1.0亿
+ * 500000 → 50.0万
+ * 5000 → 5,000
+ */
+export function formatLargeNumber(num: number): string {
+  if (num >= 1e8) {
+    return `${(num / 1e8).toFixed(1)}亿`
+  }
+  if (num >= 1e4) {
+    return `${(num / 1e4).toFixed(1)}万`
+  }
+  return num.toLocaleString()
+}

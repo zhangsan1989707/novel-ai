@@ -11,6 +11,8 @@ export interface PipelineStatus {
   progress: number
   currentChapter: number
   totalChapters: number
+  actualChapterCount: number
+  nextChapterNumber: number
   error?: string
   pipelineJobId?: number
   speedMode?: GenerationSpeedMode
@@ -189,6 +191,8 @@ export function useProjectPipeline(options: {
           progress: 0,
           currentChapter: 0,
           totalChapters: 0,
+          actualChapterCount: 0,
+          nextChapterNumber: 1,
           pipelineJobId: data.data.jobId,
           speedMode: data.data.speedMode || selectedSpeedMode,
           runtime: {

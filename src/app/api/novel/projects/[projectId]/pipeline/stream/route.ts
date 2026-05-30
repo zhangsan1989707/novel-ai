@@ -13,6 +13,14 @@ async function readPipelineSnapshot(projectId: number) {
     select: { pipelineJobId: true },
   })
 
+  const chapters = await prisma.novelChapter.findMany({
+    where: { projectId },
+    select: { chapterNumber: true, status: true },
+    orderBy: { chapterNumber: 'desc' },
+  })
+  const actualChapterCount = chapters.length
+  const nextChapterNumber = chapters.length > 0 ? (chapters[0].chapterNumber + 1) : 1
+
   let jobId = project?.pipelineJobId || null
   if (!jobId) {
     const latestJob = await prisma.generationJob.findFirst({
@@ -38,6 +46,8 @@ async function readPipelineSnapshot(projectId: number) {
         progress: 0,
         currentChapter: 0,
         totalChapters: 0,
+        actualChapterCount,
+        nextChapterNumber,
         runtime: sanitizePipelineRuntime(undefined),
         updatedAt: new Date().toISOString(),
       }
@@ -55,6 +65,8 @@ async function readPipelineSnapshot(projectId: number) {
       progress: Math.round((latestJob.stepIndex / totalSteps) * 100),
       currentChapter: latestJob.currentChapter,
       totalChapters: latestJob.totalChapters,
+      actualChapterCount,
+      nextChapterNumber,
       error: latestJob.errorMessage || undefined,
       pipelineJobId: latestJob.id,
       speedMode: normalizeGenerationSpeedMode(payload.speedMode || runtime.speedMode),
@@ -85,6 +97,8 @@ async function readPipelineSnapshot(projectId: number) {
       progress: 0,
       currentChapter: 0,
       totalChapters: 0,
+      actualChapterCount,
+      nextChapterNumber,
       runtime: sanitizePipelineRuntime(undefined),
       updatedAt: new Date().toISOString(),
     }
@@ -101,6 +115,8 @@ async function readPipelineSnapshot(projectId: number) {
     progress: Math.round((job.stepIndex / totalSteps) * 100),
     currentChapter: job.currentChapter,
     totalChapters: job.totalChapters,
+    actualChapterCount,
+    nextChapterNumber,
     error: job.errorMessage || undefined,
     pipelineJobId: job.id,
     speedMode: normalizeGenerationSpeedMode(payload.speedMode || runtime.speedMode),
