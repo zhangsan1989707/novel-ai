@@ -47,12 +47,16 @@ export function useProjectPipeline(options: {
   const onCompletedRef = useRef(onCompleted)
   const onFailedRef = useRef(onFailed)
   const pollAbortRef = useRef<AbortController | null>(null)
+  const setSelectedChapterNumberRef = useRef(setSelectedChapterNumber)
 
   useEffect(() => {
     onCompletedRef.current = onCompleted
   })
   useEffect(() => {
     onFailedRef.current = onFailed
+  })
+  useEffect(() => {
+    setSelectedChapterNumberRef.current = setSelectedChapterNumber
   })
 
   const applyPipelineSnapshot = useCallback((nextPipeline: PipelineStatus) => {
@@ -72,7 +76,7 @@ export function useProjectPipeline(options: {
 
     const nextLiveChapterNumber = nextPipeline.runtime?.currentChapter?.chapterNumber || null
     if (nextStatus === 'RUNNING' && nextLiveChapterNumber) {
-      setSelectedChapterNumber(() => nextLiveChapterNumber)
+      setSelectedChapterNumberRef.current(() => nextLiveChapterNumber)
     }
 
     if (nextStatus === 'COMPLETED' && prevStatus !== 'COMPLETED') {
@@ -82,7 +86,7 @@ export function useProjectPipeline(options: {
       toast.error(nextPipeline.error || 'AI 生成失败')
       onFailedRef.current?.()
     }
-  }, [setSelectedChapterNumber])
+  }, [])
 
   useEffect(() => {
     let timer: ReturnType<typeof setInterval> | null = null
@@ -148,7 +152,7 @@ export function useProjectPipeline(options: {
         pipelineStreamRef.current = null
       }
     }
-  }, [projectId])
+  }, [projectId, applyPipelineSnapshot])
 
   const handleStartPipeline = async ({
     hasBoundModel,

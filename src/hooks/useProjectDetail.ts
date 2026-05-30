@@ -234,6 +234,10 @@ export function useProjectDetail(initialProject: ProjectDetail | null) {
   const abortControllerRef = useRef<AbortController | null>(null)
   const fetchingRef = useRef(false)
 
+  useEffect(() => {
+    fetchingRef.current = false
+  }, [projectId])
+
   const openModal = useCallback((key: ModalKey) => {
     setModals(prev => ({ ...prev, [key]: true }))
   }, [])

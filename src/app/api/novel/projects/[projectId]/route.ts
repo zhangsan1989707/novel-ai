@@ -260,7 +260,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const totalWordCount = project.chapters.reduce((sum, chapter) => {
       return sum + (chapter.wordCount || 0)
     }, 0)
-    await ensureProjectMaintenanceQueued(id, {
+    void ensureProjectMaintenanceQueued(id, {
       hasModel: Boolean(project.aiModelConfig),
       hasBlueprint: Boolean(project.bookBlueprint),
       hasArcPlans: project.arcPlans.length > 0,
