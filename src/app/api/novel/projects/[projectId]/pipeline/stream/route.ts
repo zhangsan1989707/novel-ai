@@ -17,10 +17,14 @@ async function readPipelineSnapshot(projectId: number) {
   const chapters = await prisma.novelChapter.findMany({
     where: { projectId },
     select: { chapterNumber: true, status: true },
-    orderBy: { chapterNumber: 'desc' },
+    orderBy: { chapterNumber: 'asc' },
   })
   const actualChapterCount = chapters.length
-  const nextChapterNumber = chapters.length > 0 ? (chapters[0].chapterNumber + 1) : 1
+  const completedChapterCount = chapters.filter(c => c.status === 'COMPLETED').length
+  const firstIncomplete = chapters.find(c => c.status !== 'COMPLETED')
+  const nextChapterNumber = firstIncomplete
+    ? firstIncomplete.chapterNumber
+    : (completedChapterCount > 0 ? completedChapterCount + 1 : 1)
 
   let jobId = project?.pipelineJobId || null
   if (!jobId) {
@@ -134,21 +138,29 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     return new Response('invalid project id', { status: 400 })
   }
 
-  await failStaleRunningJobs({ projectId })
-
   const encoder = new TextEncoder()
   let closed = false
 
   const stream = new ReadableStream({
     async start(controller) {
       const send = (event: string, payload: unknown) => {
-        controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`))
+        if (closed) return
+        try {
+          controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`))
+        } catch {
+          closed = true
+        }
       }
 
       let lastFingerprint = ''
+      let staleChecked = false
 
       const tick = async () => {
         if (closed) return
+        if (!staleChecked) {
+          staleChecked = true
+          await failStaleRunningJobs({ projectId }).catch(() => {})
+        }
         const snapshot = await readPipelineSnapshot(projectId)
         const fingerprint = JSON.stringify(snapshot)
         if (fingerprint !== lastFingerprint) {
@@ -162,12 +174,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       await tick()
       const timer = setInterval(() => {
         void tick()
-      }, 1000)
+      }, 3000)
 
       request.signal.addEventListener('abort', () => {
         closed = true
         clearInterval(timer)
-        controller.close()
+        try { controller.close() } catch {}
       })
     },
   })

@@ -127,15 +127,20 @@ export function useProjectPipeline(options: {
     const eventSource = new EventSource(`/api/novel/projects/${projectId}/pipeline/stream`)
     pipelineStreamRef.current = eventSource
 
-    const applyRef = applyPipelineSnapshot
     eventSource.addEventListener('pipeline', (event) => {
       try {
         const snapshot = JSON.parse((event as MessageEvent).data) as PipelineStatus
-        applyRef(snapshot)
+        applyPipelineSnapshot(snapshot)
       } catch {
-        // ignore bad stream payloads
       }
     })
+
+    eventSource.onerror = () => {
+      eventSource.close()
+      if (pipelineStreamRef.current === eventSource) {
+        pipelineStreamRef.current = null
+      }
+    }
 
     return () => {
       eventSource.close()
@@ -143,7 +148,7 @@ export function useProjectPipeline(options: {
         pipelineStreamRef.current = null
       }
     }
-  }, [projectId, applyPipelineSnapshot])
+  }, [projectId])
 
   const handleStartPipeline = async ({
     hasBoundModel,
