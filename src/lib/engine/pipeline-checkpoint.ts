@@ -7,7 +7,7 @@ export async function isJobPaused(jobId: number): Promise<boolean> {
     where: { id: jobId },
     select: { status: true },
   })
-  return job?.status === 'PAUSED'
+  return job?.status === 'PAUSED' || job?.status === 'FAILED'
 }
 
 export async function resolveResumePlan(jobId: number): Promise<ResumePlan> {

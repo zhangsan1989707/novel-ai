@@ -6,7 +6,7 @@ import { BlueprintConsole } from '@/components/project'
 import { WorkflowBlueprintCard } from '@/components/project/WorkflowBlueprintCard'
 import { WorkflowArcPlanCard } from '@/components/project/WorkflowArcPlanCard'
 import { CharacterPanel, AnalysisWorkbench } from '@/components/ai'
-import { BookOpen, Users, Search, Rocket, Wrench, Play, Download, Repeat, Wand2 } from 'lucide-react'
+import { BookOpen, Users, Search, Rocket, Wrench, Play, Download, Repeat, Wand2, Square } from 'lucide-react'
 import { formatDisplayDate } from '@/lib/helpers'
 import { getMinimumChapterWordCount } from '@/lib/ai/chapter-quality'
 import type { GenerationSpeedMode } from '@/lib/ai/speed-mode'
@@ -72,6 +72,7 @@ export default function ProjectDetailPage({ initialProject }: { initialProject: 
     handleResumePipeline,
     handlePausePipeline,
     handleRecoverPipeline,
+    handleCancelPipeline,
   } = useProjectPipeline({
     projectId,
     selectedSpeedMode,
@@ -247,6 +248,11 @@ ${ch.content || ''}
     } catch {
       toast.error('导出失败')
     }
+  }
+
+  const handleCancelAndStopContinuous = async () => {
+    setContinuousMode(false)
+    await handleCancelPipeline()
   }
 
   const getReviewingReason = useCallback((chapter: ProjectChapter) => {
@@ -561,12 +567,22 @@ ${ch.content || ''}
                           >
                             开始生成
                           </Button>
+                          {(pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING') && (
+                            <Button
+                              variant="danger"
+                              onClick={handleCancelAndStopContinuous}
+                              className="gap-1.5"
+                            >
+                              <Square className="h-4 w-4" />
+                              停止生成
+                            </Button>
+                          )}
                           <label
                             className={`flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium cursor-pointer transition-all duration-150 border ${
                               continuousMode
                                 ? 'bg-blue-50 border-blue-300 text-blue-700 dark:bg-blue-950/20 dark:border-blue-700 dark:text-blue-300'
                                 : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-400 dark:hover:border-gray-600'
-                            } ${(pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING') ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            }`}
                           >
                             <Repeat className={`h-4 w-4 ${continuousMode ? 'text-blue-500 animate-spin [animation-duration:3s]' : ''}`} />
                             持续生成
@@ -574,7 +590,6 @@ ${ch.content || ''}
                               type="checkbox"
                               checked={continuousMode}
                               onChange={(e) => setContinuousMode(e.target.checked)}
-                              disabled={pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING'}
                               className="sr-only"
                             />
                           </label>
@@ -590,6 +605,7 @@ ${ch.content || ''}
                       handlePausePipeline={handlePausePipeline}
                       handleResumePipeline={handleResumePipeline}
                       handleRecoverPipeline={handleRecoverPipeline}
+                      handleCancelPipeline={handleCancelAndStopContinuous}
                     />
                   )}
 

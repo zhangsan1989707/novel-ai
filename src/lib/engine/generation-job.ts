@@ -361,6 +361,45 @@ export async function pauseJob(jobId: number): Promise<void> {
   })
 }
 
+export async function cancelJob(jobId: number): Promise<void> {
+  const job = await prisma.generationJob.findUnique({ where: { id: jobId } })
+  const payload = job?.payload && typeof job.payload === 'object'
+    ? job.payload as Record<string, unknown>
+    : {}
+  const runtime = sanitizePipelineRuntime(payload.runtime)
+  const currentChapter = runtime.currentChapter
+    ? {
+      ...runtime.currentChapter,
+      status: 'CANCELLED' as const,
+      updatedAt: new Date().toISOString(),
+    }
+    : null
+
+  await prisma.generationJob.update({
+    where: { id: jobId },
+    data: {
+      status: 'FAILED',
+      errorMessage: '用户手动停止生成',
+      payload: {
+        ...payload,
+        runtime: {
+          ...runtime,
+          currentChapter,
+          lastEventAt: new Date().toISOString(),
+          streamRevision: runtime.streamRevision + 1,
+        },
+      } as any,
+    },
+  })
+
+  if (job) {
+    await prisma.novelProject.update({
+      where: { id: job.projectId },
+      data: { pipelineJobId: null },
+    })
+  }
+}
+
 export async function reconcileReplayedChapterRuntime(jobId: number, chapterNo: number): Promise<void> {
   const job = await prisma.generationJob.findUnique({
     where: { id: jobId },

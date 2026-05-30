@@ -1,7 +1,7 @@
 'use client'
 
 import { Button, Card, CardContent, CardHeader, CardTitle, Progress } from '@/components/ui'
-import { Layers, Pause, Play, Loader2 } from 'lucide-react'
+import { Layers, Pause, Play, Loader2, Square } from 'lucide-react'
 import type { GenerationSpeedMode } from '@/lib/ai/speed-mode'
 import type { PipelineStatus } from '@/hooks/useProjectPipeline'
 import { getPipelineStatusLabel, getPipelineStepLabel } from './utils'
@@ -13,6 +13,7 @@ interface PipelineControlPanelProps {
   handlePausePipeline: () => Promise<void>
   handleResumePipeline: () => Promise<void>
   handleRecoverPipeline: (action: 'continue' | 'retry_chapter' | 'retry_batch', chapterNumber?: number) => Promise<void>
+  handleCancelPipeline: () => Promise<void>
 }
 
 export function PipelineControlPanel({
@@ -21,6 +22,7 @@ export function PipelineControlPanel({
   handlePausePipeline,
   handleResumePipeline,
   handleRecoverPipeline,
+  handleCancelPipeline,
 }: PipelineControlPanelProps) {
   if (!pipeline.status || pipeline.status === 'IDLE') {
     return null
@@ -66,6 +68,12 @@ export function PipelineControlPanel({
         )}
 
         <div className="flex flex-wrap gap-2">
+          {(pipeline.status === 'RUNNING' || pipeline.status === 'PENDING') && (
+            <Button variant="danger" size="sm" onClick={handleCancelPipeline} className="gap-1.5">
+              <Square className="h-4 w-4" />
+              停止
+            </Button>
+          )}
           {pipeline.status === 'RUNNING' && (
             <Button variant="outline" size="sm" onClick={handlePausePipeline} className="gap-1.5">
               <Pause className="h-4 w-4" />

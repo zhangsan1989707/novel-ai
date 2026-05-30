@@ -259,6 +259,23 @@ export function useProjectPipeline(options: {
     }
   }
 
+  const handleCancelPipeline = async () => {
+    try {
+      const res = await fetch(`/api/novel/projects/${projectId}/pipeline/cancel`, {
+        method: 'POST',
+      })
+      const data = await res.json()
+      if (data.success) {
+        toast.success('已停止 AI 生成')
+        setPipeline(null)
+      } else {
+        toast.error(data.error?.message || '停止失败')
+      }
+    } catch {
+      toast.error('停止失败')
+    }
+  }
+
   return {
     pipeline,
     setPipeline,
@@ -267,5 +284,6 @@ export function useProjectPipeline(options: {
     handleResumePipeline,
     handlePausePipeline,
     handleRecoverPipeline,
+    handleCancelPipeline,
   }
 }
