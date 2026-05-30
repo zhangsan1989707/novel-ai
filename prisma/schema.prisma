@@ -138,6 +138,9 @@ model NovelProject {
   aiUsages           AIUsage[]
   analysisTasks      AnalysisTask[]
   arcPlans           ArcPlan[]
+  arcEventLedger     ArcEventLedger[]
+  chapterCompletionReports ChapterCompletionReport[]
+  cheatAbilityState  CheatAbilityState?
   bookAnalyses       BookAnalysis[]
   bookBlueprint      BookBlueprint?
   bookSummary        BookSummary?
@@ -195,6 +198,7 @@ model NovelChapter {
   lastAgentType     AgentType?
   retryCount        Int              @default(0)
   validationReport  Json?
+  completionReport  Json?
   chapterCommits    ChapterCommit[]
   versions          ChapterVersion[]
   project           NovelProject     @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -866,6 +870,67 @@ model ArcPlan {
   @@unique([projectId, arcNumber])
   @@index([projectId])
   @@map("arc_plans")
+}
+
+model ChapterCompletionReport {
+  id                      String       @id @default(cuid())
+  projectId               Int
+  chapterNo               Int
+  actualWordCount         Int
+  targetWordCount         Int
+  chapterGoalCompleted    Boolean      @default(false)
+  mainConflictProgressed  Boolean      @default(false)
+  mainConflictResolved    Boolean      @default(false)
+  endingHookExists        Boolean      @default(false)
+  abruptTruncationDetected Boolean     @default(false)
+  completionScore         Int
+  issues                  Json         @default("[]")
+  createdAt               DateTime     @default(now())
+  project                 NovelProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, chapterNo])
+  @@index([projectId])
+  @@index([projectId, completionScore])
+  @@map("chapter_completion_reports")
+}
+
+model ArcEventLedger {
+  id               String       @id @default(cuid())
+  projectId        Int
+  arcPlanId        String?
+  arcNumber        Int?
+  eventKey         String
+  eventDescription String
+  status           String       @default("pending")
+  plannedChapterNo Int?
+  actualChapterNo  Int?
+  notes            String?
+  metadata         Json         @default("{}")
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  project          NovelProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, eventKey])
+  @@index([projectId, status])
+  @@index([projectId, actualChapterNo])
+  @@map("arc_event_ledger")
+}
+
+model CheatAbilityState {
+  id                       String       @id @default(cuid())
+  projectId                Int          @unique
+  cheatName                String
+  oneLineRule              String
+  unlockedAbilities        Json         @default("[]")
+  usageHistory             Json         @default("[]")
+  currentMarkValue         Int          @default(0)
+  currentBacklashValue     Int          @default(0)
+  cooldownActiveUntilChapter Int?
+  updatedAt                DateTime     @updatedAt
+  createdAt                DateTime     @default(now())
+  project                  NovelProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("cheat_ability_states")
 }
 
 model Villain {
