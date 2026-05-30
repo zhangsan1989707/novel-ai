@@ -374,6 +374,13 @@ export function ChapterList({ projectId, chapters: initialChapters, onChaptersCh
           chapters={chapters.map(c => ({ id: c.id, chapterNumber: c.chapterNumber, title: c.title }))}
           onClose={() => setDrawerChapterId(null)}
           onNavigate={(id) => setDrawerChapterId(id)}
+          onStatusChange={(chapterId, newStatus) => {
+            const updatedChapters = chapters.map(c =>
+              c.id === chapterId ? { ...c, status: newStatus as ChapterStatus } : c
+            )
+            setChapters(updatedChapters)
+            onChaptersChange?.(updatedChapters)
+          }}
         />
       )}
     </>

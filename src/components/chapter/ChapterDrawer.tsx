@@ -12,7 +12,8 @@ import { formatLargeNumber } from '@/lib/utils'
 import { normalizeChapterDisplay, type ChapterRawData, type ChapterDisplayData } from '@/lib/chapter-display-adapter'
 import { ChapterQualityPanel } from '@/components/ai/ChapterQualityPanel'
 import { RevisionPanel } from '@/components/ai/RevisionPanel'
-import { toast } from '@/components/ui/Toast'
+import { toast } from '@/components/ui'
+import type { ChapterQualityReport } from '@/lib/knowledge/chapter-quality'
 
 interface ChapterDrawerProps {
   projectId: number
@@ -25,16 +26,7 @@ interface ChapterDrawerProps {
 
 interface ReviewData {
   validationReport: Record<string, unknown> | null
-  qualityReport: {
-    overallScore: number
-    issues: Array<{ type: string; severity: string; description: string }>
-    suggestions: string[]
-    statistics: {
-      totalWords: number
-      totalParagraphs: number
-      dialogueRatio: number
-    }
-  } | null
+  qualityReport: ChapterQualityReport | null
   targetWordCount: number
   currentWordCount: number
   wordCountStatus: 'ok' | 'short' | 'long'
@@ -197,7 +189,7 @@ export function ChapterDrawer({ projectId, chapterId, chapters, onClose, onNavig
     setChapter(prev => prev ? { ...prev, content: newContent, wordCount: newContent.length } : prev)
     setShowRevisionPanel(false)
     toast.success('已应用修改')
-    onStatusChange?.(chapterId!, chapter?.status || 'REVIEWING')
+    if (chapterId) onStatusChange?.(chapterId, chapter?.status || 'REVIEWING')
   }
 
   // 状态标签 variant
@@ -434,7 +426,7 @@ export function ChapterDrawer({ projectId, chapterId, chapters, onClose, onNavig
                       <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">正文内容</h3>
                       {!chapter.isEmpty ? (
                         <div
-                          className="text-base leading-[1.9] text-gray-800 dark:text-gray-200"
+                          className="text-gray-800 dark:text-gray-200"
                           style={{ fontSize: '16px', lineHeight: 1.9 }}
                         >
                           {chapter.content.split('\n').map((paragraph, i) => (
@@ -501,7 +493,7 @@ export function ChapterDrawer({ projectId, chapterId, chapters, onClose, onNavig
                   <Button
                     variant="primary"
                     size="sm"
-                    onClick={() => onNavigate(chapterId!)}
+                    onClick={() => chapterId && onNavigate(chapterId)}
                     className="gap-1.5"
                   >
                     <Sparkles className="h-4 w-4" />

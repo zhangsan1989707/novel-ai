@@ -17,6 +17,7 @@ import { useProjectPipeline } from '@/hooks/useProjectPipeline'
 import { ProjectChapterDirectory } from '@/components/project/detail/ProjectChapterDirectory'
 import { ProjectSidebar } from '@/components/project/detail/ProjectSidebar'
 import { ProjectModals } from '@/components/project/detail/ProjectModals'
+import { ChapterDrawer } from '@/components/chapter/ChapterDrawer'
 import { PipelineControlPanel } from '@/components/project/detail/PipelineControlPanel'
 import { useNextStepState } from '@/components/project/detail/useNextStepState'
 import {
@@ -65,6 +66,7 @@ export default function ProjectDetailPage({ initialProject }: { initialProject: 
   const [continuousMode, setContinuousMode] = useState(false)
   const [continuousWaiting, setContinuousWaiting] = useState(false)
   const [activeTab, setActiveTab] = useState<'dashboard' | 'settings' | 'analysis' | 'characters'>('dashboard')
+  const [drawerChapterId, setDrawerChapterId] = useState<number | null>(null)
 
   const {
     pipeline,
@@ -670,7 +672,7 @@ ${ch.content || ''}
                           blueprintConfirmedAt: project.blueprintConfirmedAt,
                           arcPlanConfirmedAt: project.arcPlanConfirmedAt,
                         })}
-                        onOpenPreview={openChapterPreview}
+                        onOpenDrawer={(chapterId) => setDrawerChapterId(chapterId)}
                         onOpenEditor={openChapterEditor}
                         onOpenGenerate={openChapterGenerate}
                       />
@@ -754,6 +756,19 @@ ${ch.content || ''}
         </>
       )}
 
+
+      {drawerChapterId && (
+        <ChapterDrawer
+          projectId={projectId}
+          chapterId={drawerChapterId}
+          chapters={project.chapters.map(c => ({ id: c.id, chapterNumber: c.chapterNumber, title: c.title }))}
+          onClose={() => setDrawerChapterId(null)}
+          onNavigate={(id) => setDrawerChapterId(id)}
+          onStatusChange={(chapterId, newStatus) => {
+            fetchProject()
+          }}
+        />
+      )}
 
       <ProjectModals
         projectId={projectId}
