@@ -1,7 +1,7 @@
 'use client'
 
 import { Button, Card, CardContent, CardHeader, CardTitle, Progress } from '@/components/ui'
-import { Layers, Pause, Play, Loader2, Square } from 'lucide-react'
+import { Layers, Pause, Play, Loader2, Square, RotateCcw } from 'lucide-react'
 import type { GenerationSpeedMode } from '@/lib/ai/speed-mode'
 import type { PipelineStatus } from '@/hooks/useProjectPipeline'
 import { getPipelineStatusLabel, getPipelineStepLabel } from './utils'
@@ -15,6 +15,7 @@ interface PipelineControlPanelProps {
   handleResumePipeline: () => Promise<void>
   handleRecoverPipeline: (action: 'continue' | 'retry_chapter' | 'retry_batch', chapterNumber?: number) => Promise<void>
   handleCancelPipeline: () => Promise<void>
+  handleRestartPipeline: () => void
 }
 
 export function PipelineControlPanel({
@@ -25,6 +26,7 @@ export function PipelineControlPanel({
   handleResumePipeline,
   handleRecoverPipeline,
   handleCancelPipeline,
+  handleRestartPipeline,
 }: PipelineControlPanelProps) {
   if (!pipeline.status || pipeline.status === 'IDLE') {
     return null
@@ -89,10 +91,16 @@ export function PipelineControlPanel({
             </Button>
           )}
           {pipeline.status === 'FAILED' && (
-            <Button variant="outline" size="sm" onClick={() => handleRecoverPipeline('continue')} className="gap-1.5">
-              <Loader2 className="h-4 w-4" />
-              继续执行
-            </Button>
+            <>
+              <Button variant="primary" size="sm" onClick={handleRestartPipeline} className="gap-1.5">
+                <RotateCcw className="h-4 w-4" />
+                重新开始
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => handleRecoverPipeline('continue')} className="gap-1.5">
+                <Loader2 className="h-4 w-4" />
+                从断点恢复
+              </Button>
+            </>
           )}
         </div>
       </CardContent>

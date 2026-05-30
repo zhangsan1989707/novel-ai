@@ -690,19 +690,21 @@ export async function runProductionPipeline(
     speedMode?: GenerationSpeedMode
   }
 ): Promise<void> {
-  const job = await prisma.generationJob.findUnique({ where: { id: jobId } })
-  if (!job) return
-
-  // Immediately update the job to RUNNING to prevent stuck PENDING status
-  await updateJobStep(jobId, 'blueprint' as PipelineStep, 1)
-
-  const projectId = job.projectId
-  const jobPayload = job.payload && typeof job.payload === 'object'
-    ? job.payload as Record<string, unknown>
-    : {}
-  const speedMode = normalizeGenerationSpeedMode(options?.speedMode || jobPayload.speedMode)
+  let projectId: number | null = null
 
   try {
+    const job = await prisma.generationJob.findUnique({ where: { id: jobId } })
+    if (!job) return
+
+    projectId = job.projectId
+
+    await updateJobStep(jobId, 'blueprint' as PipelineStep, 1)
+
+    const jobPayload = job.payload && typeof job.payload === 'object'
+      ? job.payload as Record<string, unknown>
+      : {}
+    const speedMode = normalizeGenerationSpeedMode(options?.speedMode || jobPayload.speedMode)
+
     const project = await prisma.novelProject.findUnique({
       where: { id: projectId },
       select: {
@@ -984,26 +986,28 @@ export async function runProductionPipeline(
 
     const report = await loadProjectHealthReport(projectId)
     if (report) {
-      const project = await prisma.novelProject.findUnique({
+      const projectForNotify = await prisma.novelProject.findUnique({
         where: { id: projectId },
         select: { title: true },
       })
-      if (project) {
-        await syncProjectHealthNotification(projectId, project.title, report)
+      if (projectForNotify) {
+        await syncProjectHealthNotification(projectId, projectForNotify.title, report)
       }
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     await failJob(jobId, message)
 
-    const report = await loadProjectHealthReport(projectId)
-    if (report) {
-      const project = await prisma.novelProject.findUnique({
-        where: { id: projectId },
-        select: { title: true },
-      })
-      if (project) {
-        await syncProjectHealthNotification(projectId, project.title, report)
+    if (projectId) {
+      const report = await loadProjectHealthReport(projectId)
+      if (report) {
+        const projectForNotify = await prisma.novelProject.findUnique({
+          where: { id: projectId },
+          select: { title: true },
+        })
+        if (projectForNotify) {
+          await syncProjectHealthNotification(projectId, projectForNotify.title, report)
+        }
       }
     }
   }

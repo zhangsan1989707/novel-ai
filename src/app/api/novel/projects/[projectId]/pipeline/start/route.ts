@@ -101,6 +101,20 @@ export async function POST(
 
     await failStaleRunningJobs({ projectId })
 
+    const failedJob = await prisma.generationJob.findFirst({
+      where: {
+        projectId,
+        status: 'FAILED',
+      },
+      orderBy: { createdAt: 'desc' },
+    })
+    if (failedJob) {
+      await prisma.novelProject.update({
+        where: { id: projectId },
+        data: { pipelineJobId: null },
+      })
+    }
+
     const activeJob = await prisma.generationJob.findFirst({
       where: {
         projectId,

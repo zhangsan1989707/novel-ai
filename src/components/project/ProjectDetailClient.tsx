@@ -608,6 +608,13 @@ ${ch.content || ''}
                       handleResumePipeline={handleResumePipeline}
                       handleRecoverPipeline={handleRecoverPipeline}
                       handleCancelPipeline={handleCancelAndStopContinuous}
+                      handleRestartPipeline={() => handleStartPipeline({
+                        hasBoundModel,
+                        maintenanceActive,
+                        flowBlockedReason,
+                        blueprintConfirmedAt: project.blueprintConfirmedAt,
+                        arcPlanConfirmedAt: project.arcPlanConfirmedAt,
+                      })}
                     />
                   )}
 
