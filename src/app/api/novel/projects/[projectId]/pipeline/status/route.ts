@@ -32,10 +32,14 @@ export async function GET(
     const chapters = await prisma.novelChapter.findMany({
       where: { projectId },
       select: { chapterNumber: true, status: true },
-      orderBy: { chapterNumber: 'desc' },
+      orderBy: { chapterNumber: 'asc' },
     })
     const actualChapterCount = chapters.length
-    const nextChapterNumber = chapters.length > 0 ? (chapters[0].chapterNumber + 1) : 1
+    const completedChapterCount = chapters.filter(c => c.status === 'COMPLETED').length
+    const firstIncomplete = chapters.find(c => c.status !== 'COMPLETED')
+    const nextChapterNumber = firstIncomplete
+      ? firstIncomplete.chapterNumber
+      : (completedChapterCount > 0 ? completedChapterCount + 1 : 1)
 
     let jobId = project.pipelineJobId
     if (!jobId) {
