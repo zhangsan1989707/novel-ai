@@ -68,7 +68,7 @@ Novel AI 支持两种创作模式：
 |------|----------|------|
 | 前端框架 | Next.js 16.2.4 | React 19.2.4，支持 App Router |
 | 数据库 | PostgreSQL | 通过 Prisma 6.19.3 操作 |
-| AI 提供商 | 多厂商支持 | OpenAI、Anthropic、阿里云、DeepSeek、MiniMax、火山引擎 |
+| AI 提供商 | 多厂商支持 | OpenAI、Anthropic、阿里云、DeepSeek、MiniMax、火山引擎、智谱AI、秘塔AI |
 | 样式方案 | Tailwind CSS 4 | 原子化 CSS 框架 |
 | 状态管理 | React Hook Form + Zod | 表单验证与状态管理 |
 | 图表可视化 | D3.js + React Flow | 角色关系图、情绪曲线等 |
@@ -840,7 +840,144 @@ model BookAnalysis {
 
 ---
 
-## 13. 注意事项
+## 13. 风格配置系统
+
+### 13.1 系统概述
+
+风格配置系统允许用户从已有作品中提取写作风格，并在创作过程中应用这些风格。系统支持风格强度调节和安全控制，确保风格使用的合规性。
+
+### 13.2 数据模型
+
+```prisma
+model StyleProfile {
+  id            String   @id @default(cuid())
+  name          String
+  description   String?
+  sourceType    String   @default("USER_UPLOADED")  // PUBLIC_DOMAIN/LICENSED/USER_UPLOADED/ABSTRACT_TEMPLATE
+  riskLevel     String   @default("MEDIUM")          // LOW/MEDIUM/HIGH
+  authorLabel   String?
+  displayLabel  String
+  profileJson   Json                                 // 完整风格数据（prose/vocabulary/sentence/rhetoric/narrative/plot/character）
+  promptCard    String?  @db.Text                    // 提示词卡片
+  sampleStats   Json?                                // 样本统计数据
+  sourceNovelId String?
+  virtualWriterId Int?
+  creatorId     Int
+  isPublic      Boolean  @default(false)
+  tags          String[]  @default([])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  projects      NovelProject[]
+  creator       User         @relation(fields: [creatorId], references: [id], onDelete: Restrict)
+  sourceNovel   SourceNovel? @relation(fields: [sourceNovelId], references: [id])
+  virtualWriter VirtualWriter? @relation(fields: [virtualWriterId], references: [id])
+}
+```
+
+### 13.3 风格数据结构
+
+风格数据包含以下几个维度：
+
+| 维度 | 说明 | 关键指标 |
+|------|------|----------|
+| prose（文风） | 整体语气、句子长度、节奏、描述密度 | 平均句长、段落长度分布 |
+| vocabulary（词汇） | 常用词、禁用词、成语水平、现代性 | 词汇丰富度、专业术语密度 |
+| sentence（句式） | 常用句式、段落模式、过渡风格 | 主动/被动句比例、疑问句频率 |
+| rhetoric（修辞） | 常用修辞格、比喻风格、讽刺水平 | 比喻密度、排比频率 |
+| narrative（叙事） | 视角、叙述者存在感、说明风格 | 视角一致性、叙述介入程度 |
+| plot（情节） | 节奏、冲突密度、反转频率 | 冲突频率、高潮间隔 |
+| character（角色） | 主角模式、对话风格、情感表达 | 角色对话一致性 |
+
+### 13.4 项目风格集成
+
+项目可以关联风格配置，并控制风格强度：
+
+```prisma
+model NovelProject {
+  // ...
+  styleProfileId    String?
+  styleStrength     Float    @default(0.5)      // 0-1，风格强度
+  styleSafetyMode   String   @default("SAFE_ABSTRACT") // 安全模式
+  // ...
+}
+```
+
+### 13.5 API 路由
+
+| 端点 | 方法 | 功能 |
+|------|------|------|
+| `/api/styles` | GET | 获取风格列表 |
+| `/api/styles` | POST | 创建风格配置 |
+| `/api/styles/[styleId]` | GET/PUT/DELETE | 风格配置 CRUD |
+| `/api/styles/[styleId]/apply` | POST | 应用风格到项目 |
+| `/api/novel/projects/[projectId]/style/extract` | POST | 从项目中提取风格 |
+
+### 13.6 核心模块
+
+```
+src/lib/style/
+├── style-extractor.ts   // 风格提取器
+└── style-validator.ts   // 风格验证器
+
+src/types/
+└── style.ts            // 风格类型定义
+```
+
+---
+
+## 14. 角色声音指纹系统
+
+### 14.1 系统概述
+
+角色声音指纹系统为每个角色定义独特的说话风格，确保角色对话的一致性和个性化。
+
+### 14.2 数据模型
+
+角色模型新增声音相关字段：
+
+```prisma
+model Character {
+  // ...
+  speechStyle         String?          // 说话风格（正式/随意/简洁/啰嗦等）
+  vocabularyLevel     String?          // 词汇等级
+  sentencePattern     String?          // 句式模式
+  catchphraseStyle    String?          // 口头禅风格
+  dialogueExamples    String[]  @default([]) // 对话示例
+  voiceNotes          String?          // 语音备注
+  // ...
+}
+```
+
+### 14.3 声音指纹维度
+
+| 维度 | 说明 | 示例值 |
+|------|------|--------|
+| speechStyle | 整体说话风格 | "简洁直率"、"啰嗦绕弯"、"正式严谨" |
+| vocabularyLevel | 词汇复杂度 | "通俗易懂"、"文绉绉"、"专业术语多" |
+| sentencePattern | 常用句式 | "短句多"、"长句多"、"反问句多" |
+| catchphraseStyle | 口头禅特点 | "喜欢用网络用语"、"爱用古语" |
+| dialogueExamples | 典型对话样本 | 该角色的几段典型对话 |
+| voiceNotes | 其他语音备注 | 补充说明 |
+
+### 14.4 API 路由
+
+| 端点 | 方法 | 功能 |
+|------|------|------|
+| `/api/novel/projects/[projectId]/characters/[characterId]/voice` | GET | 获取角色声音指纹 |
+| `/api/novel/projects/[projectId]/characters/[characterId]/voice` | PUT | 更新角色声音指纹 |
+
+### 14.5 在 Agent 中的应用
+
+角色声音指纹在 Writer Agent 中自动应用，确保生成的角色对话符合该角色的特点。在写作过程中，系统会：
+
+1. 将角色声音指纹注入提示词
+2. 监控对话风格一致性
+3. 对偏离风格的内容进行警告
+
+---
+
+## 15. 注意事项
 
 - 项目使用 Next.js App Router，所有 API 路由均为服务端点
 - 数据库操作统一通过 `src/lib/prisma.ts` 的 Prisma Client 实例

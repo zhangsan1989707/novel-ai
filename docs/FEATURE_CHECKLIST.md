@@ -348,6 +348,15 @@ interface GenerateChapterListRequest {
 | 情绪行为细节 | 通过行为而非直接描写表达情绪 |
 | 段落长短参差 | 避免均匀段落长度 |
 
+### 9.3 批量去 AI 味功能
+
+| 特性 | 说明 |
+|------|------|
+| 自动提示 | 快速验收完成后自动提示去 AI 味优化 |
+| 一键批量处理 | 支持一键对多个章节进行去 AI 味 |
+| 流水线集成 | 集成到连续生成流水线流程中 |
+| 批量进度展示 | 显示批量去 AI 味的进度和状态 |
+
 ---
 
 ## 10. 角色管理
@@ -385,12 +394,151 @@ interface GenerateChapterListRequest {
 | currentState | JSON | 当前状态 |
 | firstChapter | int | 首次出场章节 |
 | lastUpdated | int | 最后更新章节 |
+| speechStyle | string | 说话风格 |
+| vocabularyLevel | string | 词汇等级 |
+| sentencePattern | string | 句式模式 |
+| catchphraseStyle | string | 口头禅风格 |
+| dialogueExamples | string[] | 对话示例 |
+| voiceNotes | string | 语音备注 |
+
+### 10.4 角色声音指纹系统
+
+| API 端点 | 方法 | 功能 |
+|----------|------|------|
+| `/api/novel/projects/[projectId]/characters/[characterId]/voice` | GET | 获取角色声音指纹 |
+| `/api/novel/projects/[projectId]/characters/[characterId]/voice` | PUT | 更新角色声音指纹 |
+
+#### 声音指纹特性
+- **说话风格（speechStyle）**：描述角色的说话方式（如正式、随意、简洁、啰嗦等）
+- **词汇等级（vocabularyLevel）**：角色使用的词汇复杂度
+- **句式模式（sentencePattern）**：角色常用的句式结构
+- **口头禅风格（catchphraseStyle）**：角色的典型表达习惯
+- **对话示例（dialogueExamples）**：角色的典型对话样本
+- **语音备注（voiceNotes）**：其他关于角色声音的备注
+
+#### 应用场景
+- 在章节生成中自动应用角色声音特征
+- 确保角色对话风格的一致性
+- 支持个性化角色对话风格定制
+- 用于角色关系分析和对话生成
 
 ---
 
-## 11. 伏笔系统
+## 11. 风格配置系统
 
-### 11.1 伏笔类型
+### 11.1 风格配置 API
+
+| API 端点 | 方法 | 功能 |
+|----------|------|------|
+| `/api/styles/` | GET | 获取风格列表 |
+| `/api/styles/` | POST | 创建风格配置 |
+| `/api/styles/[styleId]` | GET/PUT/DELETE | 风格配置 CRUD |
+| `/api/styles/[styleId]/apply` | POST | 应用风格到项目 |
+| `/api/novel/projects/[projectId]/style/extract` | POST | 从项目中提取风格 |
+
+### 11.2 风格数据结构
+
+| 模块 | 说明 |
+|------|------|
+| prose | 文风：整体语气、句子长度、节奏、描述密度、对话密度、内心独白密度 |
+| vocabulary | 词汇：常用词、禁用词、成语水平、现代性 |
+| sentence | 句式：常用模式、段落模式、过渡风格 |
+| rhetoric | 修辞：常用修辞格、比喻风格、讽刺水平、感官细节 |
+| narrative | 叙事：视角、叙述者存在感、说明风格、悬念手法 |
+| plot | 情节：节奏、冲突密度、反转频率、悬念风格、回报模式 |
+| character | 角色：主角模式、对话风格、情感表达、关系模式 |
+| generationGuide | 生成指南：必须做、避免、示例指令 |
+
+### 11.3 风格来源类型
+
+| 来源类型 | 枚举值 | 说明 |
+|----------|--------|------|
+| 公有领域 | `PUBLIC_DOMAIN` | 来自公版书籍 |
+| 授权 | `LICENSED` | 有版权授权的作品 |
+| 用户上传 | `USER_UPLOADED` | 用户自己上传的作品 |
+| 抽象模板 | `ABSTRACT_TEMPLATE` | 通用风格模板 |
+
+### 11.4 风险等级与安全模式
+
+| 风险等级 | 枚举值 | 说明 |
+|----------|--------|------|
+| 低风险 | `LOW` | 风格通用，无版权风险 |
+| 中风险 | `MEDIUM` | 有一定特征，需要谨慎使用 |
+| 高风险 | `HIGH` | 风格特征明显，需要严格控制 |
+
+| 安全模式 | 枚举值 | 说明 |
+|----------|--------|------|
+| 安全抽象 | `SAFE_ABSTRACT` | 只使用抽象风格特征 |
+| 严格公有领域 | `STRICT_PUBLIC_DOMAIN` | 仅使用公版风格 |
+| 用户授权 | `USER_LICENSED` | 使用用户授权的风格 |
+
+### 11.5 风格配置属性
+
+| 属性 | 类型 | 说明 |
+|------|------|------|
+| name | string | 风格名称 |
+| description | string | 风格描述 |
+| displayLabel | string | 展示标签 |
+| sourceType | StyleSourceType | 来源类型 |
+| riskLevel | StyleRiskLevel | 风险等级 |
+| authorLabel | string | 作者标签 |
+| profileJson | JSON | 完整风格数据 |
+| promptCard | string | 提示词卡片 |
+| sampleStats | JSON | 样本统计数据 |
+| sourceNovelId | string | 源小说 ID |
+| virtualWriterId | number | 虚拟作家 ID |
+| isPublic | boolean | 是否公开 |
+| tags | string[] | 标签 |
+| createdAt | DateTime | 创建时间 |
+| updatedAt | DateTime | 更新时间 |
+
+### 11.6 项目风格集成
+
+| 属性 | 类型 | 说明 |
+|------|------|------|
+| styleProfileId | string | 关联的风格配置 ID |
+| styleStrength | number | 风格强度（0-1） |
+| styleSafetyMode | StyleSafetyMode | 风格安全模式 |
+
+### 11.7 风格相关模块
+
+```
+src/lib/style/
+├── style-extractor.ts   # 风格提取器
+└── style-validator.ts   # 风格验证器
+
+src/types/
+└── style.ts            # 风格类型定义
+
+src/app/api/styles/     # 风格 API
+├── route.ts
+└── [styleId]/
+    ├── route.ts
+    └── apply/route.ts
+
+src/app/api/novel/projects/[projectId]/style/
+└── extract/route.ts
+```
+
+### 11.8 风格验证结果
+
+| 字段 | 说明 |
+|------|------|
+| styleConsistencyScore | 风格一致性评分 |
+| riskLevel | 风险等级 |
+| riskNotes | 风险注意事项 |
+| proseMatch | 文风匹配度 |
+| sentenceMatch | 句式匹配度 |
+| vocabularyMatch | 词汇匹配度 |
+| narrativeMatch | 叙事匹配度 |
+| plotMatch | 情节匹配度 |
+| similarityAlerts | 相似性警告 |
+
+---
+
+## 12. 伏笔系统
+
+### 12.1 伏笔类型
 
 | 类型 | 枚举值 | 说明 |
 |------|--------|------|
@@ -398,7 +546,7 @@ interface GenerateChapterListRequest {
 | 支线 | `SUBPLOT` | 独立于主线的剧情 |
 | 冲突 | `CONFLICT` | 核心矛盾冲突 |
 
-### 11.2 伏笔状态
+### 12.2 伏笔状态
 
 | 状态 | 枚举值 | 说明 |
 |------|--------|------|
@@ -408,9 +556,9 @@ interface GenerateChapterListRequest {
 
 ---
 
-## 12. 导出功能
+## 13. 导出功能
 
-### 12.1 导出 API
+### 13.1 导出 API
 
 | API 端点 | 方法 | 功能 |
 |----------|------|------|
@@ -418,7 +566,7 @@ interface GenerateChapterListRequest {
 | `/api/novel/projects/[projectId]/export/download` | GET | 下载导出文件 |
 | `/api/novel/projects/[projectId]/export-data` | GET | 导出数据（兼容旧接口，建议迁移至 `POST /api/novel/projects/[projectId]/export {"view":"data"}`） |
 
-### 12.2 导出格式
+### 13.2 导出格式
 
 | 格式 | 说明 | 元数据 | 压缩 |
 |------|------|--------|------|
@@ -427,7 +575,7 @@ interface GenerateChapterListRequest {
 | JSON | 结构化数据 | 必含 | 待实现 |
 | EPUB | 电子书格式 | 必含 | 支持 |
 
-### 12.3 导出模块
+### 13.3 导出模块
 
 ```
 src/lib/export/
@@ -572,6 +720,25 @@ src/lib/cost-tracker/
 | `/api/novel/projects/[projectId]/generate` | POST | 单章生成 |
 | `/api/novel/projects/[projectId]/generate/stream` | GET | 流式生成 |
 | `/api/novel/projects/[projectId]/generate/batch` | POST | 批量生成 |
+
+### 17.4 连续生成模式
+
+| 特性 | 说明 |
+|------|------|
+| 自动推进流水线 | 支持自动推进流水线批量生成多个章节 |
+| 一键批量生成 | 一键启动批量生成流程 |
+| 智能状态管理 | 自动管理生成流程状态和进度 |
+| 人类可读数字 | 统一使用人类可读的数字格式显示进度 |
+| 实际章节数据展示 | 流水线状态显示实际章节数据，而非抽象状态 |
+| 灵活停止机制 | 支持随时安全停止连续生成 |
+
+### 17.5 流水线状态显示优化
+
+| 优化项 | 说明 |
+|------|------|
+| 实际章节数据 | 显示实际章节信息，而非抽象状态描述 |
+| 统一数字格式 | 使用 `formatLargeNumber()` 统一显示所有数字 |
+| 布局优化 | 流水线状态模块位置优化，放在生成控制与章节目录之间 |
 
 ---
 

@@ -115,6 +115,7 @@ export async function applyChapterCommit(commitId: string): Promise<ChapterCommi
     commitStatus: commit.status,
     chapter: {
       id: chapter.id,
+      title: chapter.title,
       generationPrompt: chapter.generationPrompt,
       summary: chapter.summary,
     },
