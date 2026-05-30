@@ -24,8 +24,19 @@ export async function fetchInternalApi(pathname: string, init: RequestInit = {})
     requestHeaders.set('authorization', authorization)
   }
 
-  return fetch(new URL(pathname, resolveRequestOrigin(host, headerList.get('x-forwarded-proto'))), {
-    ...init,
-    headers: requestHeaders,
-  })
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 30_000)
+  if (init.signal) {
+    init.signal.addEventListener('abort', () => controller.abort())
+  }
+
+  try {
+    return await fetch(new URL(pathname, resolveRequestOrigin(host, headerList.get('x-forwarded-proto'))), {
+      ...init,
+      signal: controller.signal,
+      headers: requestHeaders,
+    })
+  } finally {
+    clearTimeout(timeout)
+  }
 }

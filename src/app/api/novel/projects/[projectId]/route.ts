@@ -271,6 +271,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       chapterSummaryCount,
       volumeSummaryCount,
       bookSummaryCount,
+    }).catch(err => {
+      logError(err instanceof Error ? err : new Error(String(err)), { type: 'maintenance_queue', projectId: id })
     })
 
     const maintenanceSummary = await getProjectMaintenanceSummary(id)

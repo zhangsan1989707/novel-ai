@@ -279,11 +279,8 @@ export async function queueRagRebuild(
 }
 
 export async function getProjectMaintenanceSummary(projectId: number): Promise<MaintenanceSummary> {
-  void startWorker()
-  const recycled = await recycleStaleRunningTasks(projectId)
-  if (recycled > 0) {
-    void drainQueue()
-  }
+  startWorker()
+  await recycleStaleRunningTasks(projectId)
   const tasks = await prisma.projectMaintenanceTask.findMany({
     where: { projectId },
     orderBy: [

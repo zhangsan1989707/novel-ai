@@ -232,6 +232,7 @@ export function useProjectDetail(initialProject: ProjectDetail | null) {
 
   const fetchIdRef = useRef(0)
   const abortControllerRef = useRef<AbortController | null>(null)
+  const fetchingRef = useRef(false)
 
   const openModal = useCallback((key: ModalKey) => {
     setModals(prev => ({ ...prev, [key]: true }))
@@ -242,6 +243,8 @@ export function useProjectDetail(initialProject: ProjectDetail | null) {
   }, [])
 
   const fetchProject = useCallback(async () => {
+    if (fetchingRef.current) return
+    fetchingRef.current = true
     const fetchId = ++fetchIdRef.current
     abortControllerRef.current?.abort()
     const controller = new AbortController()
@@ -266,6 +269,7 @@ export function useProjectDetail(initialProject: ProjectDetail | null) {
       if (fetchId === fetchIdRef.current) {
         setLoading(false)
       }
+      fetchingRef.current = false
     }
   }, [projectId])
 
@@ -296,7 +300,7 @@ export function useProjectDetail(initialProject: ProjectDetail | null) {
     if (!projectInitializing) return
     const timer = window.setInterval(() => {
       void fetchProject()
-    }, 3000)
+    }, 5000)
     return () => window.clearInterval(timer)
   }, [fetchProject, projectInitializing])
 

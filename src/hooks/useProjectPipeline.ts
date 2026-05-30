@@ -86,8 +86,11 @@ export function useProjectPipeline(options: {
 
   useEffect(() => {
     let timer: ReturnType<typeof setInterval> | null = null
+    let polling = false
 
     const pollPipeline = async () => {
+      if (polling) return
+      polling = true
       try {
         const controller = new AbortController()
         pollAbortRef.current?.abort()
@@ -101,13 +104,14 @@ export function useProjectPipeline(options: {
         }
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') return
-        // silent fail on polling errors
+      } finally {
+        polling = false
       }
     }
 
     pollPipeline()
 
-    timer = setInterval(pollPipeline, 3000)
+    timer = setInterval(pollPipeline, 5000)
     return () => {
       if (timer) clearInterval(timer)
       pollAbortRef.current?.abort()
