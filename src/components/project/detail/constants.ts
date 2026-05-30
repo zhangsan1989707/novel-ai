@@ -79,3 +79,62 @@ export const defaultSteeringValues = {
   conflictIntensity: 0.5,
   mysteryDensity: 0.3,
 }
+
+export type ProjectWorkflowPhase =
+  | 'BLUEPRINT_GENERATING'
+  | 'BLUEPRINT_READY'
+  | 'ROADMAP_READY'
+  | 'WRITING'
+  | 'MAINTENANCE_FAILED'
+
+export const workflowPhaseLabels: Record<ProjectWorkflowPhase, {
+  title: string
+  sidebarTitle: string
+  statusBadge: string
+  nextStep: string
+  estimated: string
+}> = {
+  BLUEPRINT_GENERATING: {
+    title: '生成创作蓝图中',
+    sidebarTitle: '创作准备进度',
+    statusBadge: '初始化创作工程中',
+    nextStep: '等待蓝图生成完成后确认',
+    estimated: '预计 30-90 秒',
+  },
+  BLUEPRINT_READY: {
+    title: '等待确认创作蓝图',
+    sidebarTitle: '创作准备进度',
+    statusBadge: '待确认创作蓝图',
+    nextStep: '确认蓝图后进入故事路线',
+    estimated: '取决于你的确认时间',
+  },
+  ROADMAP_READY: {
+    title: '等待确认故事路线',
+    sidebarTitle: '创作准备进度',
+    statusBadge: '待确认故事路线',
+    nextStep: '确认路线后开始生成章节',
+    estimated: '取决于你的确认时间',
+  },
+  WRITING: {
+    title: '正文生成',
+    sidebarTitle: '写作进度',
+    statusBadge: '写作进行中',
+    nextStep: '持续生成章节并推进进度',
+    estimated: '按章节进度推进',
+  },
+  MAINTENANCE_FAILED: {
+    title: '初始化任务失败',
+    sidebarTitle: '创作准备进度',
+    statusBadge: '初始化异常',
+    nextStep: '重试初始化后再继续',
+    estimated: '取决于修复与重试结果',
+  },
+}
+
+export const blueprintProgressSteps = [
+  '分析题材与平台定位',
+  '生成 Book Blueprint',
+  '生成故事路线 Arc Plan',
+  '初始化角色档案',
+  '初始化故事状态',
+]

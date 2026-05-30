@@ -26,6 +26,8 @@ interface WorkflowBlueprintCardProps {
   blueprint?: BlueprintRecord | null
   confirmed: boolean
   confirmedAt?: string | null
+  generating?: boolean
+  emptyReadOnly?: boolean
   onUpdated?: () => void
 }
 
@@ -64,7 +66,15 @@ function summaryText(value?: string | null, fallback = '未补充'): string {
   return text && text.length > 0 ? text : fallback
 }
 
-export function WorkflowBlueprintCard({ projectId, blueprint, confirmed, confirmedAt, onUpdated }: WorkflowBlueprintCardProps) {
+export function WorkflowBlueprintCard({
+  projectId,
+  blueprint,
+  confirmed,
+  confirmedAt,
+  generating,
+  emptyReadOnly,
+  onUpdated,
+}: WorkflowBlueprintCardProps) {
   const sourceBlueprint = useMemo(() => createBlueprintForm(blueprint), [blueprint])
   const [form, setForm] = useState<BlueprintRecord>(sourceBlueprint)
   const [saving, setSaving] = useState(false)
@@ -222,8 +232,8 @@ export function WorkflowBlueprintCard({ projectId, blueprint, confirmed, confirm
               ) : null}
             </div>
             <div className="flex items-center gap-2">
-              <Badge variant={confirmed ? 'success' : 'warning'}>
-                {confirmed ? '已确认' : '待确认'}
+              <Badge variant={confirmed ? 'success' : generating ? 'secondary' : 'warning'}>
+                {confirmed ? '已确认' : generating ? '生成中' : '待确认'}
               </Badge>
               {confirmed ? (
                 <Button variant="outline" size="sm" onClick={() => setEditorOpen(true)}>
@@ -264,6 +274,45 @@ export function WorkflowBlueprintCard({ projectId, blueprint, confirmed, confirm
                 </Button>
               </div>
             </>
+          ) : generating ? (
+            <div className="grid gap-3 md:grid-cols-2">
+              {Array.from({ length: 4 }).map((_, index) => (
+                <div key={index} className="rounded-2xl border border-blue-200 bg-white/80 p-4 dark:border-blue-900/40 dark:bg-slate-950/40">
+                  <div className="h-3 w-16 rounded bg-blue-100 dark:bg-blue-900/40" />
+                  <div className="mt-3 h-4 w-3/4 rounded bg-gray-100 dark:bg-gray-800 animate-pulse" />
+                  <div className="mt-2 h-4 w-2/3 rounded bg-gray-100 dark:bg-gray-800 animate-pulse" />
+                </div>
+              ))}
+            </div>
+          ) : emptyReadOnly ? (
+            <div className="space-y-4">
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="rounded-2xl border border-blue-200 bg-white/80 p-4 dark:border-blue-900/40 dark:bg-slate-950/40">
+                  <div className="text-xs text-blue-700 dark:text-blue-300">核心卖点</div>
+                  <div className="mt-2 text-sm font-medium leading-6 text-gray-900 dark:text-gray-100">{summaryText(blueprint?.corePitch, '等待 AI 生成')}</div>
+                </div>
+                <div className="rounded-2xl border border-blue-200 bg-white/80 p-4 dark:border-blue-900/40 dark:bg-slate-950/40">
+                  <div className="text-xs text-blue-700 dark:text-blue-300">世界方向</div>
+                  <div className="mt-2 text-sm leading-6 text-gray-700 dark:text-gray-300">{summaryText(blueprint?.worldDirection, '等待 AI 生成')}</div>
+                </div>
+                <div className="rounded-2xl border border-blue-200 bg-white/80 p-4 dark:border-blue-900/40 dark:bg-slate-950/40">
+                  <div className="text-xs text-blue-700 dark:text-blue-300">主线方向</div>
+                  <div className="mt-2 text-sm leading-6 text-gray-700 dark:text-gray-300">{summaryText(blueprint?.mainlineDirection, '等待 AI 生成')}</div>
+                </div>
+                <div className="rounded-2xl border border-blue-200 bg-white/80 p-4 dark:border-blue-900/40 dark:bg-slate-950/40">
+                  <div className="text-xs text-blue-700 dark:text-blue-300">成长方向</div>
+                  <div className="mt-2 text-sm leading-6 text-gray-700 dark:text-gray-300">{summaryText(blueprint?.growthDirection, '等待 AI 生成')}</div>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" onClick={() => setEditorOpen(true)}>
+                  微调蓝图
+                </Button>
+                <Button variant="primary" onClick={handleConfirm} loading={confirming}>
+                  确认并开始创作
+                </Button>
+              </div>
+            </div>
           ) : renderEditor()}
         </CardContent>
       </Card>

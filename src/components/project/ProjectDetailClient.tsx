@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { Button, Card, CardContent, CardHeader, CardTitle, Badge, toast, MoreActionsMenu, ErrorBoundary } from '@/components/ui'
 import { BlueprintConsole } from '@/components/project'
 import { WorkflowBlueprintCard } from '@/components/project/WorkflowBlueprintCard'
+import { blueprintProgressSteps } from '@/components/project/detail/constants'
 import { WorkflowArcPlanCard } from '@/components/project/WorkflowArcPlanCard'
 import { CharacterPanel, AnalysisWorkbench } from '@/components/ai'
-import { BookOpen, Users, Search, Rocket, Wrench, Play, Download, Repeat, Wand2, Square } from 'lucide-react'
+import { BookOpen, Users, Search, Rocket, Wrench, Play, Download, Wand2, Square } from 'lucide-react'
 import { formatDisplayDate } from '@/lib/helpers'
 import { getMinimumChapterWordCount } from '@/lib/ai/chapter-quality'
 import { formatWordCount } from '@/lib/utils'
@@ -23,11 +24,11 @@ import { useNextStepState } from '@/components/project/detail/useNextStepState'
 import {
   projectStatusMap,
   speedModeOptions,
-  speedModeLabels,
   defaultSteeringValues,
-  getSpeedModeDescription,
   getPipelineStatusLabel,
   groupChaptersByArc,
+  resolveWorkflowPhase,
+  workflowPhaseLabels,
 } from '@/components/project/detail'
 
 export default function ProjectDetailPage({ initialProject }: { initialProject: NonNullable<ReturnType<typeof useProjectDetail>['project']> | null }) {
@@ -67,6 +68,10 @@ export default function ProjectDetailPage({ initialProject }: { initialProject: 
   const [continuousWaiting, setContinuousWaiting] = useState(false)
   const [activeTab, setActiveTab] = useState<'dashboard' | 'settings' | 'analysis' | 'characters'>('dashboard')
   const [drawerChapterId, setDrawerChapterId] = useState<number | null>(null)
+  const drawerChapters = useMemo(
+    () => project?.chapters.map(c => ({ id: c.id, chapterNumber: c.chapterNumber, title: c.title })) || [],
+    [project?.chapters]
+  )
 
   const {
     pipeline,
@@ -304,6 +309,15 @@ ${ch.content || ''}
   const hasBoundModel = Boolean(project.aiModelConfig)
   const isAnalyzeMode = project.projectMode === 'ANALYZE'
   const workflowStage = project.workflowStage || (!project.blueprintConfirmedAt ? 'BLUEPRINT_CONFIRM' : !project.arcPlanConfirmedAt ? 'ARC_PLAN_CONFIRM' : 'GENERATE')
+  const workflowPhase = resolveWorkflowPhase(
+    {
+      ...project,
+      workflowStage,
+      maintenanceSummary: project.maintenanceSummary ?? null,
+    },
+    { maintenanceActive },
+  )
+  const workflowPhaseLabel = workflowPhaseLabels[workflowPhase]
   const flowBlockedReason = !project.bookBlueprint
     ? '请先生成并确认全书蓝图'
     : !project.blueprintConfirmedAt
@@ -344,11 +358,13 @@ ${ch.content || ''}
             <Badge variant={projectStatusMap[project.status].variant}>
               {projectStatusMap[project.status].label}
             </Badge>
-            {pipeline && (
+            {workflowPhase !== 'WRITING' ? (
+              <Badge variant="secondary">{workflowPhaseLabel.statusBadge}</Badge>
+            ) : pipeline ? (
               <Badge variant={pipeline.status === 'RUNNING' ? 'primary' : pipeline.status === 'FAILED' ? 'danger' : 'secondary'}>
                 {getPipelineStatusLabel(pipeline.status)}
               </Badge>
-            )}
+            ) : null}
           </div>
           <p className="mt-1 text-sm text-gray-500">
             {project.genre || '未设定题材'} · {project.writingStyle || '未设定风格'} · 更新于 {formatDisplayDate(project.updatedAt)}
@@ -505,16 +521,58 @@ ${ch.content || ''}
 
               {activeTab === 'dashboard' && (
                 <>
-                  {workflowStage === 'BLUEPRINT_CONFIRM' && (
+                  {(workflowPhase === 'BLUEPRINT_GENERATING' || workflowPhase === 'MAINTENANCE_FAILED') && (
+                    <Card className="border-blue-200 bg-blue-50/60 dark:border-blue-900/40 dark:bg-blue-950/20">
+                      <CardContent className="p-6">
+                        <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+                          <div className="max-w-2xl space-y-3">
+                            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{workflowPhaseLabel.title}</h2>
+                            <p className="text-sm leading-6 text-gray-600 dark:text-gray-300">
+                              正在根据你的题材、平台、标题和创作目标生成创作蓝图，请先不要离开当前页面。
+                            </p>
+                            <ul className="space-y-2 text-sm text-gray-700 dark:text-gray-200">
+                              {blueprintProgressSteps.map(step => (
+                                <li key={step} className="flex items-center gap-2">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                                  {step}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                          <div className="w-full max-w-sm rounded-2xl border border-blue-200 bg-white/80 p-4 dark:border-blue-900/40 dark:bg-slate-950/40">
+                            <div className="text-sm font-medium text-gray-900 dark:text-white">流水线进度</div>
+                            <div className="mt-3 space-y-3 text-sm text-gray-600 dark:text-gray-300">
+                              {blueprintProgressSteps.map((step, index) => (
+                                <div key={step} className="flex items-center justify-between">
+                                  <span>{index + 1}. {step}</span>
+                                  <span className={maintenanceActive && index === 0 ? 'text-blue-600' : 'text-gray-400'}>
+                                    {maintenanceActive && index === 0 ? '进行中' : '等待中'}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                            {workflowPhase === 'MAINTENANCE_FAILED' && (
+                              <p className="mt-4 text-sm text-red-600 dark:text-red-300">
+                                初始化任务失败，请稍后重试。
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {workflowPhase === 'BLUEPRINT_READY' && (
                     <WorkflowBlueprintCard
                       projectId={projectId}
                       blueprint={project.bookBlueprint ?? null}
                       confirmed={Boolean(project.blueprintConfirmedAt)}
                       onUpdated={fetchProject}
+                      emptyReadOnly
                     />
                   )}
 
-                  {workflowStage === 'ARC_PLAN_CONFIRM' && (
+                  {workflowPhase === 'ROADMAP_READY' && (
                     <WorkflowArcPlanCard
                       projectId={projectId}
                       confirmed={Boolean(project.arcPlanConfirmedAt)}
@@ -523,102 +581,31 @@ ${ch.content || ''}
                     />
                   )}
 
-                  <Card className="border-green-200 bg-green-50/70 dark:border-green-900/40 dark:bg-green-950/20">
-                    <CardContent className="p-5">
-                      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                        <div>
-                          <div className="text-sm font-medium text-green-700 dark:text-green-300">生成控制</div>
-                          <h2 className="mt-1 text-lg font-semibold text-gray-900 dark:text-white">选择生产节奏后启动流水线</h2>
-                          <div className="mt-2 rounded-lg border border-green-200 bg-white/80 px-3 py-2 text-xs text-green-800 dark:border-green-900/50 dark:bg-slate-950/30 dark:text-green-200">
-                            当前模式：{speedModeLabels[selectedSpeedMode]}。{getSpeedModeDescription(selectedSpeedMode)}
-                          </div>
-                          {continuousWaiting && pipeline?.status === 'COMPLETED' && (
-                            <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200">
-                              <span className="inline-block mr-1.5 align-middle">
-                                <span className="inline-block w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-                              </span>
-                              持续生成模式：正在准备下一批次...
-                            </div>
-                          )}
-                          {flowBlockedReason && (
-                            <div className="mt-2 text-xs text-green-700/80 dark:text-green-300/80">{flowBlockedReason}</div>
-                          )}
-                        </div>
-                        <div className="flex w-full flex-col gap-2 sm:w-56">
-                          <select
-                            value={selectedSpeedMode}
-                            onChange={(event) => setSelectedSpeedMode(event.target.value as GenerationSpeedMode)}
-                            disabled={pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING'}
-                            className="h-9 rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900 shadow-sm dark:border-gray-700 dark:bg-slate-950 dark:text-gray-100"
-                            aria-label="生成速度模式"
-                          >
-                            {speedModeOptions.map(option => (
-                              <option key={option.value} value={option.value}>{option.label}</option>
-                            ))}
-                          </select>
-                          <Button
-                            variant="primary"
-                            onClick={() => handleStartPipeline({
-                              hasBoundModel,
-                              maintenanceActive,
-                              flowBlockedReason,
-                              blueprintConfirmedAt: project.blueprintConfirmedAt,
-                              arcPlanConfirmedAt: project.arcPlanConfirmedAt,
-                            })}
-                            loading={pipelineStarting}
-                            disabled={pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING' || pipeline?.status === 'PAUSED' || !hasBoundModel || maintenanceActive || Boolean(flowBlockedReason)}
-                          >
-                            开始生成
-                          </Button>
-                          {(pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING') && (
-                            <Button
-                              variant="danger"
-                              onClick={handleCancelAndStopContinuous}
-                              className="gap-1.5"
-                            >
-                              <Square className="h-4 w-4" />
-                              停止生成
-                            </Button>
-                          )}
-                          <label
-                            className={`flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium cursor-pointer transition-all duration-150 border ${
-                              continuousMode
-                                ? 'bg-blue-50 border-blue-300 text-blue-700 dark:bg-blue-950/20 dark:border-blue-700 dark:text-blue-300'
-                                : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-400 dark:hover:border-gray-600'
-                            }`}
-                          >
-                            <Repeat className={`h-4 w-4 ${continuousMode ? 'text-blue-500 animate-spin [animation-duration:3s]' : ''}`} />
-                            持续生成
-                            <input
-                              type="checkbox"
-                              checked={continuousMode}
-                              onChange={(e) => setContinuousMode(e.target.checked)}
-                              className="sr-only"
-                            />
-                          </label>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {pipeline && (
+                  {workflowPhase === 'WRITING' && (<>
                     <PipelineControlPanel
                       pipeline={pipeline}
                       activeSpeedMode={activeSpeedMode}
+                      selectedSpeedMode={selectedSpeedMode}
+                      speedModeOptions={speedModeOptions}
                       estimatedTotalChapters={estimatedTotalChapters}
-                      handlePausePipeline={handlePausePipeline}
-                      handleResumePipeline={handleResumePipeline}
-                      handleRecoverPipeline={handleRecoverPipeline}
-                      handleCancelPipeline={handleCancelAndStopContinuous}
-                      handleRestartPipeline={() => handleStartPipeline({
+                      pipelineStarting={pipelineStarting}
+                      hasBoundModel={hasBoundModel}
+                      maintenanceActive={maintenanceActive}
+                      flowBlockedReason={flowBlockedReason}
+                      continuousWaiting={continuousWaiting}
+                      handleStartPipeline={() => handleStartPipeline({
                         hasBoundModel,
                         maintenanceActive,
                         flowBlockedReason,
                         blueprintConfirmedAt: project.blueprintConfirmedAt,
                         arcPlanConfirmedAt: project.arcPlanConfirmedAt,
                       })}
+                      handlePausePipeline={handlePausePipeline}
+                      handleResumePipeline={handleResumePipeline}
+                      handleRecoverPipeline={handleRecoverPipeline}
+                      handleCancelPipeline={handleCancelAndStopContinuous}
+                      onSpeedModeChange={setSelectedSpeedMode}
                     />
-                  )}
 
                   <Card>
                     <CardHeader>
@@ -678,6 +665,8 @@ ${ch.content || ''}
                       />
                     </CardContent>
                   </Card>
+                  </>
+                  )}
                 </>
               )}
 
@@ -743,13 +732,14 @@ ${ch.content || ''}
             </div>
 
             <div className="xl:col-span-3">
-              <ProjectSidebar
+            <ProjectSidebar
                 project={project}
                 progress={progress}
                 effectiveTargetWordCount={effectiveTargetWordCount}
                 estimatedTotalChapters={estimatedTotalChapters}
                 sidebarCollapsed={sidebarCollapsed}
                 onToggleSidebar={setSidebarCollapsed}
+                workflowPhase={workflowPhase}
               />
             </div>
           </div>
@@ -761,11 +751,14 @@ ${ch.content || ''}
         <ChapterDrawer
           projectId={projectId}
           chapterId={drawerChapterId}
-          chapters={project.chapters.map(c => ({ id: c.id, chapterNumber: c.chapterNumber, title: c.title }))}
-          onClose={() => setDrawerChapterId(null)}
+          chapters={drawerChapters}
+          onClose={() => {
+            setDrawerChapterId(null)
+            fetchProject()
+          }}
           onNavigate={(id) => setDrawerChapterId(id)}
           onStatusChange={(chapterId, newStatus) => {
-            fetchProject()
+            // 不在抽屉打开时全量刷新，关闭时统一刷新
           }}
         />
       )}

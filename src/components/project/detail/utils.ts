@@ -1,6 +1,20 @@
 import type { ProjectChapter } from '@/hooks/useProjectDetail'
 import { pipelineStatusMap, pipelineStepMap, speedModeOptions } from './constants'
+import type { ProjectWorkflowPhase } from './constants'
 import type { GenerationSpeedMode } from '@/lib/ai/speed-mode'
+
+interface WorkflowPhaseProject {
+  workflowStage?: 'BLUEPRINT_CONFIRM' | 'ARC_PLAN_CONFIRM' | 'GENERATE'
+  blueprintConfirmedAt?: string | null
+  arcPlanConfirmedAt?: string | null
+  bookBlueprint?: unknown
+  arcPlans?: unknown[]
+  storyRoadmap?: unknown[]
+  maintenanceSummary?: {
+    bootstrapFailed?: boolean
+    ragFailed?: boolean
+  } | null
+}
 
 export function getSpeedModeDescription(speedMode: GenerationSpeedMode) {
   return speedModeOptions.find(option => option.value === speedMode)?.description || ''
@@ -21,6 +35,31 @@ export function formatDuration(durationMs?: number) {
   const minutes = Math.floor(seconds / 60)
   const remainSeconds = seconds % 60
   return `${minutes} 分 ${remainSeconds} 秒`
+}
+
+export function resolveWorkflowPhase(
+  project: WorkflowPhaseProject,
+  options: { maintenanceActive?: boolean } = {},
+): ProjectWorkflowPhase {
+  const { maintenanceActive } = options
+
+  if (maintenanceActive) {
+    return 'BLUEPRINT_GENERATING'
+  }
+
+  if (!project.blueprintConfirmedAt && project.workflowStage === 'BLUEPRINT_CONFIRM') {
+    return project.bookBlueprint ? 'BLUEPRINT_READY' : 'BLUEPRINT_GENERATING'
+  }
+
+  if (!project.arcPlanConfirmedAt && project.workflowStage === 'ARC_PLAN_CONFIRM') {
+    return Array.isArray(project.storyRoadmap) && project.storyRoadmap.length > 0 ? 'ROADMAP_READY' : 'BLUEPRINT_GENERATING'
+  }
+
+  if (project.maintenanceSummary?.bootstrapFailed || project.maintenanceSummary?.ragFailed) {
+    return 'MAINTENANCE_FAILED'
+  }
+
+  return 'WRITING'
 }
 
 interface ArcPlan {

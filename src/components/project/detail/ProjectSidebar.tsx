@@ -5,6 +5,8 @@ import { Target, Users, Clock, ChevronRight, ChevronDown } from 'lucide-react'
 import { formatDisplayDate } from '@/lib/helpers'
 import { formatLargeNumber } from '@/lib/utils'
 import type { ProjectDetail } from '@/hooks/useProjectDetail'
+import type { ProjectWorkflowPhase } from '@/components/project/detail/constants'
+import { workflowPhaseLabels } from '@/components/project/detail/constants'
 
 interface ProjectSidebarProps {
   project: ProjectDetail
@@ -13,6 +15,7 @@ interface ProjectSidebarProps {
   estimatedTotalChapters: number | null
   sidebarCollapsed: boolean
   onToggleSidebar: (collapsed: boolean) => void
+  workflowPhase?: ProjectWorkflowPhase
 }
 
 export function ProjectSidebar({
@@ -22,6 +25,7 @@ export function ProjectSidebar({
   estimatedTotalChapters,
   sidebarCollapsed,
   onToggleSidebar,
+  workflowPhase,
 }: ProjectSidebarProps) {
   return (
     <>
@@ -41,14 +45,32 @@ export function ProjectSidebar({
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-1.5">
                 <Target className="h-4 w-4 text-blue-600" />
-                写作进度
+                {workflowPhase && workflowPhase !== 'WRITING' ? workflowPhaseLabels[workflowPhase].sidebarTitle : '写作进度'}
               </h3>
               <span className="text-lg font-bold text-blue-600">
-                {progress !== null ? `${progress}%` : '-'}
+                {workflowPhase && workflowPhase !== 'WRITING' ? workflowPhaseLabels[workflowPhase].title : progress !== null ? `${progress}%` : '-'}
               </span>
             </div>
 
-            {effectiveTargetWordCount ? (
+            {workflowPhase && workflowPhase !== 'WRITING' ? (
+              <div className="rounded-xl border border-blue-200 bg-white/80 p-4 text-sm dark:border-blue-900/40 dark:bg-slate-950/40">
+                <div className="space-y-3 text-gray-700 dark:text-gray-200">
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="text-gray-500">当前阶段</span>
+                    <span className="font-medium text-gray-900 dark:text-white text-right">{workflowPhaseLabels[workflowPhase].title}</span>
+                  </div>
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="text-gray-500">下一步</span>
+                    <span className="text-right">{workflowPhaseLabels[workflowPhase].nextStep}</span>
+                  </div>
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="text-gray-500">预计耗时</span>
+                    <span className="text-right">{workflowPhaseLabels[workflowPhase].estimated}</span>
+                  </div>
+                </div>
+                <p className="mt-3 text-xs text-gray-500">进入正文生成后，这里会恢复为写作进度。</p>
+              </div>
+            ) : effectiveTargetWordCount ? (
               <Progress value={project.currentWordCount} max={effectiveTargetWordCount} showLabel size="sm" />
             ) : (
               <div className="w-full h-2 bg-gray-100 dark:bg-gray-800 rounded-full">
@@ -56,26 +78,28 @@ export function ProjectSidebar({
               </div>
             )}
 
-            <div className="mt-3 grid grid-cols-4 gap-2 text-center">
-              <div>
-                <p className="text-sm font-bold">{formatLargeNumber(project.currentWordCount)}</p>
-                <p className="text-xs text-gray-500">当前</p>
+            {workflowPhase === 'WRITING' ? (
+              <div className="mt-3 grid grid-cols-4 gap-2 text-center">
+                <div>
+                  <p className="text-sm font-bold">{formatLargeNumber(project.currentWordCount)}</p>
+                  <p className="text-xs text-gray-500">当前</p>
+                </div>
+                <div>
+                  <p className="text-sm font-bold">{effectiveTargetWordCount ? formatLargeNumber(effectiveTargetWordCount) : '-'}</p>
+                  <p className="text-xs text-gray-500">目标</p>
+                </div>
+                <div>
+                  <p className="text-sm font-bold">{estimatedTotalChapters?.toLocaleString() || '-'}</p>
+                  <p className="text-xs text-gray-500">预计章数</p>
+                </div>
+                <div>
+                  <p className="text-sm font-bold">{project.chapters.length}</p>
+                  <p className="text-xs text-gray-500">已建章节</p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm font-bold">{effectiveTargetWordCount ? formatLargeNumber(effectiveTargetWordCount) : '-'}</p>
-                <p className="text-xs text-gray-500">目标</p>
-              </div>
-              <div>
-                <p className="text-sm font-bold">{estimatedTotalChapters?.toLocaleString() || '-'}</p>
-                <p className="text-xs text-gray-500">预计章数</p>
-              </div>
-              <div>
-                <p className="text-sm font-bold">{project.chapters.length}</p>
-                <p className="text-xs text-gray-500">已建章节</p>
-              </div>
-            </div>
+            ) : null}
 
-            {estimatedTotalChapters && project.expectedStageCount ? (
+            {workflowPhase === 'WRITING' && estimatedTotalChapters && project.expectedStageCount ? (
               <p className="mt-3 text-xs text-gray-500">
                 当前按 {project.lengthType || 'LONG'} 口径规划，全书预计约 {estimatedTotalChapters} 章，默认拆分为 {project.expectedStageCount} 个阶段。
               </p>

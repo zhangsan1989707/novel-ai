@@ -85,7 +85,7 @@ export function useNextStepState({
       badgeLabel: '待确认',
       title: '先确认全书蓝图',
       description: '核心卖点、世界方向、主线方向、成长方向、终局方向以及平台/题材/风格策略需要先确认，再进入后续生产。',
-      ctaLabel: '前往蓝图',
+      ctaLabel: '确认并开始创作',
       ctaAction: 'blueprint',
     }
   }
