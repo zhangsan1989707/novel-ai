@@ -11,23 +11,23 @@ type LengthPlanningRule = {
 
 const LENGTH_RULES: Record<PlanningLengthType, LengthPlanningRule> = {
   SHORT: {
-    minTargetWordCount: 120000,
-    minTotalChapters: 120,
+    minTargetWordCount: 80000,
+    minTotalChapters: 30,
     stageSequence: SHORT_STAGES,
   },
   MEDIUM: {
-    minTargetWordCount: 500000,
-    minTotalChapters: 500,
+    minTargetWordCount: 300000,
+    minTotalChapters: 100,
     stageSequence: FULL_STAGES,
   },
   LONG: {
-    minTargetWordCount: 1000000,
-    minTotalChapters: 1000,
+    minTargetWordCount: 800000,
+    minTotalChapters: 300,
     stageSequence: FULL_STAGES,
   },
   ULTRA_LONG: {
-    minTargetWordCount: 10000000,
-    minTotalChapters: 3000,
+    minTargetWordCount: 2000000,
+    minTotalChapters: 700,
     stageSequence: FULL_STAGES,
   },
 }

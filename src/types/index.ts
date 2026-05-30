@@ -384,10 +384,10 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
 export type LengthType = 'short' | 'medium' | 'long' | 'ultra_long'
 
 export const LENGTH_TYPE_LABELS: Record<LengthType, string> = {
-  short: '短篇 (12万字 / 120章起)',
-  medium: '中篇 (50万字 / 500章起)',
-  long: '长篇 (100万字 / 1000章起)',
-  ultra_long: '超长篇 (1000万字 / 3000章起)',
+  short: '短篇 (8万字 / 30章起)',
+  medium: '中篇 (30万字 / 100章起)',
+  long: '长篇 (80万字 / 300章起)',
+  ultra_long: '超长篇 (200万字 / 700章起)',
 }
 
 export type ArcStage = 'opening' | 'growth' | 'expansion' | 'mid_conflict' | 'pre_finale' | 'finale'

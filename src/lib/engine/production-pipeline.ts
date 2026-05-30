@@ -436,14 +436,16 @@ function resolveResumeChapter(
   chapters: Array<{ chapterNumber: number; status: string }>,
   resumeFromChapterNumber?: number
 ) {
-  if (resumeFromChapterNumber) return resumeFromChapterNumber
-
   const sorted = [...chapters].sort((a, b) => a.chapterNumber - b.chapterNumber)
-  const firstIncomplete = sorted.find(chapter => chapter.status !== 'COMPLETED')
+
+  const minChapter = resumeFromChapterNumber || 1
+  const firstIncomplete = sorted.find(
+    chapter => chapter.chapterNumber >= minChapter && chapter.status !== 'COMPLETED'
+  )
   if (firstIncomplete) return firstIncomplete.chapterNumber
 
   const maxChapterNumber = sorted.reduce((max, chapter) => Math.max(max, chapter.chapterNumber), 0)
-  return maxChapterNumber + 1
+  return Math.max(maxChapterNumber + 1, minChapter)
 }
 
 async function planChapterBatch(
@@ -940,7 +942,7 @@ export async function runProductionPipeline(
         return
       }
 
-      await updateJobStep(jobId, 'write' as PipelineStep, 4, outlines.length, completed + 1)
+      await updateJobStep(jobId, 'write' as PipelineStep, 4, outlines.length, outline.chapterNumber)
       setCurrentChapter(outline.chapterNumber, outline.title)
       const result = await runChapterGenerationPipeline(projectId, outline.chapterNumber, handlePipelineEvent, {
         speedMode,
