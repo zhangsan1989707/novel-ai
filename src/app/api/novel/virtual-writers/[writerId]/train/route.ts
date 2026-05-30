@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { TrainingStatus } from '@/types'
 import { logError } from '@/lib/logger'
+import { runVirtualWriterTraining } from '@/lib/virtual-writer/training'
 
 // ============================================
 // POST /api/novel/virtual-writers/[writerId]/train
@@ -48,44 +49,7 @@ export async function POST(
       )
     }
 
-    // 更新训练状态为进行中
-    await prisma.virtualWriter.update({
-      where: { id },
-      data: {
-        trainingStatus: TrainingStatus.TRAINING,
-        trainingProgress: 0,
-      },
-    })
-
-    // TODO: 实际异步执行训练任务
-    // 这里简化处理，直接更新为已训练状态
-    // 真实场景应该使用任务队列（如 Bull, RQ）异步处理
-    setTimeout(async () => {
-      try {
-        await prisma.virtualWriter.update({
-          where: { id: id as number },
-          data: {
-            trainingStatus: TrainingStatus.TRAINED,
-            trainingProgress: 100,
-            trainedAt: new Date(),
-            // 模拟提取的风格特征
-            styleFeatures: writer.styleFeatures || '该作家风格独特，语言流畅...',
-            vocabularyFeatures: writer.vocabularyFeatures || '词汇丰富，善用修辞...',
-            sentenceFeatures: writer.sentenceFeatures || '句式多变，长短结合...',
-            rhetoricFeatures: writer.rhetoricFeatures || '善用比喻、排比等修辞手法...',
-            themeFeatures: writer.themeFeatures || '主题深刻，关注人性...',
-          },
-        })
-      } catch (err) {
-        logError(err instanceof Error ? err : new Error(String(err)), { type: 'training_update', writerId: id })
-        await prisma.virtualWriter.update({
-          where: { id: id as number },
-          data: {
-            trainingStatus: TrainingStatus.FAILED,
-          },
-        })
-      }
-    }, 100)
+    await runVirtualWriterTraining(id)
 
     return NextResponse.json({
       success: true,
