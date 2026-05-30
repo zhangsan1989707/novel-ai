@@ -12,6 +12,8 @@ interface TitleCandidatePanelProps {
   coreHook: string
   /** 题材 */
   genre?: string
+  /** 子题材 */
+  subGenres?: string[]
   /** 目标平台 */
   platform?: string
   /** 频道 */
@@ -24,6 +26,8 @@ interface TitleCandidatePanelProps {
   conflict?: string
   /** 情绪承诺 */
   emotionalPromise?: string
+  /** 禁用词 */
+  forbiddenWords?: string[]
   /** AI 模型 ID */
   aiModelId?: number
   /** 选择标题后的回调 */
@@ -76,12 +80,14 @@ export function TitleCandidatePanel({
   currentTitle,
   coreHook,
   genre,
+  subGenres,
   platform,
   channel,
   targetStyle,
   protagonistIdentity,
   conflict,
   emotionalPromise,
+  forbiddenWords,
   aiModelId,
   onSelectTitle,
 }: TitleCandidatePanelProps) {
@@ -106,11 +112,13 @@ export function TitleCandidatePanel({
           platform,
           channel,
           genre,
+          subGenres,
           targetStyle,
           coreHook,
           protagonistIdentity,
           conflict,
           emotionalPromise,
+          forbiddenWords,
           aiModelId,
           currentTitle,
         }),
