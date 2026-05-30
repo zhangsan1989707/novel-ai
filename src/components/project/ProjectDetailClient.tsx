@@ -760,6 +760,7 @@ ${ch.content || ''}
         project={project}
         modals={modals}
         closeModal={closeModal}
+        openToolModal={(key) => { closeModal('toolbox'); openModal(key) }}
         previewChapter={previewChapter}
         setPreviewChapter={setPreviewChapter}
         submitting={submitting}

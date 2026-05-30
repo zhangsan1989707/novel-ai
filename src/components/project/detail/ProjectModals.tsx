@@ -1,9 +1,9 @@
 'use client'
 
 import { Button, Modal, Badge, toast } from '@/components/ui'
-import { BookOpen } from 'lucide-react'
+import { BookOpen, Search, Image, BarChart3, Shield, Wand2, Layers } from 'lucide-react'
 import { ProjectBaseInfoForm } from '@/components/project'
-import { ResearchPanel, ReviewPanel, DeslopPanel, BatchDeslopPanel, ExportPanel, AnalysisWorkbench, CoverGenerator } from '@/components/ai'
+import { ResearchPanel, ReviewPanel, DeslopPanel, BatchDeslopPanel, ExportPanel, AnalysisWorkbench, CoverGenerator, Toolbox } from '@/components/ai'
 import type { ProjectChapter } from '@/hooks/useProjectDetail'
 import { chapterStatusMap } from './constants'
 import { formatLargeNumber } from '@/lib/utils'
@@ -19,6 +19,7 @@ interface ProjectModalsProps {
   }
   modals: Record<ModalKey, boolean>
   closeModal: (key: ModalKey) => void
+  openToolModal: (key: Exclude<ModalKey, 'toolbox' | 'edit' | 'delete' | 'chapterPreview' | 'export'>) => void
   previewChapter: ProjectChapter | null
   setPreviewChapter: (chapter: ProjectChapter | null) => void
   submitting: boolean
@@ -35,6 +36,7 @@ export function ProjectModals({
   project,
   modals,
   closeModal,
+  openToolModal,
   previewChapter,
   setPreviewChapter,
   submitting,
@@ -45,6 +47,51 @@ export function ProjectModals({
   openChapterGenerate,
   getReviewingReason,
 }: ProjectModalsProps) {
+  const toolboxTools = [
+    {
+      id: 'research',
+      label: '资料研究',
+      description: '搜索相关资料辅助创作',
+      icon: <Search className="h-4 w-4" />,
+      onClick: () => openToolModal('research'),
+    },
+    {
+      id: 'cover',
+      label: '封面生成',
+      description: 'AI 生成小说封面图',
+      icon: <Image className="h-4 w-4" />,
+      onClick: () => openToolModal('cover'),
+    },
+    {
+      id: 'plotAnalysis',
+      label: '拆书分析',
+      description: '分析现有文本结构',
+      icon: <BarChart3 className="h-4 w-4" />,
+      onClick: () => openToolModal('plotAnalysis'),
+    },
+    {
+      id: 'review',
+      label: '对抗式审稿',
+      description: 'AI 多角色交叉审稿',
+      icon: <Shield className="h-4 w-4" />,
+      onClick: () => openToolModal('review'),
+    },
+    {
+      id: 'deslop',
+      label: '去AI味',
+      description: '优化单章文本自然度',
+      icon: <Wand2 className="h-4 w-4" />,
+      onClick: () => openToolModal('deslop'),
+    },
+    {
+      id: 'batchDeslop',
+      label: '批量去AI味',
+      description: '批量处理已完成章节',
+      icon: <Layers className="h-4 w-4" />,
+      onClick: () => openToolModal('batchDeslop'),
+    },
+  ]
+
   return (
     <>
       <Modal
@@ -238,6 +285,12 @@ export function ProjectModals({
           chapterCount={project.chapters.length}
         />
       </Modal>
+
+      <Toolbox
+        open={modals.toolbox}
+        onClose={() => closeModal('toolbox')}
+        tools={toolboxTools}
+      />
     </>
   )
 }

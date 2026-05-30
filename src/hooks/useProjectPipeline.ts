@@ -192,11 +192,15 @@ export function useProjectPipeline(options: {
 
     setPipelineStarting(true)
     try {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 30000)
       const res = await fetch(`/api/novel/projects/${projectId}/pipeline/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ speedMode: selectedSpeedMode }),
+        signal: controller.signal,
       })
+      clearTimeout(timeoutId)
       const data = await res.json()
       if (data.success) {
         toast.success('AI 生成已启动')
