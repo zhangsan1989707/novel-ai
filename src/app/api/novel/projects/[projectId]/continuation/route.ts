@@ -156,7 +156,7 @@ export async function POST(
       // 构建上下文
       const currentChapter = lastChapter
         ? toChapterDTO({ ...lastChapter, chapterNumber, title: chapterTitle })
-        : toChapterDTO({ id: 0, projectId: projectIdNum, chapterNumber, title: chapterTitle, content: '', wordCount: 0, status: 'DRAFT' as const, sortOrder: chapterNumber, summary: null, generationPrompt: null, generationParams: null, generationCount: 0, lastGeneratedTime: null, chapterOutline: null, validationReport: null, retryCount: 0, lastAgentType: null, virtualWriterId: null, createdAt: new Date(), updatedAt: new Date(), virtualWriter: null })
+        : toChapterDTO({ id: 0, projectId: projectIdNum, chapterNumber, title: chapterTitle, content: '', wordCount: 0, status: 'DRAFT' as const, sortOrder: chapterNumber, summary: null, generationPrompt: null, generationParams: null, generationCount: 0, lastGeneratedTime: null, chapterOutline: null, validationReport: null, completionReport: null, retryCount: 0, lastAgentType: null, virtualWriterId: null, createdAt: new Date(), updatedAt: new Date(), virtualWriter: null })
 
       const memoryPack = await buildChapterMemoryPack(projectIdNum, chapterNumber, {
         recentChapterCount: 5,
@@ -201,7 +201,7 @@ export async function POST(
 
       const currentChapterForContinue = lastChapter
         ? toChapterDTO({ ...lastChapter, chapterNumber, title: chapterTitle })
-        : toChapterDTO({ id: 0, projectId: projectIdNum, chapterNumber, title: chapterTitle, content: '', wordCount: 0, status: 'DRAFT' as const, sortOrder: chapterNumber, summary: null, generationPrompt: null, generationParams: null, generationCount: 0, lastGeneratedTime: null, chapterOutline: null, validationReport: null, retryCount: 0, lastAgentType: null, virtualWriterId: null, createdAt: new Date(), updatedAt: new Date(), virtualWriter: null })
+        : toChapterDTO({ id: 0, projectId: projectIdNum, chapterNumber, title: chapterTitle, content: '', wordCount: 0, status: 'DRAFT' as const, sortOrder: chapterNumber, summary: null, generationPrompt: null, generationParams: null, generationCount: 0, lastGeneratedTime: null, chapterOutline: null, validationReport: null, completionReport: null, retryCount: 0, lastAgentType: null, virtualWriterId: null, createdAt: new Date(), updatedAt: new Date(), virtualWriter: null })
 
       const memoryPack = await buildChapterMemoryPack(projectIdNum, chapterNumber, {
         recentChapterCount: Math.max(3, contextChapterCount),
@@ -240,7 +240,7 @@ export async function POST(
 
       const currentChapterForRewrite = lastChapter
         ? toChapterDTO({ ...lastChapter, chapterNumber, title: chapterTitle })
-        : toChapterDTO({ id: 0, projectId: projectIdNum, chapterNumber, title: chapterTitle, content: '', wordCount: 0, status: 'DRAFT' as const, sortOrder: chapterNumber, summary: null, generationPrompt: null, generationParams: null, generationCount: 0, lastGeneratedTime: null, chapterOutline: null, validationReport: null, retryCount: 0, lastAgentType: null, virtualWriterId: null, createdAt: new Date(), updatedAt: new Date(), virtualWriter: null })
+        : toChapterDTO({ id: 0, projectId: projectIdNum, chapterNumber, title: chapterTitle, content: '', wordCount: 0, status: 'DRAFT' as const, sortOrder: chapterNumber, summary: null, generationPrompt: null, generationParams: null, generationCount: 0, lastGeneratedTime: null, chapterOutline: null, validationReport: null, completionReport: null, retryCount: 0, lastAgentType: null, virtualWriterId: null, createdAt: new Date(), updatedAt: new Date(), virtualWriter: null })
 
       const memoryPack = await buildChapterMemoryPack(projectIdNum, chapterNumber, {
         recentChapterCount: Math.max(3, contextChapterCount),

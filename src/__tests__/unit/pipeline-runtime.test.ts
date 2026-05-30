@@ -31,7 +31,7 @@ describe('pipeline runtime live content', () => {
   })
 
   it('appends and resets live content for the active chapter', () => {
-    const runtime = createPipelineRuntimeState('fast')
+    const runtime = createPipelineRuntimeState('FAST_ACCEPTANCE')
     runtime.currentChapter = makeChapterRuntime()
 
     const appended = appendChapterLiveContent(runtime, '第一句')

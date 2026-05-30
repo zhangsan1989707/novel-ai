@@ -89,3 +89,8 @@ export {
   buildResearchPrompt,
   type ResearchPromptInput,
 } from './research'
+
+// ============================================
+// 标题工厂提示词
+// ============================================
+export { buildTitleFactoryPrompt } from '@/lib/title-strategy/prompt'
