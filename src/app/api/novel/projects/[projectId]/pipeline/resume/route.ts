@@ -46,7 +46,9 @@ export async function POST(
       : {}
     const speedMode = normalizeGenerationSpeedMode(payload.speedMode)
     if (process.env.NOVEL_AI_PIPELINE_INLINE !== 'false') {
-      void runProductionPipeline(project.pipelineJobId, { speedMode })
+      runProductionPipeline(project.pipelineJobId, { speedMode }).catch(err =>
+        console.error('Pipeline resume error:', err)
+      )
     }
 
     return NextResponse.json({ success: true, data: { jobId: project.pipelineJobId, status: 'pending', speedMode } })

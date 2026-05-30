@@ -280,18 +280,32 @@ export async function failStaleRunningJobs(
   const now = Date.now()
   const jobs = await prisma.generationJob.findMany({
     where: {
-      status: 'RUNNING',
+      status: { in: ['RUNNING', 'PENDING'] },
       ...(options.projectId ? { projectId: options.projectId } : {}),
     },
     select: {
       id: true,
+      status: true,
       payload: true,
       updatedAt: true,
+      createdAt: true,
     },
   })
 
   let failedCount = 0
   for (const job of jobs) {
+    if (job.status === 'PENDING') {
+      const pendingAge = now - job.updatedAt.getTime()
+      if (pendingAge < staleMs) continue
+
+      await failJob(
+        job.id,
+        `生成任务已排队超过 ${Math.round(staleMs / 60000)} 分钟仍未启动，已标记为失败，请重新开始`
+      )
+      failedCount++
+      continue
+    }
+
     const payload = normalizePayload(job.payload)
     const lastEventAt = readLastRuntimeEventAt(payload, job.updatedAt)
     if (now - lastEventAt.getTime() < staleMs) continue

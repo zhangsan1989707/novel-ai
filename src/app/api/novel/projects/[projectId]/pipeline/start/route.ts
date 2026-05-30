@@ -110,6 +110,12 @@ export async function POST(
     })
 
     if (activeJob) {
+      if (activeJob.status === 'PENDING') {
+        runProductionPipeline(activeJob.id, { speedMode }).catch(err =>
+          console.error('Pipeline retry error:', err)
+        )
+      }
+
       const payload = activeJob.payload && typeof activeJob.payload === 'object'
         ? activeJob.payload as Record<string, unknown>
         : {}
@@ -126,7 +132,9 @@ export async function POST(
 
     const jobId = await createJob(projectId, 'FULL_PIPELINE', speedMode)
     if (process.env.NOVEL_AI_PIPELINE_INLINE !== 'false') {
-      void runProductionPipeline(jobId, { speedMode })
+      runProductionPipeline(jobId, { speedMode }).catch(err =>
+        console.error('Pipeline start error:', err)
+      )
     }
 
     return NextResponse.json({
