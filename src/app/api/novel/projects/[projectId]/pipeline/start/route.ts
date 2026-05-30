@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { createJob, failStaleRunningJobs } from '@/lib/engine/generation-job'
+import { createJob, failStaleRunningJobs, resumeJob, updateJobStep } from '@/lib/engine/generation-job'
 import { runProductionPipeline } from '@/lib/engine/production-pipeline'
 import { getProjectMaintenanceSummary } from '@/lib/engine/auto-maintenance'
 import { getWorkflowBlockReason } from '@/lib/engine/project-flow'
@@ -111,11 +111,34 @@ export async function POST(
 
     if (activeJob) {
       if (activeJob.status === 'PENDING') {
+        // PENDING状态的任务可能是之前创建但未启动的，直接运行
+        await updateJobStep(activeJob.id, 'blueprint' as any, 1)
         runProductionPipeline(activeJob.id, { speedMode }).catch(err =>
           console.error('Pipeline retry error:', err)
         )
+      } else if (activeJob.status === 'RUNNING') {
+        // 如果已经在运行，直接返回
+        const payload = activeJob.payload && typeof activeJob.payload === 'object'
+          ? activeJob.payload as Record<string, unknown>
+          : {}
+        return NextResponse.json({
+          success: true,
+          data: {
+            jobId: activeJob.id,
+            projectId,
+            status: activeJob.status,
+            speedMode: normalizeGenerationSpeedMode(payload.speedMode),
+          },
+        })
+      } else if (activeJob.status === 'PAUSED') {
+        // 如果任务是暂停状态，先恢复它
+        await resumeJob(activeJob.id)
+        runProductionPipeline(activeJob.id, { speedMode }).catch(err =>
+          console.error('Pipeline resume error:', err)
+        )
       }
 
+      // 处理完上面的分支后返回
       const payload = activeJob.payload && typeof activeJob.payload === 'object'
         ? activeJob.payload as Record<string, unknown>
         : {}
@@ -142,7 +165,7 @@ export async function POST(
       data: {
         jobId,
         projectId,
-        status: 'pending',
+        status: 'PENDING',
         speedMode,
         runner: process.env.NOVEL_AI_PIPELINE_INLINE === 'false' ? 'external' : 'inline',
       },

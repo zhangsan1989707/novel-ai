@@ -89,7 +89,7 @@ export async function POST(
       data: {
         jobId: project.pipelineJobId,
         target,
-        status: 'pending',
+        status: 'PENDING',
         speedMode,
       },
     })

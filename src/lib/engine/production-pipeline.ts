@@ -893,13 +893,13 @@ export async function runProductionPipeline(
     const resumePlan = await resolveResumePlan(jobId)
     await clearJobRecoveryTarget(jobId)
 
-    const project = await prisma.novelProject.findUnique({
+    const projectForInit = await prisma.novelProject.findUnique({
       where: { id: projectId },
       select: { totalVolumes: true },
     })
-    if (project) {
+    if (projectForInit) {
       await initWorldState(projectId)
-      await initStoryState(projectId, project.totalVolumes * 25)
+      await initStoryState(projectId, projectForInit.totalVolumes * 25)
     }
 
     if (resumePlan.startFrom === 'blueprint') {

@@ -51,7 +51,7 @@ export async function POST(
       )
     }
 
-    return NextResponse.json({ success: true, data: { jobId: project.pipelineJobId, status: 'pending', speedMode } })
+    return NextResponse.json({ success: true, data: { jobId: project.pipelineJobId, status: 'PENDING', speedMode } })
   } catch (error) {
     console.error('Pipeline resume error:', error)
     return NextResponse.json(

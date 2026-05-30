@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { sanitizePipelineRuntime } from '@/lib/engine/pipeline-runtime'
 import { normalizeGenerationSpeedMode } from '@/lib/ai/speed-mode'
+import { failStaleRunningJobs } from '@/lib/engine/generation-job'
 
 interface RouteParams {
   params: Promise<{ projectId: string }>
@@ -132,6 +133,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   if (Number.isNaN(projectId)) {
     return new Response('invalid project id', { status: 400 })
   }
+
+  await failStaleRunningJobs({ projectId })
 
   const encoder = new TextEncoder()
   let closed = false

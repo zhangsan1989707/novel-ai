@@ -42,7 +42,7 @@ export async function POST(
       success: true,
       data: {
         jobId: project.pipelineJobId,
-        status: 'cancelled',
+        status: 'FAILED',
       },
     })
   } catch (error) {
