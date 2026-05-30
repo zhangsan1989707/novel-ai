@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Button, Badge, Modal } from '@/components/ui'
+import { Button, Badge, Modal, Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui'
 import {
   X, ChevronLeft, ChevronRight, BookOpen, FileText, Clock, Hash,
   AlertCircle, Zap, CheckCircle2, RotateCcw, Wand2, ChevronDown,
@@ -24,12 +24,48 @@ interface ChapterDrawerProps {
   onStatusChange?: (chapterId: number, newStatus: string) => void
 }
 
+interface PlanningEvent {
+  eventKey: string
+  eventDescription: string
+  status: string
+  plannedChapterNo: number | null
+  actualChapterNo: number | null
+}
+
+interface CheatState {
+  cheatName: string
+  oneLineRule: string
+  unlockedAbilities: unknown
+  currentMarkValue: number
+  currentBacklashValue: number
+  cooldownActiveUntilChapter: number | null
+}
+
+interface CompletionReport {
+  completionReport?: {
+    completionScore?: number
+    chapterGoalCompleted?: boolean
+    mainConflictProgressed?: boolean
+    endingHookExists?: boolean
+    abruptTruncationDetected?: boolean
+    issues?: Array<{ code: string; message: string }>
+  }
+  ruleFantasyResult?: {
+    score?: number
+    passed?: boolean
+    findings?: Array<{ code: string; message: string }>
+  }
+}
+
 interface ReviewData {
   validationReport: Record<string, unknown> | null
   qualityReport: ChapterQualityReport | null
   targetWordCount: number
   currentWordCount: number
   wordCountStatus: 'ok' | 'short' | 'long'
+  completionReport?: CompletionReport | null
+  arcEvents?: PlanningEvent[]
+  cheatState?: CheatState | null
 }
 
 const REJECT_REASONS = [
@@ -47,6 +83,7 @@ export function ChapterDrawer({ projectId, chapterId, chapters, onClose, onNavig
   const [reviewData, setReviewData] = useState<ReviewData | null>(null)
   const [qualityPanelOpen, setQualityPanelOpen] = useState(false)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'content' | 'planning'>('content')
 
   // 退回重写 Modal
   const [showRejectModal, setShowRejectModal] = useState(false)
@@ -103,6 +140,7 @@ export function ChapterDrawer({ projectId, chapterId, chapters, onClose, onNavig
     fetchReviewData()
     setShowRevisionPanel(false)
     setUnlocked(false)
+    setActiveTab('content')
   }, [fetchChapter, fetchReviewData])
 
   // 键盘导航
@@ -182,6 +220,7 @@ export function ChapterDrawer({ projectId, chapterId, chapters, onClose, onNavig
   const openRevision = (mode: 'polish' | 'expand') => {
     setRevisionMode(mode)
     setShowRevisionPanel(true)
+    setActiveTab('content')
   }
 
   // 润色/补全完成
@@ -223,6 +262,10 @@ export function ChapterDrawer({ projectId, chapterId, chapters, onClose, onNavig
   const isDraft = chapter?.status === 'DRAFT'
   const showReviewActions = (isReviewing || unlocked) && !showRevisionPanel
 
+  const completionReport = reviewData?.completionReport
+  const arcEvents = reviewData?.arcEvents || []
+  const cheatState = reviewData?.cheatState
+
   return (
     <>
       <div className="fixed inset-0 z-50 flex justify-end bg-black/50" onClick={onClose}>
@@ -261,9 +304,17 @@ export function ChapterDrawer({ projectId, chapterId, chapters, onClose, onNavig
                 )}
               </div>
             </div>
-            <Button variant="ghost" size="sm" onClick={onClose}>
-              <X className="h-5 w-5" />
-            </Button>
+            <div className="flex items-center gap-2">
+              <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'content' | 'planning')}>
+                <TabsList className="bg-gray-100 dark:bg-gray-800">
+                  <TabsTrigger value="content">正文</TabsTrigger>
+                  <TabsTrigger value="planning">规划对齐</TabsTrigger>
+                </TabsList>
+              </Tabs>
+              <Button variant="ghost" size="sm" onClick={onClose}>
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
           </div>
 
           {/* 内容区 */}
@@ -278,170 +329,267 @@ export function ChapterDrawer({ projectId, chapterId, chapters, onClose, onNavig
               <div className="text-center py-12 text-red-500">{error}</div>
             ) : chapter ? (
               <div>
-                {/* 润色/补全面板 */}
-                {showRevisionPanel ? (
-                  <div className="px-6 py-4">
-                    <RevisionPanel
-                      projectId={projectId}
-                      chapterId={chapter.id}
-                      currentContent={chapter.content}
-                      onApply={handleRevisionApply}
-                      onCancel={() => setShowRevisionPanel(false)}
-                      initialRevisionType={revisionMode === 'expand' ? 'expand' : 'polish'}
-                    />
-                  </div>
-                ) : (
-                  <div className="px-6 py-4 space-y-5">
-                    {/* 草稿提示 */}
-                    {chapter.isDraft && (
-                      <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
-                        <div className="flex items-center gap-2 text-sm text-yellow-800 dark:text-yellow-200">
-                          <AlertCircle className="h-4 w-4" />
-                          <span>当前展示的是生成中草稿内容，尚未通过质量校验</span>
-                        </div>
+                {activeTab === 'content' ? (
+                  <>
+                    {/* 润色/补全面板 */}
+                    {showRevisionPanel ? (
+                      <div className="px-6 py-4">
+                        <RevisionPanel
+                          projectId={projectId}
+                          chapterId={chapter.id}
+                          currentContent={chapter.content}
+                          onApply={handleRevisionApply}
+                          onCancel={() => setShowRevisionPanel(false)}
+                          initialRevisionType={revisionMode === 'expand' ? 'expand' : 'polish'}
+                        />
                       </div>
-                    )}
-
-                    {/* AI 质检区（可折叠） */}
-                    {(reviewData || isReviewing) && (
-                      <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-                        <button
-                          className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors"
-                          onClick={() => setQualityPanelOpen(!qualityPanelOpen)}
-                        >
-                          <div className="flex items-center gap-3">
-                            <Sparkles className="h-4 w-4 text-blue-500" />
-                            <span className="text-sm font-medium">AI 质检报告</span>
-                            {reviewData?.qualityReport && (
-                              <Badge
-                                variant={
-                                  reviewData.qualityReport.overallScore >= 70 ? 'success'
-                                    : reviewData.qualityReport.overallScore >= 40 ? 'warning'
-                                    : 'danger'
-                                }
-                                className="text-xs"
-                              >
-                                {reviewData.qualityReport.overallScore}分
-                              </Badge>
-                            )}
-                            {wordCountHint && (
-                              <Badge
-                                variant={wordCountHint.type === 'success' ? 'success' : wordCountHint.type === 'warning' ? 'warning' : 'default'}
-                                className="text-xs"
-                              >
-                                {wordCountHint.type === 'success' ? '字数达标' : wordCountHint.type === 'warning' ? '字数不足' : '字数偏多'}
-                              </Badge>
-                            )}
+                    ) : (
+                      <div className="px-6 py-4 space-y-5">
+                        {/* 草稿提示 */}
+                        {chapter.isDraft && (
+                          <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                            <div className="flex items-center gap-2 text-sm text-yellow-800 dark:text-yellow-200">
+                              <AlertCircle className="h-4 w-4" />
+                              <span>当前展示的是生成中草稿内容，尚未通过质量校验</span>
+                            </div>
                           </div>
-                          {qualityPanelOpen ? (
-                            <ChevronUp className="h-4 w-4 text-gray-400" />
-                          ) : (
-                            <ChevronDown className="h-4 w-4 text-gray-400" />
-                          )}
-                        </button>
+                        )}
 
-                        {qualityPanelOpen && (
-                          <div className="px-4 py-3 space-y-3 border-t border-gray-200 dark:border-gray-700">
-                            {/* 字数状态 */}
-                            {wordCountHint && (
-                              <div className={`text-sm px-3 py-2 rounded-lg ${
-                                wordCountHint.type === 'success'
-                                  ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300'
-                                  : wordCountHint.type === 'warning'
-                                    ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300'
-                                    : 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300'
-                              }`}>
-                                {wordCountHint.text}
+                        {/* AI 质检区（可折叠） */}
+                        {(reviewData || isReviewing) && (
+                          <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                            <button
+                              className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors"
+                              onClick={() => setQualityPanelOpen(!qualityPanelOpen)}
+                            >
+                              <div className="flex items-center gap-3">
+                                <Sparkles className="h-4 w-4 text-blue-500" />
+                                <span className="text-sm font-medium">AI 质检报告</span>
+                                {reviewData?.qualityReport && (
+                                  <Badge
+                                    variant={
+                                      reviewData.qualityReport.overallScore >= 70 ? 'success'
+                                        : reviewData.qualityReport.overallScore >= 40 ? 'warning'
+                                        : 'danger'
+                                    }
+                                    className="text-xs"
+                                  >
+                                    {reviewData.qualityReport.overallScore}分
+                                  </Badge>
+                                )}
+                                {wordCountHint && (
+                                  <Badge
+                                    variant={wordCountHint.type === 'success' ? 'success' : wordCountHint.type === 'warning' ? 'warning' : 'default'}
+                                    className="text-xs"
+                                  >
+                                    {wordCountHint.type === 'success' ? '字数达标' : wordCountHint.type === 'warning' ? '字数不足' : '字数偏多'}
+                                  </Badge>
+                                )}
                               </div>
-                            )}
+                              {qualityPanelOpen ? (
+                                <ChevronUp className="h-4 w-4 text-gray-400" />
+                              ) : (
+                                <ChevronDown className="h-4 w-4 text-gray-400" />
+                              )}
+                            </button>
 
-                            {/* 质量维度 */}
-                            {reviewData?.qualityReport && (
-                              <>
-                                {reviewData.qualityReport.issues.length > 0 && (
-                                  <div>
-                                    <h4 className="text-xs font-medium text-gray-500 mb-2">问题 ({reviewData.qualityReport.issues.length})</h4>
-                                    <div className="space-y-1">
-                                      {reviewData.qualityReport.issues.slice(0, 5).map((issue, i) => (
-                                        <div key={i} className="flex items-start gap-2 text-sm">
-                                          <Badge
-                                            variant={issue.severity === 'critical' ? 'danger' : issue.severity === 'warning' ? 'warning' : 'default'}
-                                            className="text-xs shrink-0 mt-0.5"
-                                          >
-                                            {issue.severity === 'critical' ? '严重' : issue.severity === 'warning' ? '警告' : '提示'}
-                                          </Badge>
-                                          <span className="text-gray-600 dark:text-gray-300">{issue.description}</span>
+                            {qualityPanelOpen && (
+                              <div className="px-4 py-3 space-y-3 border-t border-gray-200 dark:border-gray-700">
+                                {/* 字数状态 */}
+                                {wordCountHint && (
+                                  <div className={`text-sm px-3 py-2 rounded-lg ${
+                                    wordCountHint.type === 'success'
+                                      ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300'
+                                      : wordCountHint.type === 'warning'
+                                        ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300'
+                                        : 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300'
+                                  }`}>
+                                    {wordCountHint.text}
+                                  </div>
+                                )}
+
+                                {/* 质量维度 */}
+                                {reviewData?.qualityReport && (
+                                  <>
+                                    {reviewData.qualityReport.issues.length > 0 && (
+                                      <div>
+                                        <h4 className="text-xs font-medium text-gray-500 mb-2">问题 ({reviewData.qualityReport.issues.length})</h4>
+                                        <div className="space-y-1">
+                                          {reviewData.qualityReport.issues.slice(0, 5).map((issue, i) => (
+                                            <div key={i} className="flex items-start gap-2 text-sm">
+                                              <Badge
+                                                variant={issue.severity === 'critical' ? 'danger' : issue.severity === 'warning' ? 'warning' : 'default'}
+                                                className="text-xs shrink-0 mt-0.5"
+                                              >
+                                                {issue.severity === 'critical' ? '严重' : issue.severity === 'warning' ? '警告' : '提示'}
+                                              </Badge>
+                                              <span className="text-gray-600 dark:text-gray-300">{issue.description}</span>
+                                            </div>
+                                          ))}
                                         </div>
-                                      ))}
-                                    </div>
-                                  </div>
+                                      </div>
+                                    )}
+                                    {reviewData.qualityReport.suggestions.length > 0 && (
+                                      <div>
+                                        <h4 className="text-xs font-medium text-gray-500 mb-2">建议</h4>
+                                        <ul className="space-y-1">
+                                          {reviewData.qualityReport.suggestions.slice(0, 3).map((s, i) => (
+                                            <li key={i} className="text-sm text-gray-600 dark:text-gray-300 flex items-start gap-2">
+                                              <span className="text-blue-500 mt-0.5">·</span>
+                                              {s}
+                                            </li>
+                                          ))}
+                                        </ul>
+                                      </div>
+                                    )}
+                                  </>
                                 )}
-                                {reviewData.qualityReport.suggestions.length > 0 && (
-                                  <div>
-                                    <h4 className="text-xs font-medium text-gray-500 mb-2">建议</h4>
-                                    <ul className="space-y-1">
-                                      {reviewData.qualityReport.suggestions.slice(0, 3).map((s, i) => (
-                                        <li key={i} className="text-sm text-gray-600 dark:text-gray-300 flex items-start gap-2">
-                                          <span className="text-blue-500 mt-0.5">·</span>
-                                          {s}
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                )}
-                              </>
-                            )}
 
-                            {/* AI 去味面板入口 */}
-                            {chapter.content && (
-                              <div className="pt-2 border-t border-gray-100 dark:border-gray-700">
-                                <ChapterQualityPanel
-                                  projectId={projectId}
-                                  chapterId={chapter.id}
-                                  chapterNumber={chapter.chapterNo}
-                                  chapterTitle={chapter.title}
-                                  content={chapter.content}
-                                  onOptimizeComplete={(revised) => {
-                                    setChapter(prev => prev ? { ...prev, content: revised } : prev)
-                                    toast.success('已应用优化')
-                                  }}
-                                />
+                                {/* AI 去味面板入口 */}
+                                {chapter.content && (
+                                  <div className="pt-2 border-t border-gray-100 dark:border-gray-700">
+                                    <ChapterQualityPanel
+                                      projectId={projectId}
+                                      chapterId={chapter.id}
+                                      chapterNumber={chapter.chapterNo}
+                                      chapterTitle={chapter.title}
+                                      content={chapter.content}
+                                      onOptimizeComplete={(revised) => {
+                                        setChapter(prev => prev ? { ...prev, content: revised } : prev)
+                                        toast.success('已应用优化')
+                                      }}
+                                    />
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>
                         )}
+
+                        {/* 摘要区 */}
+                        {chapter.summary && (
+                          <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                            <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">章节摘要</h3>
+                            <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{chapter.summary}</p>
+                          </div>
+                        )}
+
+                        {/* 正文区 */}
+                        <div>
+                          <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">正文内容</h3>
+                          {!chapter.isEmpty ? (
+                            <div
+                              className="text-gray-800 dark:text-gray-200"
+                              style={{ fontSize: '16px', lineHeight: 1.9 }}
+                            >
+                              {chapter.content.split('\n').map((paragraph, i) => (
+                                paragraph.trim() ? (
+                                  <p key={i} className="mb-4">{paragraph}</p>
+                                ) : null
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-center py-12 text-gray-400">
+                              <FileText className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                              <p>正文尚未生成或尚未同步完成</p>
+                              <p className="text-sm mt-1">生成中的内容将在完成后显示</p>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
-
-                    {/* 摘要区 */}
-                    {chapter.summary && (
-                      <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                        <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">章节摘要</h3>
-                        <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{chapter.summary}</p>
+                  </>
+                ) : (
+                  <div className="px-6 py-4 space-y-5">
+                    <div className="p-4 rounded-lg border border-gray-200 dark:border-gray-700 space-y-3">
+                      <h3 className="text-sm font-medium text-gray-600 dark:text-gray-200">章节目标与完成情况</h3>
+                      <div className="text-sm text-gray-600 dark:text-gray-300">目标：{chapter.summary || '未设置章节目标'}</div>
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        <div className={`px-3 py-2 rounded-lg ${completionReport?.completionReport?.chapterGoalCompleted ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300' : 'bg-yellow-50 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-300'}`}>
+                          {completionReport?.completionReport?.chapterGoalCompleted ? '目标完成' : '目标未确认完成'}
+                        </div>
+                        <div className={`px-3 py-2 rounded-lg ${completionReport?.completionReport?.mainConflictProgressed ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300' : 'bg-yellow-50 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-300'}`}>
+                          {completionReport?.completionReport?.mainConflictProgressed ? '主冲突推进' : '主冲突未明显推进'}
+                        </div>
+                        <div className={`px-3 py-2 rounded-lg ${completionReport?.completionReport?.endingHookExists ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300' : 'bg-yellow-50 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-300'}`}>
+                          {completionReport?.completionReport?.endingHookExists ? '结尾钩子存在' : '结尾钩子不足'}
+                        </div>
+                        <div className={`px-3 py-2 rounded-lg ${completionReport?.completionReport?.abruptTruncationDetected ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300' : 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300'}`}>
+                          {completionReport?.completionReport?.abruptTruncationDetected ? '疑似异常截断' : '未检测到截断'}
+                        </div>
                       </div>
-                    )}
-
-                    {/* 正文区 */}
-                    <div>
-                      <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">正文内容</h3>
-                      {!chapter.isEmpty ? (
-                        <div
-                          className="text-gray-800 dark:text-gray-200"
-                          style={{ fontSize: '16px', lineHeight: 1.9 }}
-                        >
-                          {chapter.content.split('\n').map((paragraph, i) => (
-                            paragraph.trim() ? (
-                              <p key={i} className="mb-4">{paragraph}</p>
-                            ) : null
+                      <div className="text-sm text-gray-500">
+                        完成分：{completionReport?.completionReport?.completionScore ?? '-'}
+                        {completionReport?.ruleFantasyResult ? ` / 规则校验分：${completionReport.ruleFantasyResult.score ?? '-'}` : ''}
+                      </div>
+                      {(completionReport?.completionReport?.issues?.length || completionReport?.ruleFantasyResult?.findings?.length) ? (
+                        <div className="space-y-1 text-sm text-gray-600 dark:text-gray-300">
+                          {(completionReport?.completionReport?.issues || []).slice(0, 3).map((issue, i) => (
+                            <div key={`c-${i}`} className="flex items-start gap-2">
+                              <Badge variant="warning" className="text-xs shrink-0 mt-0.5">{issue.code}</Badge>
+                              <span>{issue.message}</span>
+                            </div>
+                          ))}
+                          {(completionReport?.ruleFantasyResult?.findings || []).slice(0, 3).map((finding, i) => (
+                            <div key={`r-${i}`} className="flex items-start gap-2">
+                              <Badge variant="danger" className="text-xs shrink-0 mt-0.5">{finding.code}</Badge>
+                              <span>{finding.message}</span>
+                            </div>
                           ))}
                         </div>
+                      ) : null}
+                    </div>
+
+                    <div className="p-4 rounded-lg border border-gray-200 dark:border-gray-700 space-y-3">
+                      <h3 className="text-sm font-medium text-gray-600 dark:text-gray-200">对应 Arc 事件</h3>
+                      {arcEvents.length === 0 ? (
+                        <div className="text-sm text-gray-500">暂无待推进事件</div>
                       ) : (
-                        <div className="text-center py-12 text-gray-400">
-                          <FileText className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                          <p>正文尚未生成或尚未同步完成</p>
-                          <p className="text-sm mt-1">生成中的内容将在完成后显示</p>
+                        <div className="space-y-2 text-sm text-gray-600 dark:text-gray-300">
+                          {arcEvents.slice(0, 6).map(event => (
+                            <div key={event.eventKey} className="flex items-start justify-between gap-3">
+                              <div>
+                                <div className="font-medium">{event.eventDescription}</div>
+                                <div className="text-xs text-gray-400">{event.eventKey}</div>
+                              </div>
+                              <Badge variant={event.status === 'started' ? 'primary' : event.status === 'delayed' ? 'warning' : 'default'} className="text-xs shrink-0">
+                                {event.status}
+                              </Badge>
+                            </div>
+                          ))}
                         </div>
                       )}
+                    </div>
+
+                    <div className="p-4 rounded-lg border border-gray-200 dark:border-gray-700 space-y-3">
+                      <h3 className="text-sm font-medium text-gray-600 dark:text-gray-200">金手指状态</h3>
+                      {cheatState ? (
+                        <div className="text-sm text-gray-600 dark:text-gray-300 space-y-1">
+                          <div>名称：{cheatState.cheatName}</div>
+                          <div>规则：{cheatState.oneLineRule}</div>
+                          <div>标记值：{cheatState.currentMarkValue} / 反噬值：{cheatState.currentBacklashValue}</div>
+                          <div>{cheatState.cooldownActiveUntilChapter ? `冷却到第${cheatState.cooldownActiveUntilChapter}章` : '当前无冷却'}</div>
+                        </div>
+                      ) : (
+                        <div className="text-sm text-gray-500">未检测到金手指状态</div>
+                      )}
+                    </div>
+
+                    <div className="p-4 rounded-lg border border-gray-200 dark:border-gray-700 space-y-3">
+                      <h3 className="text-sm font-medium text-gray-600 dark:text-gray-200">是否需要续写</h3>
+                      <div className="text-sm text-gray-600 dark:text-gray-300">
+                        {isCompleted ? '本章已锁定，可在需要时选择补完或润色。' : '本章尚未锁定，建议先补完未达标项再进入下一章。'}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button variant="primary" size="sm" className="gap-1.5" onClick={() => openRevision('expand')}>
+                          <Wand2 className="h-4 w-4" />
+                          一键补完本章
+                        </Button>
+                        <Button variant="outline" size="sm" className="gap-1.5" onClick={() => openRevision('polish')}>
+                          <PenLine className="h-4 w-4" />
+                          局部润色
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 )}
