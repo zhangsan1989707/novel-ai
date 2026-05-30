@@ -1,8 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { Button, Input, Select, toast } from '@/components/ui'
-import { Play, Loader2, Eye, EyeOff, ChevronDown, ChevronUp } from 'lucide-react'
+import { Button, Input, Select } from '@/components/ui'
+import { Play, Loader2, Eye, EyeOff, ChevronDown, ChevronUp, Settings2, Shield, CheckCircle2 } from 'lucide-react'
 import { AIVendor } from '@/types'
 
 interface AIConfigFormData {
@@ -31,15 +31,15 @@ interface AIConfigFormProps {
   testResult: { success: boolean; message: string } | null
 }
 
-const vendorMeta: Record<AIVendor, { label: string; icon: string; needsEndpoint: boolean }> = {
-  [AIVendor.OPENAI]: { label: 'OpenAI', icon: '🤖', needsEndpoint: false },
-  [AIVendor.ANTHROPIC]: { label: 'Anthropic (Claude)', icon: '🧠', needsEndpoint: false },
-  [AIVendor.ALIBABA]: { label: '阿里云 (通义千问)', icon: '☁️', needsEndpoint: false },
-  [AIVendor.DEEPSEEK]: { label: 'DeepSeek', icon: '🔍', needsEndpoint: false },
-  [AIVendor.MINIMAX]: { label: 'MiniMax', icon: '⚡', needsEndpoint: false },
-  [AIVendor.MIMO]: { label: '小米 MiMo', icon: '📱', needsEndpoint: true },
-  [AIVendor.VOLCENGINE]: { label: '火山引擎 (字节)', icon: '🌋', needsEndpoint: true },
-  [AIVendor.ZHIPU]: { label: '智谱 AI (GLM)', icon: '💎', needsEndpoint: true },
+const vendorMeta: Record<AIVendor, { label: string; icon: string; desc: string; needsEndpoint: boolean }> = {
+  [AIVendor.OPENAI]: { label: 'OpenAI', icon: '🤖', desc: 'GPT-4o / o1 系列', needsEndpoint: false },
+  [AIVendor.ANTHROPIC]: { label: 'Anthropic', icon: '🧠', desc: 'Claude Sonnet / Opus', needsEndpoint: false },
+  [AIVendor.ALIBABA]: { label: '阿里云', icon: '☁️', desc: '通义千问 Qwen 系列', needsEndpoint: false },
+  [AIVendor.DEEPSEEK]: { label: 'DeepSeek', icon: '🔍', desc: 'DeepSeek V4 / R1', needsEndpoint: false },
+  [AIVendor.MINIMAX]: { label: 'MiniMax', icon: '⚡', desc: 'MiniMax-Text-01', needsEndpoint: false },
+  [AIVendor.MIMO]: { label: '小米 MiMo', icon: '📱', desc: 'MiMo 系列模型', needsEndpoint: true },
+  [AIVendor.VOLCENGINE]: { label: '火山引擎', icon: '🌋', desc: '豆包 / Ark 系列', needsEndpoint: true },
+  [AIVendor.ZHIPU]: { label: '智谱 AI', icon: '💎', desc: 'GLM-4 系列', needsEndpoint: true },
 }
 
 const vendorOptions = Object.entries(vendorMeta).map(([value, meta]) => ({
@@ -118,127 +118,164 @@ export function AIConfigForm({
   const presets = modelPresets[currentVendor] || []
 
   return (
-    <div className="space-y-5">
-      <Input
-        label="配置名称"
-        placeholder="如：我的 DeepSeek"
-        value={formData.name}
-        onChange={(e) => update({ name: e.target.value })}
-      />
+    <div className="space-y-0">
+      <SectionHeader icon={<Settings2 className="h-4 w-4" />} title="基础设置" />
 
-      <Select
-        label="AI 提供商"
-        options={vendorOptions}
-        value={formData.vendor}
-        onChange={(e) => handleVendorChange(e.target.value as AIVendor)}
-      />
+      <div className="space-y-4 px-0.5">
+        <Input
+          label="配置名称"
+          placeholder="如：我的 DeepSeek"
+          value={formData.name}
+          onChange={(e) => update({ name: e.target.value })}
+        />
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-          模型 ID
-        </label>
-        {presets.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mb-2">
-            {presets.map((preset) => (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            AI 提供商
+          </label>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {(Object.entries(vendorMeta) as [AIVendor, typeof vendorMeta[AIVendor]][]).map(([vendor, meta]) => (
               <button
-                key={preset}
+                key={vendor}
                 type="button"
-                onClick={() => update({ modelId: preset })}
-                className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
-                  formData.modelId === preset
-                    ? 'border-blue-400 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
-                    : 'border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:border-gray-600 dark:text-gray-400'
+                onClick={() => handleVendorChange(vendor)}
+                className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 transition-all duration-200 ${
+                  currentVendor === vendor
+                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/40 dark:border-blue-400 shadow-sm'
+                    : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/50 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800'
                 }`}
               >
-                {preset}
+                <span className="text-xl">{meta.icon}</span>
+                <span className={`text-xs font-medium ${
+                  currentVendor === vendor
+                    ? 'text-blue-700 dark:text-blue-300'
+                    : 'text-gray-700 dark:text-gray-300'
+                }`}>
+                  {meta.label}
+                </span>
               </button>
             ))}
           </div>
-        )}
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            模型 ID
+          </label>
+          {presets.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-2.5">
+              {presets.map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => update({ modelId: preset })}
+                  className={`px-3 py-1.5 text-xs rounded-lg border transition-all duration-200 ${
+                    formData.modelId === preset
+                      ? 'border-blue-400 bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:border-blue-500 dark:text-blue-300 shadow-sm'
+                      : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300 bg-white dark:bg-gray-800/50'
+                  }`}
+                >
+                  {preset}
+                </button>
+              ))}
+            </div>
+          )}
+          <Input
+            placeholder="输入模型 ID 或点击上方预设"
+            value={formData.modelId}
+            onChange={(e) => update({ modelId: e.target.value })}
+          />
+        </div>
+
         <Input
-          placeholder="输入模型 ID 或点击上方预设"
-          value={formData.modelId}
-          onChange={(e) => update({ modelId: e.target.value })}
+          label="API Key"
+          type={showApiKey ? 'text' : 'password'}
+          placeholder={editing ? '留空则保持不变，或输入新的 API Key' : '请输入您的 API Key'}
+          value={formData.apiKey}
+          onChange={(e) => update({ apiKey: e.target.value })}
+          rightAction={
+            <button
+              type="button"
+              onClick={() => setShowApiKey(!showApiKey)}
+              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+            >
+              {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          }
         />
+
+        {needsEndpoint && (
+          <Input
+            label="API 端点"
+            placeholder="如：https://ark.cn-beijing.volces.com/api/coding/v3"
+            value={formData.apiEndpoint}
+            onChange={(e) => update({ apiEndpoint: e.target.value })}
+          />
+        )}
       </div>
 
-      <Input
-        label="API Key"
-        type={showApiKey ? 'text' : 'password'}
-        placeholder={editing ? '留空则保持不变，或输入新的 API Key' : '请输入您的 API Key'}
-        value={formData.apiKey}
-        onChange={(e) => update({ apiKey: e.target.value })}
-        rightAction={
-          <button
-            type="button"
-            onClick={() => setShowApiKey(!showApiKey)}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
-          >
-            {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-          </button>
-        }
+      <div className="my-5">
+        <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20">
+          <input
+            type="checkbox"
+            id="isDefault"
+            checked={formData.isDefault}
+            onChange={(e) => update({ isDefault: e.target.checked })}
+            className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 dark:bg-gray-800"
+          />
+          <label htmlFor="isDefault" className="flex items-center gap-1.5 text-sm text-blue-700 dark:text-blue-300 cursor-pointer">
+            <CheckCircle2 className="h-4 w-4" />
+            设为默认配置
+          </label>
+        </div>
+      </div>
+
+      <SectionHeader
+        icon={<Shield className="h-4 w-4" />}
+        title="RAG 向量化"
+        subtitle="可选 · 章节检索与记忆召回"
+        collapsible
+        expanded={showEmbedding}
+        onToggle={() => setShowEmbedding(!showEmbedding)}
       />
 
-      {needsEndpoint && (
-        <Input
-          label="API 端点"
-          placeholder="如：https://ark.cn-beijing.volces.com/api/coding/v3"
-          value={formData.apiEndpoint}
-          onChange={(e) => update({ apiEndpoint: e.target.value })}
-        />
-      )}
-
-      <div className="border border-border rounded-lg overflow-hidden">
-        <button
-          type="button"
-          onClick={() => setShowEmbedding(!showEmbedding)}
-          className="flex items-center justify-between w-full px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
-        >
-          <div>
-            <span>RAG 向量化设置</span>
-            <span className="ml-2 text-xs text-gray-400 font-normal">(可选)</span>
-          </div>
-          {showEmbedding ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-        </button>
-        {showEmbedding && (
-          <div className="px-4 pb-4 space-y-3 border-t border-border pt-3">
-            <p className="text-xs text-gray-400">
-              用于章节检索和记忆召回。可单独指定 embedding 提供商、端点和密钥。
-            </p>
-            <Select
-              label="Embedding 提供商"
-              options={vendorOptions}
-              value={formData.embeddingVendor || AIVendor.OPENAI}
-              onChange={(e) => {
-                const embeddingVendor = e.target.value as AIVendor
-                update({
-                  embeddingVendor,
-                  embeddingApiEndpoint: formData.embeddingApiEndpoint || defaultEmbeddingApiEndpoints[embeddingVendor] || '',
-                  embeddingModelId: formData.embeddingModelId || defaultEmbeddingModelIds[embeddingVendor] || '',
-                })
-              }}
-            />
+      {showEmbedding && (
+        <div className="space-y-4 px-0.5 pb-2">
+          <Select
+            label="Embedding 提供商"
+            options={vendorOptions}
+            value={formData.embeddingVendor || AIVendor.OPENAI}
+            onChange={(e) => {
+              const embeddingVendor = e.target.value as AIVendor
+              update({
+                embeddingVendor,
+                embeddingApiEndpoint: formData.embeddingApiEndpoint || defaultEmbeddingApiEndpoints[embeddingVendor] || '',
+                embeddingModelId: formData.embeddingModelId || defaultEmbeddingModelIds[embeddingVendor] || '',
+              })
+            }}
+          />
+          <Input
+            label="API Key（可选）"
+            type={showApiKey ? 'text' : 'password'}
+            placeholder="向量服务对应的 API Key"
+            value={formData.embeddingApiKey}
+            onChange={(e) => update({ embeddingApiKey: e.target.value })}
+          />
+          <Input
+            label="端点（可选）"
+            placeholder="如：https://api.openai.com/v1"
+            value={formData.embeddingApiEndpoint}
+            onChange={(e) => update({ embeddingApiEndpoint: e.target.value })}
+          />
+          <div className="grid grid-cols-2 gap-3">
             <Input
-              label="Embedding API Key（可选）"
-              type={showApiKey ? 'text' : 'password'}
-              placeholder="如：向量服务对应的 API Key"
-              value={formData.embeddingApiKey}
-              onChange={(e) => update({ embeddingApiKey: e.target.value })}
-            />
-            <Input
-              label="Embedding 端点（可选）"
-              placeholder="如：https://api.openai.com/v1"
-              value={formData.embeddingApiEndpoint}
-              onChange={(e) => update({ embeddingApiEndpoint: e.target.value })}
-            />
-            <Input
-              label="Embedding 模型 ID（可选）"
+              label="模型 ID（可选）"
               placeholder="如：text-embedding-3-small"
               value={formData.embeddingModelId}
               onChange={(e) => update({ embeddingModelId: e.target.value })}
             />
             <Input
-              label="Embedding 维度（可选）"
+              label="维度（可选）"
               type="number"
               min={64}
               max={3072}
@@ -247,31 +284,27 @@ export function AIConfigForm({
               onChange={(e) => update({ embeddingDimensions: e.target.value })}
             />
           </div>
-        )}
-      </div>
-
-      <div className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          id="isDefault"
-          checked={formData.isDefault}
-          onChange={(e) => update({ isDefault: e.target.checked })}
-          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-        />
-        <label htmlFor="isDefault" className="text-sm text-gray-600 dark:text-gray-400">
-          设为默认配置
-        </label>
-      </div>
-
-      {testResult && (
-        <div className={`flex items-center gap-2 p-3 rounded-lg text-sm ${
-          testResult.success ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'
-        }`}>
-          {testResult.success ? '✅' : '❌'} {testResult.message}
         </div>
       )}
 
-      <div className="flex gap-3 justify-end pt-2">
+      {testResult && (
+        <div className={`mt-4 flex items-center gap-2.5 p-3 rounded-xl text-sm ${
+          testResult.success
+            ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+            : 'bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800'
+        }`}>
+          <span className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs ${
+            testResult.success
+              ? 'bg-emerald-100 dark:bg-emerald-900/50'
+              : 'bg-red-100 dark:bg-red-900/50'
+          }`}>
+            {testResult.success ? '✓' : '✗'}
+          </span>
+          {testResult.message}
+        </div>
+      )}
+
+      <div className="flex gap-3 justify-end pt-5 mt-2 border-t border-gray-100 dark:border-gray-800">
         <Button type="button" variant="outline" onClick={onCancel}>
           取消
         </Button>
@@ -286,6 +319,50 @@ export function AIConfigForm({
       </div>
     </div>
   )
+}
+
+function SectionHeader({
+  icon,
+  title,
+  subtitle,
+  collapsible,
+  expanded,
+  onToggle,
+}: {
+  icon: React.ReactNode
+  title: string
+  subtitle?: string
+  collapsible?: boolean
+  expanded?: boolean
+  onToggle?: () => void
+}) {
+  const content = (
+    <div className="flex items-center gap-2">
+      <span className="text-gray-500 dark:text-gray-400">{icon}</span>
+      <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">{title}</span>
+      {subtitle && (
+        <span className="text-xs text-gray-400 dark:text-gray-500 font-normal">{subtitle}</span>
+      )}
+    </div>
+  )
+
+  if (collapsible && onToggle) {
+    return (
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex items-center justify-between w-full py-3 mt-1"
+      >
+        {content}
+        <span className="text-gray-400 dark:text-gray-500 transition-transform duration-200"
+          style={{ transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+          <ChevronDown className="h-4 w-4" />
+        </span>
+      </button>
+    )
+  }
+
+  return <div className="py-3 mt-1">{content}</div>
 }
 
 export {

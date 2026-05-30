@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Button, Input, Select, Modal, Badge, Card, CardContent, toast } from '@/components/ui'
-import { Plus, Key, Search, Zap, AlertTriangle, Filter, X } from 'lucide-react'
+import { Button, Select, Modal, Badge, Card, CardContent, toast } from '@/components/ui'
+import { Plus, Key, Search, AlertTriangle, X } from 'lucide-react'
 import { AIVendor } from '@/types'
 import { AIConfigCard } from '@/components/ai/AIConfigCard'
 import {
@@ -64,7 +64,6 @@ export default function SettingsPage() {
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [vendorFilter, setVendorFilter] = useState<VendorFilter>('ALL')
-  const [showApiKey, setShowApiKey] = useState(false)
 
   const [formData, setFormData] = useState<AIConfigFormData>({
     name: '',
@@ -113,7 +112,6 @@ export default function SettingsPage() {
 
   const openModal = (config?: AIConfig) => {
     setTestResult(null)
-    setShowApiKey(false)
     if (config) {
       setEditingConfig(config)
       setFormData({
@@ -322,30 +320,34 @@ export default function SettingsPage() {
 
       <div className="max-w-5xl mx-auto space-y-6">
         {!loading && (
-          <Card className={defaultConfig ? 'border-blue-200 bg-blue-50/50' : 'border-amber-200 bg-amber-50/50'}>
+          <Card className={
+            defaultConfig
+              ? 'border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20'
+              : 'border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20'
+          }>
             <CardContent className="p-4">
               {defaultConfig ? (
                 <div className="flex items-center gap-3">
                   <span className="text-xl">{vendorMeta[defaultConfig.vendor]?.icon || '🤖'}</span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-blue-700">
+                    <p className="text-sm font-medium text-blue-700 dark:text-blue-300">
                       当前默认配置：
                       <span className="font-bold">{defaultConfig.name}</span>
                       <Badge variant="outline" className="ml-2 text-xs">
                         {vendorMeta[defaultConfig.vendor]?.label || defaultConfig.vendor}
                       </Badge>
                     </p>
-                    <p className="text-xs text-blue-500 mt-0.5">
+                    <p className="text-xs text-blue-500 dark:text-blue-400 mt-0.5">
                       模型 {defaultConfig.modelId}，所有 AI 功能将默认使用此配置
                     </p>
                   </div>
                 </div>
               ) : (
                 <div className="flex items-center gap-3">
-                  <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0" />
+                  <AlertTriangle className="h-5 w-5 text-amber-500 dark:text-amber-400 shrink-0" />
                   <div>
-                    <p className="text-sm font-medium text-amber-700">未设置默认配置</p>
-                    <p className="text-xs text-amber-500 mt-0.5">
+                    <p className="text-sm font-medium text-amber-700 dark:text-amber-300">未设置默认配置</p>
+                    <p className="text-xs text-amber-500 dark:text-amber-400 mt-0.5">
                       系统将使用环境变量中的 AI 配置作为备选。建议点击「设为默认」指定一个配置。
                     </p>
                   </div>
@@ -358,19 +360,19 @@ export default function SettingsPage() {
         {!loading && configs.length > 0 && (
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" />
               <input
                 type="text"
                 placeholder="搜索配置名称或模型..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-8 h-10 rounded-lg border border-gray-300 text-sm bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full pl-9 pr-8 h-10 rounded-lg border border-gray-300 dark:border-gray-600 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent"
               />
               {searchQuery && (
                 <button
                   type="button"
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -390,15 +392,15 @@ export default function SettingsPage() {
         )}
 
         {loading ? (
-          <div className="text-center py-12 text-gray-500">加载中...</div>
+          <div className="text-center py-12 text-gray-500 dark:text-gray-400">加载中...</div>
         ) : filteredConfigs.length === 0 ? (
-          <Card>
+          <Card className="border-gray-200 dark:border-gray-700">
             <CardContent className="p-8 text-center">
               {configs.length === 0 ? (
                 <>
-                  <Key className="h-12 w-12 mx-auto text-gray-300 mb-4" />
-                  <h3 className="font-medium mb-2">暂无 AI 配置</h3>
-                  <p className="text-sm text-gray-500 mb-4">添加您的第一个 AI API 配置</p>
+                  <Key className="h-12 w-12 mx-auto text-gray-300 dark:text-gray-600 mb-4" />
+                  <h3 className="font-medium text-gray-900 dark:text-gray-200 mb-2">暂无 AI 配置</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">添加您的第一个 AI API 配置</p>
                   <Button type="button" onClick={() => openModal()}>
                     <Plus className="h-4 w-4 mr-2" />
                     添加配置
@@ -406,9 +408,9 @@ export default function SettingsPage() {
                 </>
               ) : (
                 <>
-                  <Search className="h-12 w-12 mx-auto text-gray-300 mb-4" />
-                  <h3 className="font-medium mb-2">没有匹配的配置</h3>
-                  <p className="text-sm text-gray-500">尝试调整搜索条件或清除筛选</p>
+                  <Search className="h-12 w-12 mx-auto text-gray-300 dark:text-gray-600 mb-4" />
+                  <h3 className="font-medium text-gray-900 dark:text-gray-200 mb-2">没有匹配的配置</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">尝试调整搜索条件或清除筛选</p>
                 </>
               )}
             </CardContent>
