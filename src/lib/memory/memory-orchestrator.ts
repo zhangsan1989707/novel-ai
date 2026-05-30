@@ -398,7 +398,7 @@ export async function buildChapterMemoryPack(
   const characterLimit = options.characterLimit ?? 10
   const plotlineLimit = options.plotlineLimit ?? 10
   const researchLimit = options.researchLimit ?? 3
-  const skipAIRerank = options.speedMode !== 'quality'
+  const skipAIRerank = options.speedMode !== 'FINAL_POLISH'
 
   const project = await prisma.novelProject.findUnique({
     where: { id: projectId },

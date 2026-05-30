@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Button, Input, Textarea, Modal } from '@/components/ui'
+import { Button, Input, Textarea, Modal, Card, CardContent, ErrorBoundary } from '@/components/ui'
 import { toast } from '@/components/ui/Toast'
 import { ArrowLeft, Save, Trash2, FileText, Wand2, Edit3, X, BookOpen, RefreshCw, Shield, Clock, Hash, Zap, AlertCircle } from 'lucide-react'
 import { ChapterStatus } from '@/types'
@@ -24,7 +24,7 @@ interface ChapterEditorProps {
 export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: ChapterEditorProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const [rawChapter, setRawChapter] = useState<ChapterRawData>(initialChapter || {
+  const [rawChapter, setRawChapter] = useState<ChapterRawData>((initialChapter as ChapterRawData) || {
     id: 0,
     chapterNumber: 0,
     title: '',
@@ -155,6 +155,8 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
 
   const handleOptimizeComplete = useCallback((revisedContent: string) => {
     setRawChapter(prev => ({ ...prev, content: revisedContent }))
+    setShowQualityPanel(false)
+    setShowAntiDetectPanel(false)
   }, [])
 
   const openRevisionModal = useCallback((mode: RevisionType) => {
@@ -263,7 +265,7 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setShowAntiDetectPanel(true)}
+            onClick={() => setShowAntiDetectPanel(!showAntiDetectPanel)}
             className="gap-1.5"
           >
             <Shield className="h-4 w-4" />
@@ -272,7 +274,7 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setShowQualityPanel(true)}
+            onClick={() => setShowQualityPanel(!showQualityPanel)}
             className="gap-1.5"
           >
             <FileText className="h-4 w-4" />
@@ -375,6 +377,39 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
               </div>
             )}
           </div>
+
+          {/* AI 质量检测面板 */}
+          {showQualityPanel && displayChapter.content.length > 100 && (
+            <Card>
+              <CardContent className="p-6">
+                <ErrorBoundary>
+                  <ChapterQualityPanel
+                    projectId={projectId}
+                    chapterId={chapterId || 0}
+                    chapterNumber={displayChapter.chapterNo}
+                    chapterTitle={displayChapter.title}
+                    content={displayChapter.content}
+                    onOptimizeComplete={handleOptimizeComplete}
+                  />
+                </ErrorBoundary>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* AI 去AI味面板 */}
+          {showAntiDetectPanel && displayChapter.content.length > 100 && (
+            <Card>
+              <CardContent className="p-6">
+                <ErrorBoundary>
+                  <AntiDetectPanel
+                    content={displayChapter.content}
+                    chapterId={chapterId}
+                    onRewriteComplete={handleOptimizeComplete}
+                  />
+                </ErrorBoundary>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* 右侧：状态信息 */}
@@ -402,7 +437,7 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
               )}
               <div className="flex justify-between">
                 <dt className="text-sm text-gray-500">更新时间</dt>
-                <dd className="text-sm font-medium">{formatDisplayDateTime(displayChapter.updatedAt)}</dd>
+                <dd className="text-sm font-medium">{formatDisplayDateTime(displayChapter.updatedAt || '')}</dd>
               </div>
             </dl>
           </div>
@@ -445,7 +480,7 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
 
       {/* 删除确认弹窗 */}
       <Modal
-        isOpen={showDeleteModal}
+        open={showDeleteModal}
         onClose={() => setShowDeleteModal(false)}
         title="确认删除"
       >
@@ -462,35 +497,14 @@ export function ChapterEditor({ projectId, chapterId, initialChapter, onSave }: 
         </div>
       </Modal>
 
-      {/* 质量检测面板 */}
-      {showQualityPanel && chapterId && (
-        <ChapterQualityPanel
-          projectId={projectId}
-          chapterId={chapterId}
-          content={displayChapter.content}
-          onClose={() => setShowQualityPanel(false)}
-        />
-      )}
-
-      {/* 去AI味面板 */}
-      {showAntiDetectPanel && chapterId && (
-        <AntiDetectPanel
-          projectId={projectId}
-          chapterId={chapterId}
-          content={displayChapter.content}
-          onClose={() => setShowAntiDetectPanel(false)}
-          onComplete={handleOptimizeComplete}
-        />
-      )}
-
       {/* 修订面板 */}
       {showRevisionModal && chapterId && (
         <RevisionPanel
           projectId={projectId}
           chapterId={chapterId}
-          mode={revisionMode}
+          initialRevisionType={revisionMode}
           currentContent={displayChapter.content}
-          onClose={closeRevisionModal}
+          onCancel={closeRevisionModal}
           onApply={handleRevisionApply}
         />
       )}

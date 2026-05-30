@@ -77,9 +77,9 @@ export async function runFeedbackLoop(
         characterProfiles: input.characterProfiles,
         recentSummaries: input.recentSummaries,
         targetWordCount: input.targetWordCount,
-        genre: input.genre,
-        writingStyle: input.writingStyle,
-        worldSetting: input.worldSetting,
+        genre: input.genre || undefined,
+        writingStyle: input.writingStyle || undefined,
+        worldSetting: input.worldSetting || undefined,
       })
       currentContent = writerResult.content
       onChunk?.(currentContent)
@@ -110,7 +110,7 @@ export async function runFeedbackLoop(
         newChapterContent: currentContent,
         characterProfiles: input.characterProfiles,
         recentSummaries: input.recentSummaries,
-        worldSetting: input.worldSetting,
+        worldSetting: input.worldSetting || undefined,
         openPlotlines: input.openPlotlines,
         chapterTitle: currentOutline.chapterTitle,
         chapterGoal: currentOutline.chapterGoal,
@@ -153,8 +153,8 @@ export async function runFeedbackLoop(
             projectId: input.projectId,
             chapterNo: input.chapterNo,
             content: currentContent,
-            writingStyle: input.writingStyle,
-            genre: input.genre,
+            writingStyle: input.writingStyle || undefined,
+            genre: input.genre || undefined,
             chapterTitle: currentOutline.chapterTitle,
           })
           currentContent = polishedContent.content

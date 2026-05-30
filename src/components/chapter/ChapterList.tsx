@@ -277,7 +277,7 @@ export function ChapterList({ projectId, chapters: initialChapters, onChaptersCh
   }
 
   if (chapters.length === 0) {
-    return <ChaptersEmptyState onOpenGenerator={onOpenGenerator} />
+    return <ChaptersEmptyState onCreate={() => setShowNewModal(true)} onGenerate={() => onOpenGenerator?.()} />
   }
 
   return (
@@ -292,8 +292,8 @@ export function ChapterList({ projectId, chapters: initialChapters, onChaptersCh
           strategy={verticalListSortingStrategy}
         >
           <ExpandableList
-            items={chapters}
-            initialCount={INITIAL_VISIBLE_CHAPTERS}
+            items={chapters} getKey={(chapter) => chapter.id}
+            initialVisibleCount={INITIAL_VISIBLE_CHAPTERS}
             renderItem={(chapter) => (
               <SortableItem
                 key={chapter.id}
@@ -314,7 +314,7 @@ export function ChapterList({ projectId, chapters: initialChapters, onChaptersCh
 
       {/* 新建章节弹窗 */}
       <Modal
-        isOpen={showNewModal}
+        open={showNewModal}
         onClose={() => setShowNewModal(false)}
         title="新建章节"
       >
@@ -349,7 +349,7 @@ export function ChapterList({ projectId, chapters: initialChapters, onChaptersCh
 
       {/* 删除确认弹窗 */}
       <Modal
-        isOpen={showDeleteModal}
+        open={showDeleteModal}
         onClose={() => setShowDeleteModal(false)}
         title="确认删除"
       >

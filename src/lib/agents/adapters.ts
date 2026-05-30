@@ -17,12 +17,12 @@ interface PlannerInput {
   projectId: number
   chapterNo: number
   projectTitle: string
-  genre?: string | null
-  writingStyle?: string | null
-  worldSetting?: string | null
-  powerSystem?: string | null
-  protagonistProfile?: string | null
-  antagonistSetting?: string | null
+  genre?: string
+  writingStyle?: string
+  worldSetting?: string
+  powerSystem?: string
+  protagonistProfile?: string
+  antagonistSetting?: string
   targetWordCount: number
   characterProfiles: { name: string; role: string; description: string }[]
   openPlotlines: { id: string; description: string }[]
@@ -40,10 +40,10 @@ interface WriterInput {
   projectId: number
   chapterNo: number
   projectTitle: string
-  genre?: string | null
-  writingStyle?: string | null
-  worldSetting?: string | null
-  powerSystem?: string | null
+  genre?: string
+  writingStyle?: string
+  worldSetting?: string
+  powerSystem?: string
   outline: ChapterOutline
   characterProfiles: CharacterProfile[]
   recentSummaries: { chapterNo: number; summary: string }[]
@@ -61,8 +61,8 @@ interface PolisherInput {
   chapterNo: number
   content: string
   styleGuide?: string | null
-  writingStyle?: string | null
-  genre?: string | null
+  writingStyle?: string
+  genre?: string
   chapterTitle?: string
   useEnhancedPrompt?: boolean
 }
@@ -78,7 +78,7 @@ interface ValidatorInput {
   newChapterContent: string
   characterProfiles: CharacterProfile[]
   recentSummaries: { chapterNo: number; summary: string }[]
-  worldSetting?: string | null
+  worldSetting?: string
   openPlotlines: PlotlineData[]
   chapterTitle?: string
   chapterGoal?: string
@@ -90,8 +90,8 @@ interface SummarizerInput {
   chapterNo: number
   chapterTitle: string
   chapterContent: string
-  worldSetting?: string | null
-  protagonistProfile?: string | null
+  worldSetting?: string
+  protagonistProfile?: string
 }
 
 const plannerAdapter: AgentDefinition<PlannerInput, PlannerOutput> = {

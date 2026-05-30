@@ -57,8 +57,8 @@ export async function saveChapterSummary(
       summary: data.summary,
       keyEvents: data.keyEvents,
       emotionalTone: data.emotionalTone,
-      plantedPlotlines: data.plantedPlotlines,
-      resolvedPlotlines: data.resolvedPlotlines,
+      plantedPlotlines: (data.plantedPlotlines || []).map((p: unknown) => String(p)),
+      resolvedPlotlines: (data.resolvedPlotlines || []).map((p: unknown) => String(p)),
     },
     create: {
       projectId,
@@ -66,8 +66,8 @@ export async function saveChapterSummary(
       summary: data.summary,
       keyEvents: data.keyEvents,
       emotionalTone: data.emotionalTone,
-      plantedPlotlines: data.plantedPlotlines,
-      resolvedPlotlines: data.resolvedPlotlines,
+      plantedPlotlines: (data.plantedPlotlines || []).map((p: unknown) => String(p)),
+      resolvedPlotlines: (data.resolvedPlotlines || []).map((p: unknown) => String(p)),
     },
   })
 }

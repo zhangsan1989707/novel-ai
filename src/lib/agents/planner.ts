@@ -87,7 +87,7 @@ export async function plannerAgent(
 
   // 构建提示词
   const prompt = buildPlannerPrompt({
-    ...context,
+    ...context, projectTitle: context.projectTitle || "",
     chapterNo,
     memoryContext: input.memoryContext,
     recentChapterSummaries: recentChapters.map(ch => ({

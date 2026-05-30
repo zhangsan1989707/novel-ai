@@ -86,9 +86,9 @@ export async function writerAgent(
     temperature = 0.4  // 修正模式需要更精确
   } else {
     prompt = buildWriterPrompt({
-      projectTitle: context.projectTitle,
-      genre: context.genre,
-      writingStyle: context.writingStyle,
+      projectTitle: context.projectTitle || "",
+      genre: context.genre || "",
+      writingStyle: context.writingStyle || "",
       memoryContext: input.memoryContext,
       worldSetting: context.worldSetting,
       powerSystem: context.powerSystem,

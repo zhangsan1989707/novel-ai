@@ -161,15 +161,15 @@ export async function runChapterProjectionWriters(
     if (context.payload.summaryData?.plantedPlotlines?.length) {
       await batchCreatePlotlines(
         context.projectId,
-        context.payload.summaryData.plantedPlotlines.map(description => ({
-          description,
+        context.payload.summaryData.plantedPlotlines.map((description: unknown) => ({
+          description: String(description),
           plantedAt: context.chapterNo,
           type: 'FORESHADOW',
         }))
       )
     }
     if (context.payload.summaryData?.resolvedPlotlines?.length) {
-      await batchResolvePlotlines(context.payload.summaryData.resolvedPlotlines, context.chapterNo)
+      await batchResolvePlotlines(context.payload.summaryData.resolvedPlotlines.map((id: unknown) => String(id)), context.chapterNo)
     }
     projectionStatus.plotlines = 'done'
   } catch (error) {
@@ -179,7 +179,7 @@ export async function runChapterProjectionWriters(
   try {
     const updates = context.payload.validationReport?.characterUpdates || {}
     if (Object.keys(updates).length > 0) {
-      await batchUpdateCharacterProfiles(context.projectId, updates, context.chapterNo)
+      await batchUpdateCharacterProfiles(context.projectId, updates as Record<string, string | Record<string, unknown>>, context.chapterNo)
     }
     projectionStatus.characters = 'done'
   } catch (error) {

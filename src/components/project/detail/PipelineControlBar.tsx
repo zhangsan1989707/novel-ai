@@ -1,6 +1,6 @@
 'use client'
 
-import { Button, Select } from '@/components/ui'
+import { Button } from '@/components/ui'
 import { Play, Pause, Square, RotateCcw, Loader2, Zap } from 'lucide-react'
 import type { GenerationSpeedMode } from '@/lib/ai/speed-mode'
 import type { PipelineStatus } from '@/hooks/useProjectPipeline'
@@ -75,16 +75,16 @@ export function PipelineControlBar({
   return (
     <div className="flex items-center gap-3 px-4 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg">
       {/* 模式选择 */}
-      <Select
+      <select
         value={activeSpeedMode}
         onChange={(e) => onSpeedModeChange(e.target.value as GenerationSpeedMode)}
-        className="w-32 h-8 text-sm"
+        className="w-32 h-8 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 px-2"
         disabled={isRunning}
       >
         {speedModeOptions.map(opt => (
           <option key={opt.value} value={opt.value}>{opt.label}</option>
         ))}
-      </Select>
+      </select>
 
       {/* 操作按钮 */}
       <div className="flex items-center gap-1.5">
