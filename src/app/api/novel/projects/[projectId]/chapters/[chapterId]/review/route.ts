@@ -25,13 +25,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       )
     }
 
-    const [chapter, project] = await Promise.all([
+    const [chapter, project, completionReport, arcEvents, cheatState] = await Promise.all([
       prisma.novelChapter.findUnique({
         where: { id: chapterIdNum },
         select: {
           id: true,
+          chapterNumber: true,
           content: true,
           validationReport: true,
+          completionReport: true,
           wordCount: true,
           status: true,
         },
@@ -39,6 +41,20 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       prisma.novelProject.findUnique({
         where: { id: projectIdNum },
         select: { chapterWordCount: true },
+      }),
+      prisma.chapterCompletionReport.findFirst({
+        where: { projectId: projectIdNum },
+        orderBy: { chapterNo: 'desc' },
+      }),
+      prisma.arcEventLedger.findMany({
+        where: { projectId: projectIdNum, status: { in: ['pending', 'started', 'delayed'] } },
+        orderBy: [{ arcNumber: 'asc' }, { plannedChapterNo: 'asc' }, { createdAt: 'asc' }],
+        select: { eventKey: true, eventDescription: true, status: true, plannedChapterNo: true, actualChapterNo: true },
+        take: 10,
+      }),
+      prisma.cheatAbilityState.findUnique({
+        where: { projectId: projectIdNum },
+        select: { cheatName: true, oneLineRule: true, unlockedAbilities: true, currentMarkValue: true, currentBacklashValue: true, cooldownActiveUntilChapter: true },
       }),
     ])
 
@@ -71,6 +87,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         targetWordCount,
         currentWordCount,
         wordCountStatus,
+        completionReport: chapter.completionReport || completionReport || null,
+        arcEvents,
+        cheatState: cheatState || null,
       },
     })
   } catch (error) {

@@ -35,8 +35,8 @@ export async function onProjectCreate(context: HookContext): Promise<HookResult>
 }
 
 export async function onChapterGenerateStart(context: HookContext): Promise<HookResult> {
-  const { projectId } = context
-  if (!projectId) {
+  const { projectId, chapterNo } = context
+  if (!projectId || !chapterNo) {
     return { action: 'continue' }
   }
 
@@ -58,6 +58,38 @@ export async function onChapterGenerateStart(context: HookContext): Promise<Hook
       action: 'warn',
       message: `检测到设定缺口：${warnings.join('、')}`,
       data: { warnings },
+    }
+  }
+
+  if (chapterNo > 1) {
+    const previousReport = await prisma.chapterCompletionReport.findUnique({
+      where: {
+        projectId_chapterNo: {
+          projectId,
+          chapterNo: chapterNo - 1,
+        },
+      },
+    })
+
+    const previousChapter = await prisma.novelChapter.findUnique({
+      where: {
+        projectId_chapterNumber: {
+          projectId,
+          chapterNumber: chapterNo - 1,
+        },
+      },
+      select: { status: true },
+    })
+
+    if (!previousChapter || previousChapter.status !== 'COMPLETED' || (previousReport && previousReport.completionScore < 80)) {
+      return {
+        action: 'block',
+        message: `第${chapterNo - 1}章未满足完成条件，不允许自动进入下一章`,
+        data: {
+          previousChapterStatus: previousChapter?.status ?? null,
+          previousCompletionScore: previousReport?.completionScore ?? null,
+        },
+      }
     }
   }
 

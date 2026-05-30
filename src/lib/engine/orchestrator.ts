@@ -5,7 +5,7 @@
 import { prisma } from '@/lib/prisma'
 import { ChapterStatus, type Prisma } from '@prisma/client'
 import { countChineseWords } from '@/lib/utils'
-import { getMinimumChapterWordCount, buildChapterWordCountWarning } from '@/lib/ai/chapter-quality'
+import { getMinimumChapterWordCount } from '@/lib/ai/chapter-quality'
 import { AIService } from '@/lib/ai/service'
 import { plannerAgent } from '../agents/planner'
 import { writerAgent } from '../agents/writer'
@@ -19,7 +19,6 @@ import { hookRegistry } from '../hooks/registry'
 import { directChapter } from '../agents/narrative-director'
 import { chapterDeslopper } from '../agents/deslopper'
 import { recordAndApplyChapterCommit } from './chapter-commit'
-import { buildRevisionPrompt } from '@/lib/ai'
 import { estimateMaxTokensForTargetWordCount, resolveEffectiveChapterWordCount } from '@/lib/ai/speed-mode'
 import type { GenerationRole, GenerationSpeedMode } from '@/lib/ai/speed-mode'
 import type {
@@ -27,15 +26,18 @@ import type {
   ValidationReport as EngineValidationReport,
   ChapterSummaryData,
   SSEEvent,
-  AgentType,
   GenerationPhase,
 } from './types'
 import { normalizePopularFictionProfile, scorePopularFictionChapter } from './popular-fiction'
 import type { StyleProfilePromptCard } from '@/types/style'
-import { buildSeedOutlineFromChapterState, extractChapterPlanningSeed } from './chapter-metadata'
-import { createChapterContract, type ChapterGenerationContract } from './chapter-contract'
+import { buildSeedOutlineFromChapterState } from './chapter-metadata'
+import { createChapterContract } from './chapter-contract'
 import { runQualityGate, type QualityGateResult } from './quality-gate'
 import { expandChapter, compressChapter, continueChapter } from './chapter-repair'
+import { buildChapterCompletionReport } from './chapter-completion'
+import { getPendingOrStartedArcEvents, buildArcEventPromptContext, advanceArcEvent } from './arc-event-ledger'
+import { getCheatAbilityState, appendCheatUsage, buildCheatAbilityPromptContext } from './cheat-ability-state'
+import { runRuleFantasyValidator } from './rule-fantasy-validator'
 
 const MAX_RETRY_COUNT = 3
 const MAX_REPAIR_ATTEMPTS = 2
@@ -75,35 +77,6 @@ function emitProgress(
       timestamp: new Date().toISOString(),
     },
   })
-}
-
-function buildReviewSuggestion(review: {
-  consensus: string
-  criticalIssues: string[]
-  improvementPriority: string[]
-  overallScore: number
-}): string {
-  const parts: string[] = []
-
-  if (review.consensus.trim()) {
-    parts.push(`审稿共识：${review.consensus.trim()}`)
-  }
-
-  if (review.criticalIssues.length > 0) {
-    parts.push(`关键问题：${review.criticalIssues.slice(0, 3).join('；')}`)
-  }
-
-  if (review.improvementPriority.length > 0) {
-    parts.push(`优先改进：${review.improvementPriority.slice(0, 5).join('；')}`)
-  }
-
-  if (review.overallScore < 60) {
-    parts.push('请优先重构章节冲突、节奏和钩子，再保留人物与世界观连续性。')
-  } else {
-    parts.push('请保留原有亮点，只修正薄弱表达、节奏拖沓和轻微结构问题。')
-  }
-
-  return parts.join('\n')
 }
 
 /**
@@ -210,14 +183,20 @@ export async function runChapterGenerationPipeline(
         researchLimit: 3,
         speedMode,
       })
+
+  const cheatState = await getCheatAbilityState(projectId)
+  const arcEvents = await getPendingOrStartedArcEvents(projectId)
+  const cheatPromptContext = buildCheatAbilityPromptContext(cheatState)
+  const arcEventPromptContext = buildArcEventPromptContext(arcEvents)
+
   const emotionalArc = memoryPack.storyState?.emotionalArc || []
-  const plannerMemoryContext = [memoryPack.plannerContext, directorDirective ? `## 导演指令\n${directorDirective}` : '']
+  const plannerMemoryContext = [memoryPack.plannerContext, cheatPromptContext, arcEventPromptContext, directorDirective ? `## 导演指令\n${directorDirective}` : '']
     .filter(Boolean)
     .join('\n\n')
-  const writerMemoryContext = [memoryPack.writerContext, directorDirective ? `## 导演指令\n${directorDirective}` : '']
+  const writerMemoryContext = [memoryPack.writerContext, cheatPromptContext, directorDirective ? `## 导演指令\n${directorDirective}` : '']
     .filter(Boolean)
     .join('\n\n')
-  const validatorMemoryContext = [memoryPack.validatorContext, directorDirective ? `## 导演指令\n${directorDirective}` : '']
+  const validatorMemoryContext = [memoryPack.validatorContext, cheatPromptContext, directorDirective ? `## 导演指令\n${directorDirective}` : '']
     .filter(Boolean)
     .join('\n\n')
   const summarizerMemoryContext = memoryPack.summarizerContext
@@ -467,7 +446,7 @@ export async function runChapterGenerationPipeline(
         emit({ type: 'agent_switch', data: { agent: 'reviewer' } })
 
         try {
-          const reviewResult = await reviewerAgent(
+          await reviewerAgent(
             {
               projectId,
               content: polishedContent,
@@ -476,93 +455,67 @@ export async function runChapterGenerationPipeline(
               chapterNo,
               worldSetting: project.worldSetting || undefined,
               provider: await getRoleProvider('reviewer'),
-            },
+            }
           )
 
-          await prisma.reviewReport.create({
-            data: {
+          reviewedContent = ''
+          await writerAgent(
+            {
               projectId,
               chapterNo,
-              content: polishedContent,
-              reviews: reviewResult.reviews as unknown as object[],
-              overallScore: reviewResult.overallScore,
-              consensus: reviewResult.consensus,
-              criticalIssues: reviewResult.criticalIssues,
-              improvementPriority: reviewResult.improvementPriority,
+              projectTitle: project.title,
+              genre: project.genre || undefined,
+              writingStyle: project.writingStyle || undefined,
+              memoryContext: writerMemoryContext,
+              worldSetting: project.worldSetting || undefined,
+              powerSystem: project.powerSystem || undefined,
+              protagonistProfile: project.protagonistProfile || undefined,
+              antagonistSetting: project.antagonistSetting || undefined,
+              targetWordCount: chapterTargetWordCount,
+              outline,
+              characterProfiles: memoryPack.characterProfiles,
+              recentSummaries: memoryPack.recentChapterSummaries,
+              provider: await getRoleProvider('writer'),
+              maxTokens: estimateMaxTokensForTargetWordCount(chapterTargetWordCount),
+              popularFictionProfile,
+              styleProfilePromptCard,
+              styleStrength: project.styleStrength,
+              styleSafetyMode: (project.styleSafetyMode as 'SAFE_ABSTRACT' | 'STRICT_PUBLIC_DOMAIN' | 'USER_LICENSED') || 'SAFE_ABSTRACT',
             },
-          })
-
-          const shouldApplyRevision = reviewResult.overallScore < 85 || reviewResult.criticalIssues.length > 0
-          if (shouldApplyRevision) {
-            const reviewRevisionType = reviewResult.overallScore < 60 || reviewResult.criticalIssues.length > 0
-              ? 'rewrite'
-              : 'polish'
-
-            await runPhase('review_revision', async () => {
-              emit({ type: 'agent_switch', data: { agent: 'review_revision' } })
-
-              const reviewContext = {
-                projectTitle: project.title,
-                genre: project.genre || undefined,
-                writingStyle: project.writingStyle || undefined,
-                worldSetting: project.worldSetting || undefined,
-                powerSystem: project.powerSystem || undefined,
-                protagonistProfile: project.protagonistProfile || undefined,
-                protagonistGoal: project.protagonistGoal || undefined,
-                antagonistSetting: project.antagonistSetting || undefined,
-                endingPlan: project.endingPlan || undefined,
-                writingPrompt: project.writingPrompt || undefined,
-                currentChapterNumber: chapterNo,
-                currentChapterTitle: outline.chapterTitle,
-                currentChapterSummary: [outline.chapterGoal, outline.mainConflict].filter(Boolean).join('；'),
-                memoryContext: writerMemoryContext,
-              }
-
-              const reviewPrompt = buildRevisionPrompt(
-                reviewContext,
-                polishedContent,
-                reviewRevisionType,
-                buildReviewSuggestion(reviewResult)
-              )
-
-              const revisionResult = await (await getRoleProvider('revision')).generate(reviewPrompt, {
-                temperature: reviewRevisionType === 'rewrite' ? 0.72 : 0.55,
-                maxTokens: Math.min(4096, Math.max(2000, Math.ceil(polishedContent.length * 0.75))),
-              })
-
-              reviewedContent = revisionResult.content.trim() || polishedContent
-            })
-          }
+            (token) => {
+              reviewedContent += token
+              emit({ type: 'token', data: { content: token } })
+            }
+          )
         } catch (reviewError) {
           emit({
             type: 'hook_warning',
             data: {
-              warnings: [
-                `对抗审稿失败，已回退到原润色稿：${reviewError instanceof Error ? reviewError.message : '未知错误'}`,
-              ],
+              warnings: [`对抗审稿失败，已保留润色稿：${reviewError instanceof Error ? reviewError.message : '未知错误'}`],
             },
           })
+          reviewedContent = polishedContent
         }
       })
     }
 
-    // ========== Phase 5 + 6: 校验 + 去 AI 味 并行 ==========
-    let validationReport: ValidatorValidationReport | null = null
+    // ========== Phase 5 + 6: 校验 + 去 AI 味 ==========
+    let validationReport!: ValidatorValidationReport
     let finalContent = reviewedContent
 
     if (speedMode === 'FINAL_POLISH') {
-      emit({ type: 'agent_switch', data: { agent: 'validator_deslopper' } })
       emitProgress(emit, 'validating', chapterNo, totalChapters, completedChaptersCount, countChineseWords(reviewedContent), chapterTargetWordCount, '正在校验和去 AI 味')
+      emit({ type: 'agent_switch', data: { agent: 'validator_deslopper' } })
 
       const [validReport, deslopContent] = await Promise.all([
         runPhase('validator', async () => {
-          let report = await validatorAgent({
+          return validatorAgent({
             projectId,
             chapterNo,
             newChapterContent: reviewedContent,
-            memoryContext: validatorMemoryContext,
             characterProfiles: memoryPack.characterProfiles,
             recentSummaries: memoryPack.recentChapterSummaries,
+            memoryContext: validatorMemoryContext,
             worldSetting: project.worldSetting || undefined,
             openPlotlines: memoryPack.openPlotlines,
             chapterTitle: outline.chapterTitle,
@@ -570,54 +523,15 @@ export async function runChapterGenerationPipeline(
             provider: await getRoleProvider('validator'),
             popularFictionProfile,
           })
-
-          const popularScore = scorePopularFictionChapter({
-            content: reviewedContent,
-            outline,
-            profile: popularFictionProfile,
-          })
-          report = {
-            ...report,
-            popularFiction: popularScore,
-            result: popularScore.emotion < 7 || popularScore.conflict < 7 || popularScore.hook < 7 || popularScore.character < 7
-              ? 'retry'
-              : report.result,
-            issues: [
-              ...report.issues,
-              ...popularScore.issues.map(issue => ({
-                type: 'emotion' as const,
-                severity: 'major' as const,
-                description: issue,
-                location: '全文',
-                reference: '爆款四因子诊断',
-              })),
-            ],
-          }
-
-          emit({
-            type: 'validation',
-            data: {
-              result: report.result,
-              score: report.score,
-            },
-          })
-
-          return report
         }),
         runPhase('deslopper', async () => {
           try {
-            const result = await chapterDeslopper({
+            return await chapterDeslopper({
               projectId,
               chapterId: chapter.id,
               content: reviewedContent,
-              chapterNumber: chapterNo,
-              chapterTitle: outline.chapterTitle,
-              genre: project.genre || undefined,
-              writingStyle: project.writingStyle || undefined,
-              strictness: 'medium',
-              provider: await getRoleProvider('deslopper'),
+              provider: await getRoleProvider('validator'),
             })
-            return result.revisedContent
           } catch (deslopError) {
             emit({
               type: 'hook_warning',
@@ -633,7 +547,7 @@ export async function runChapterGenerationPipeline(
       ])
 
       validationReport = validReport
-      finalContent = deslopContent
+      finalContent = typeof deslopContent === 'string' ? deslopContent : deslopContent.revisedContent
 
       if (validReport?.result === 'retry') {
         const currentRetry = await prisma.novelChapter.findUnique({
@@ -789,6 +703,103 @@ export async function runChapterGenerationPipeline(
       repairAttempts++
     }
 
+    const completionReport = buildChapterCompletionReport({
+      content: finalContent,
+      targetWordCount: contract.targetWordCount,
+      outline,
+      mainConflict: outline.mainConflict || memoryPack.storyState?.mainConflict,
+      previousMainConflict: undefined,
+    })
+
+    const ruleFantasyResult = runRuleFantasyValidator({
+      chapterNo,
+      content: finalContent,
+      outline,
+      validationReport: validationReport as unknown as EngineValidationReport,
+      cheatUsage: outline.cheatUsage ? {
+        chapterNo,
+        abilityName: outline.cheatUsage,
+        costDescription: outline.forbiddenMistakes?.[0] ?? '未记录具体代价',
+        markValueChange: 5,
+        backlashValueChange: 2,
+        cooldownUntilChapter: null,
+      } : null,
+      cheatAbilityUnlockedAbilities: cheatState ? (Array.isArray(cheatState.unlockedAbilities) ? (cheatState.unlockedAbilities as unknown as string[]) : []) : [],
+      cheatAbilityCooldownUntilChapter: cheatState?.cooldownActiveUntilChapter ?? null,
+      popularFiction: popularFictionProfile ? scorePopularFictionChapter({ content: finalContent, outline, profile: popularFictionProfile }) : null,
+    })
+
+    if (completionReport.completionScore < 80 || !ruleFantasyResult.passed) {
+      const completionIssues = completionReport.issues.map(issue => issue.message)
+      const ruleIssues = ruleFantasyResult.findings.map(finding => finding.message)
+
+      await prisma.novelChapter.update({
+        where: { id: chapter.id },
+        data: {
+          content: finalContent,
+          status: ChapterStatus.REVIEWING,
+          wordCount: countChineseWords(finalContent),
+          completionReport: {
+            completionReport,
+            ruleFantasyResult,
+          } as unknown as Prisma.InputJsonValue,
+          lastAgentType: 'VALIDATOR',
+        },
+      })
+
+      await prisma.chapterCompletionReport.upsert({
+        where: {
+          projectId_chapterNo: {
+            projectId,
+            chapterNo,
+          },
+        },
+        update: {
+          actualWordCount: completionReport.actualWordCount,
+          targetWordCount: completionReport.targetWordCount,
+          chapterGoalCompleted: completionReport.chapterGoalCompleted,
+          mainConflictProgressed: completionReport.mainConflictProgressed,
+          mainConflictResolved: completionReport.mainConflictResolved,
+          endingHookExists: completionReport.endingHookExists,
+          abruptTruncationDetected: completionReport.abruptTruncationDetected,
+          completionScore: completionReport.completionScore,
+          issues: completionReport.issues as unknown as Prisma.InputJsonValue,
+        },
+        create: {
+          projectId,
+          chapterNo,
+          actualWordCount: completionReport.actualWordCount,
+          targetWordCount: completionReport.targetWordCount,
+          chapterGoalCompleted: completionReport.chapterGoalCompleted,
+          mainConflictProgressed: completionReport.mainConflictProgressed,
+          mainConflictResolved: completionReport.mainConflictResolved,
+          endingHookExists: completionReport.endingHookExists,
+          abruptTruncationDetected: completionReport.abruptTruncationDetected,
+          completionScore: completionReport.completionScore,
+          issues: completionReport.issues as unknown as Prisma.InputJsonValue,
+        },
+      })
+
+      emit({
+        type: 'quality_gate_failed',
+        data: {
+          message: '章节完成度或规则玄幻校验未通过，不允许自动进入下一章',
+          completionReport,
+          ruleFantasyResult,
+          errors: [...completionIssues, ...ruleIssues],
+        },
+      })
+
+      emitProgress(emit, 'failed', chapterNo, totalChapters, completedChaptersCount, completionReport.actualWordCount, chapterTargetWordCount, '章节完成度或规则玄幻校验未通过，已标记人工审核')
+
+      return {
+        success: true,
+        chapterId: chapter.id,
+        content: finalContent,
+        error: '章节完成度或规则玄幻校验未通过，已标记人工审核',
+      }
+    }
+
     // Quality Gate 通过，保存章节
     emitProgress(emit, 'committing', chapterNo, totalChapters, completedChaptersCount, countChineseWords(finalContent), chapterTargetWordCount, '正在保存章节到数据库')
     
@@ -817,6 +828,55 @@ export async function runChapterGenerationPipeline(
         agentType: speedMode === 'FINAL_POLISH' ? 'POLISHER' : 'WRITER',
         emittedAt: new Date().toISOString(),
       }, 'pipeline')
+
+      await prisma.chapterCompletionReport.upsert({
+        where: {
+          projectId_chapterNo: {
+            projectId,
+            chapterNo,
+          },
+        },
+        update: {
+          actualWordCount: completionReport.actualWordCount,
+          targetWordCount: completionReport.targetWordCount,
+          chapterGoalCompleted: completionReport.chapterGoalCompleted,
+          mainConflictProgressed: completionReport.mainConflictProgressed,
+          mainConflictResolved: completionReport.mainConflictResolved,
+          endingHookExists: completionReport.endingHookExists,
+          abruptTruncationDetected: completionReport.abruptTruncationDetected,
+          completionScore: completionReport.completionScore,
+          issues: completionReport.issues as unknown as Prisma.InputJsonValue,
+        },
+        create: {
+          projectId,
+          chapterNo,
+          actualWordCount: completionReport.actualWordCount,
+          targetWordCount: completionReport.targetWordCount,
+          chapterGoalCompleted: completionReport.chapterGoalCompleted,
+          mainConflictProgressed: completionReport.mainConflictProgressed,
+          mainConflictResolved: completionReport.mainConflictResolved,
+          endingHookExists: completionReport.endingHookExists,
+          abruptTruncationDetected: completionReport.abruptTruncationDetected,
+          completionScore: completionReport.completionScore,
+          issues: completionReport.issues as unknown as Prisma.InputJsonValue,
+        },
+      })
+
+      if (outline.cheatUsage) {
+        await appendCheatUsage(projectId, {
+          chapterNo,
+          abilityName: outline.cheatUsage,
+          costDescription: outline.forbiddenMistakes?.[0] ?? '未记录具体代价',
+          markValueChange: 5,
+          backlashValueChange: 2,
+          cooldownUntilChapter: null,
+        })
+      }
+
+      const matchedArcEvent = arcEvents.find(event => finalContent.includes(event.eventDescription.slice(0, 8)))
+      if (matchedArcEvent) {
+        await advanceArcEvent(projectId, matchedArcEvent.eventKey, 'completed', chapterNo, `在第${chapterNo}章推进完成`)
+      }
 
       await hookRegistry.execute('chapter_generate_end', {
         projectId,
@@ -879,39 +939,25 @@ export async function runChapterGenerationPipeline(
 /**
  * 获取章节生成状态
  */
-export async function getChapterGenerationStatus(
-  projectId: number,
-  chapterNo: number
-): Promise<{
-  status: string
-  retryCount: number
-  validationReport?: EngineValidationReport | null
-  lastAgentType?: AgentType | null
-}> {
+export async function getChapterGenerationStatus(projectId: number, chapterNo: number) {
   const chapter = await prisma.novelChapter.findUnique({
     where: { projectId_chapterNumber: { projectId, chapterNumber: chapterNo } },
   })
 
-  if (!chapter) {
-    return { status: 'NOT_FOUND', retryCount: 0 }
-  }
-
   return {
-    status: chapter.status,
-    retryCount: chapter.retryCount,
-    validationReport: chapter.validationReport as EngineValidationReport | null,
-    lastAgentType: chapter.lastAgentType as AgentType | null,
+    chapterNo,
+    status: chapter?.status || 'DRAFT',
+    wordCount: chapter?.wordCount || 0,
+    title: chapter?.title || `第${chapterNo}章`,
+    summary: chapter?.summary || '',
+    lastAgentType: chapter?.lastAgentType || null,
+    updatedAt: chapter?.updatedAt || null,
   }
 }
 
-function formatStyleSection(profileData: Record<string, unknown>, section: string): string {
-  const data = profileData[section] as Record<string, unknown> | undefined
-  if (!data) return ''
-  return Object.entries(data)
-    .filter(([, v]) => v !== undefined && v !== null && v !== '')
-    .map(([k, v]) => {
-      if (Array.isArray(v)) return `${k}: ${v.join('、')}`
-      return `${k}: ${v}`
-    })
-    .join('\n')
+function formatStyleSection(data: Record<string, unknown>, key: string): string {
+  const value = data[key]
+  if (typeof value === 'string') return value
+  if (Array.isArray(value)) return value.filter(item => typeof item === 'string').join('\n')
+  return ''
 }
