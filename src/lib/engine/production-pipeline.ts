@@ -693,198 +693,202 @@ export async function runProductionPipeline(
   const job = await prisma.generationJob.findUnique({ where: { id: jobId } })
   if (!job) return
 
+  // Immediately update the job to RUNNING to prevent stuck PENDING status
+  await updateJobStep(jobId, 'blueprint' as PipelineStep, 1)
+
   const projectId = job.projectId
   const jobPayload = job.payload && typeof job.payload === 'object'
     ? job.payload as Record<string, unknown>
     : {}
   const speedMode = normalizeGenerationSpeedMode(options?.speedMode || jobPayload.speedMode)
-  const project = await prisma.novelProject.findUnique({
-    where: { id: projectId },
-    select: {
-      chapterWordCount: true,
-      workflowStage: true,
-      blueprintConfirmedAt: true,
-      arcPlanConfirmedAt: true,
-      bookBlueprint: { select: { id: true } },
-      arcPlans: { select: { id: true } },
-    },
-  })
-  const targetWordCount = project?.chapterWordCount || 3000
-  const flowBlockReason = getWorkflowBlockReason({
-    workflowStage: project?.workflowStage,
-    blueprintConfirmedAt: project?.blueprintConfirmedAt,
-    arcPlanConfirmedAt: project?.arcPlanConfirmedAt,
-    hasBlueprint: Boolean(project?.bookBlueprint),
-    hasArcPlans: Boolean(project?.arcPlans.length),
-  })
-  if (flowBlockReason && !canStartGeneration({
-    workflowStage: project?.workflowStage,
-    blueprintConfirmedAt: project?.blueprintConfirmedAt,
-    arcPlanConfirmedAt: project?.arcPlanConfirmedAt,
-    hasBlueprint: Boolean(project?.bookBlueprint),
-    hasArcPlans: Boolean(project?.arcPlans.length),
-  })) {
-    await failJob(jobId, flowBlockReason)
-    return
-  }
-  let runtime = sanitizePipelineRuntime(
-    job.payload && typeof job.payload === 'object'
-      ? (job.payload as Record<string, unknown>).runtime
-      : undefined
-  )
-  if (runtime.streamRevision === 0 && runtime.currentChapter === null && runtime.recentChapters.length === 0) {
-    runtime = createPipelineRuntimeState(speedMode)
-  } else {
-    runtime = { ...runtime, speedMode }
-  }
-  let lastPersistAt = 0
-  let persistChain = Promise.resolve()
-
-  const queuePersist = (force: boolean = false) => {
-    const now = Date.now()
-    if (!force && now - lastPersistAt < 900) return
-    runtime = {
-      ...runtime,
-      lastEventAt: new Date(now).toISOString(),
-      streamRevision: runtime.streamRevision + 1,
-    }
-    lastPersistAt = now
-    persistChain = persistChain
-      .then(() => updateJobRuntime(jobId, runtime))
-      .catch(() => undefined)
-  }
-
-  const setCurrentChapter = (chapterNumber: number, title?: string) => {
-    const now = new Date().toISOString()
-    runtime = {
-      ...runtime,
-      currentChapter: {
-        chapterNumber,
-        title,
-        status: 'RUNNING',
-        currentAgent: 'planner',
-        currentPhase: 'planner',
-        currentWordCount: 0,
-        targetWordCount,
-        liveContent: '',
-        startedAt: now,
-        updatedAt: now,
-        phaseTimings: {},
-      },
-    }
-    queuePersist(true)
-  }
-
-  const handlePipelineEvent = (event: SSEEvent) => {
-    if (!runtime.currentChapter) return
-
-    const now = new Date().toISOString()
-    const current = { ...runtime.currentChapter, updatedAt: now }
-
-    switch (event.type) {
-      case 'start': {
-        const agent = typeof event.data.agent === 'string' ? event.data.agent : current.currentAgent
-        current.currentAgent = agent
-        current.currentPhase = agent
-        break
-      }
-      case 'agent_switch': {
-        const agent = typeof event.data.agent === 'string' ? event.data.agent : current.currentAgent
-        if ((agent === 'writer' || agent === 'polisher') && current.currentPhase !== agent) {
-          current.liveContent = ''
-        }
-        current.currentAgent = agent
-        current.currentPhase = agent
-        break
-      }
-      case 'research': {
-        current.currentAgent = 'research'
-        current.currentPhase = 'research'
-        current.lastMessage = `已加载 ${Number(event.data.refsCount || 0)} 条研究资料`
-        break
-      }
-      case 'wordCount': {
-        const count = Number(event.data.count || 0)
-        if (Number.isFinite(count)) {
-          current.currentWordCount = count
-          current.lastTokenAt = now
-        }
-        break
-      }
-      case 'phase_timing': {
-        const phase = String(event.data.phase || '')
-        const durationMs = Number(event.data.durationMs || 0)
-        if (phase) {
-          current.phaseTimings = {
-            ...current.phaseTimings,
-            [phase]: durationMs,
-          }
-          runtime.lastPhase = phase
-          runtime.lastPhaseDurationMs = durationMs
-          current.currentPhase = phase
-          current.lastMessage = `${phase} 完成，用时 ${durationMs}ms`
-        }
-        break
-      }
-      case 'validation': {
-        current.currentAgent = 'validator'
-        current.currentPhase = 'validator'
-        current.lastMessage = `校验结果：${String(event.data.result || 'unknown')} / ${Number(event.data.score || 0)}分`
-        break
-      }
-      case 'hook_warning': {
-        const warnings = Array.isArray(event.data.warnings) ? event.data.warnings.filter(item => typeof item === 'string') : []
-        current.lastMessage = warnings.join('；')
-        break
-      }
-      case 'done': {
-        current.status = 'COMPLETED'
-        current.currentWordCount = Number(event.data.wordCount || current.currentWordCount || 0)
-        current.qualityStatus = typeof event.data.qualityStatus === 'string' ? event.data.qualityStatus : undefined
-        current.warning = typeof event.data.warning === 'string' ? event.data.warning : undefined
-        current.totalDurationMs = Number(event.data.duration || 0) || current.totalDurationMs
-        current.completedAt = now
-        current.currentPhase = 'completed'
-        current.lastMessage = current.warning || '章节生成完成'
-        break
-      }
-      case 'error': {
-        current.status = 'FAILED'
-        current.error = typeof event.data.message === 'string' ? event.data.message : '生成失败'
-        current.currentPhase = 'failed'
-        current.lastMessage = current.error
-        break
-      }
-      default:
-        break
-    }
-
-    runtime = {
-      ...runtime,
-      currentChapter: current,
-    }
-
-    if (event.type === 'token') {
-      runtime = appendChapterLiveContent(
-        runtime,
-        typeof event.data.content === 'string' ? event.data.content : ''
-      )
-      if (runtime.currentChapter) {
-        runtime = {
-          ...runtime,
-          currentChapter: {
-            ...runtime.currentChapter,
-            lastTokenAt: now,
-          },
-        }
-      }
-    }
-
-    const forcePersist = event.type === 'done' || event.type === 'error' || event.type === 'phase_timing'
-    queuePersist(forcePersist)
-  }
 
   try {
+    const project = await prisma.novelProject.findUnique({
+      where: { id: projectId },
+      select: {
+        chapterWordCount: true,
+        workflowStage: true,
+        blueprintConfirmedAt: true,
+        arcPlanConfirmedAt: true,
+        bookBlueprint: { select: { id: true } },
+        arcPlans: { select: { id: true } },
+      },
+    })
+    const targetWordCount = project?.chapterWordCount || 3000
+    const flowBlockReason = getWorkflowBlockReason({
+      workflowStage: project?.workflowStage,
+      blueprintConfirmedAt: project?.blueprintConfirmedAt,
+      arcPlanConfirmedAt: project?.arcPlanConfirmedAt,
+      hasBlueprint: Boolean(project?.bookBlueprint),
+      hasArcPlans: Boolean(project?.arcPlans.length),
+    })
+    if (flowBlockReason && !canStartGeneration({
+      workflowStage: project?.workflowStage,
+      blueprintConfirmedAt: project?.blueprintConfirmedAt,
+      arcPlanConfirmedAt: project?.arcPlanConfirmedAt,
+      hasBlueprint: Boolean(project?.bookBlueprint),
+      hasArcPlans: Boolean(project?.arcPlans.length),
+    })) {
+      await failJob(jobId, flowBlockReason)
+      return
+    }
+    let runtime = sanitizePipelineRuntime(
+      job.payload && typeof job.payload === 'object'
+        ? (job.payload as Record<string, unknown>).runtime
+        : undefined
+    )
+    if (runtime.streamRevision === 0 && runtime.currentChapter === null && runtime.recentChapters.length === 0) {
+      runtime = createPipelineRuntimeState(speedMode)
+    } else {
+      runtime = { ...runtime, speedMode }
+    }
+    let lastPersistAt = 0
+    let persistChain = Promise.resolve()
+
+    const queuePersist = (force: boolean = false) => {
+      const now = Date.now()
+      if (!force && now - lastPersistAt < 900) return
+      runtime = {
+        ...runtime,
+        lastEventAt: new Date(now).toISOString(),
+        streamRevision: runtime.streamRevision + 1,
+      }
+      lastPersistAt = now
+      persistChain = persistChain
+        .then(() => updateJobRuntime(jobId, runtime))
+        .catch(() => undefined)
+    }
+
+    const setCurrentChapter = (chapterNumber: number, title?: string) => {
+      const now = new Date().toISOString()
+      runtime = {
+        ...runtime,
+        currentChapter: {
+          chapterNumber,
+          title,
+          status: 'RUNNING',
+          currentAgent: 'planner',
+          currentPhase: 'planner',
+          currentWordCount: 0,
+          targetWordCount,
+          liveContent: '',
+          startedAt: now,
+          updatedAt: now,
+          phaseTimings: {},
+        },
+      }
+      queuePersist(true)
+    }
+
+    const handlePipelineEvent = (event: SSEEvent) => {
+      if (!runtime.currentChapter) return
+
+      const now = new Date().toISOString()
+      const current = { ...runtime.currentChapter, updatedAt: now }
+
+      switch (event.type) {
+        case 'start': {
+          const agent = typeof event.data.agent === 'string' ? event.data.agent : current.currentAgent
+          current.currentAgent = agent
+          current.currentPhase = agent
+          break
+        }
+        case 'agent_switch': {
+          const agent = typeof event.data.agent === 'string' ? event.data.agent : current.currentAgent
+          if ((agent === 'writer' || agent === 'polisher') && current.currentPhase !== agent) {
+            current.liveContent = ''
+          }
+          current.currentAgent = agent
+          current.currentPhase = agent
+          break
+        }
+        case 'research': {
+          current.currentAgent = 'research'
+          current.currentPhase = 'research'
+          current.lastMessage = `已加载 ${Number(event.data.refsCount || 0)} 条研究资料`
+          break
+        }
+        case 'wordCount': {
+          const count = Number(event.data.count || 0)
+          if (Number.isFinite(count)) {
+            current.currentWordCount = count
+            current.lastTokenAt = now
+          }
+          break
+        }
+        case 'phase_timing': {
+          const phase = String(event.data.phase || '')
+          const durationMs = Number(event.data.durationMs || 0)
+          if (phase) {
+            current.phaseTimings = {
+              ...current.phaseTimings,
+              [phase]: durationMs,
+            }
+            runtime.lastPhase = phase
+            runtime.lastPhaseDurationMs = durationMs
+            current.currentPhase = phase
+            current.lastMessage = `${phase} 完成，用时 ${durationMs}ms`
+          }
+          break
+        }
+        case 'validation': {
+          current.currentAgent = 'validator'
+          current.currentPhase = 'validator'
+          current.lastMessage = `校验结果：${String(event.data.result || 'unknown')} / ${Number(event.data.score || 0)}分`
+          break
+        }
+        case 'hook_warning': {
+          const warnings = Array.isArray(event.data.warnings) ? event.data.warnings.filter(item => typeof item === 'string') : []
+          current.lastMessage = warnings.join('；')
+          break
+        }
+        case 'done': {
+          current.status = 'COMPLETED'
+          current.currentWordCount = Number(event.data.wordCount || current.currentWordCount || 0)
+          current.qualityStatus = typeof event.data.qualityStatus === 'string' ? event.data.qualityStatus : undefined
+          current.warning = typeof event.data.warning === 'string' ? event.data.warning : undefined
+          current.totalDurationMs = Number(event.data.duration || 0) || current.totalDurationMs
+          current.completedAt = now
+          current.currentPhase = 'completed'
+          current.lastMessage = current.warning || '章节生成完成'
+          break
+        }
+        case 'error': {
+          current.status = 'FAILED'
+          current.error = typeof event.data.message === 'string' ? event.data.message : '生成失败'
+          current.currentPhase = 'failed'
+          current.lastMessage = current.error
+          break
+        }
+        default:
+          break
+      }
+
+      runtime = {
+        ...runtime,
+        currentChapter: current,
+      }
+
+      if (event.type === 'token') {
+        runtime = appendChapterLiveContent(
+          runtime,
+          typeof event.data.content === 'string' ? event.data.content : ''
+        )
+        if (runtime.currentChapter) {
+          runtime = {
+            ...runtime,
+            currentChapter: {
+              ...runtime.currentChapter,
+              lastTokenAt: now,
+            },
+          }
+        }
+      }
+
+      const forcePersist = event.type === 'done' || event.type === 'error' || event.type === 'phase_timing'
+      queuePersist(forcePersist)
+    }
+
     const provider = await createProjectProvider(projectId, { speedMode, generationRole: 'blueprint' })
     const resumePlan = await resolveResumePlan(jobId)
     await clearJobRecoveryTarget(jobId)
@@ -990,7 +994,6 @@ export async function runProductionPipeline(
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    await persistChain
     await failJob(jobId, message)
 
     const report = await loadProjectHealthReport(projectId)
