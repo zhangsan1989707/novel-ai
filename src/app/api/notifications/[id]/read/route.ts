@@ -16,7 +16,6 @@ export async function PATCH(
       return NextResponse.json({ error: '无效的通知 ID' }, { status: 400 })
     }
 
-    // TODO: 后续接入认证后，需要验证通知是否属于当前用户
     const { prisma } = await import('@/lib/prisma')
     const { getCurrentUserId } = await import('@/lib/auth')
     const userId = await getCurrentUserId()
