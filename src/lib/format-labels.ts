@@ -74,9 +74,9 @@ export const speedModeLabels: Record<string, string> = {
   FINAL_POLISH: '精修成稿',
 }
 
-// Agent 类型 - 同时支持大写和小写
+// Agent 类型 - 支持大写、小写和组合类型
 export const agentTypeLabels: Record<string, string> = {
-  // 大写
+  // 单个 Agent - 大写
   PLANNER: '策划',
   WRITER: '写作',
   POLISHER: '润色',
@@ -85,7 +85,7 @@ export const agentTypeLabels: Record<string, string> = {
   RESEARCHER: '研究',
   REVIEWER: '审稿',
   DESLOPPER: '去AI味',
-  // 小写
+  // 单个 Agent - 小写
   planner: '策划',
   writer: '写作',
   polisher: '润色',
@@ -94,6 +94,11 @@ export const agentTypeLabels: Record<string, string> = {
   researcher: '研究',
   reviewer: '审稿',
   deslopper: '去AI味',
+  // 组合 Agent
+  validator_deslopper: '校验+去AI味',
+  polisher_summarizer: '润色+摘要',
+  review_revision: '审稿修订',
+  REVIEW_REVISION: '审稿修订',
 }
 
 /**
@@ -137,11 +142,10 @@ export function formatSpeedMode(mode: string): string {
 }
 
 /**
- * 格式化 Agent 类型 - 支持大小写
+ * 格式化 Agent 类型 - 支持大小写和组合类型
  */
 export function formatAgentType(agent: string): string {
   if (!agent) return ''
-  // 先尝试直接查找，再尝试大写
   return agentTypeLabels[agent] || agentTypeLabels[agent.toUpperCase()] || agent
 }
 
