@@ -1,9 +1,20 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Button, Input, Select, Modal, Badge, Card, CardContent, toast } from '@/components/ui'
-import { Plus, Trash2, Edit2, Check, Key, Play, Loader2, CheckCircle, XCircle, Eye, EyeOff, Zap, AlertTriangle } from 'lucide-react'
+import { Plus, Key, Search, Zap, AlertTriangle, Filter, X } from 'lucide-react'
 import { AIVendor } from '@/types'
+import { AIConfigCard } from '@/components/ai/AIConfigCard'
+import {
+  AIConfigForm,
+  vendorMeta,
+  vendorOptions,
+  defaultModelIds,
+  defaultApiEndpoints,
+  defaultEmbeddingModelIds,
+  defaultEmbeddingApiEndpoints,
+  defaultEmbeddingDimensions,
+} from '@/components/ai/AIConfigForm'
 
 interface AIConfig {
   id: number
@@ -21,62 +32,26 @@ interface AIConfig {
   sortOrder: number
 }
 
-type TestStatus = 'idle' | 'testing' | 'success' | 'error'
+interface AIConfigFormData {
+  name: string
+  vendor: AIVendor
+  modelId: string
+  apiKey: string
+  apiEndpoint: string
+  embeddingVendor: AIVendor | null | undefined
+  embeddingApiKey: string
+  embeddingApiEndpoint: string
+  embeddingModelId: string
+  embeddingDimensions: string
+  isDefault: boolean
+}
 
-const vendorOptions = [
-  { label: 'DeepSeek', value: AIVendor.DEEPSEEK },
-  { label: 'OpenAI', value: AIVendor.OPENAI },
-  { label: 'Anthropic (Claude)', value: AIVendor.ANTHROPIC },
-  { label: '阿里云 (通义千问)', value: AIVendor.ALIBABA },
-  { label: 'MiniMax', value: AIVendor.MINIMAX },
-  { label: '小米 MiMo', value: AIVendor.MIMO },
-  { label: '火山引擎 (字节)', value: AIVendor.VOLCENGINE },
-  { label: '智谱 AI (GLM)', value: AIVendor.ZHIPU },
+type VendorFilter = AIVendor | 'ALL'
+
+const vendorFilterOptions = [
+  { label: '全部厂商', value: 'ALL' },
+  ...vendorOptions.map(v => ({ label: v.label, value: v.value })),
 ]
-
-const vendorLabels: Record<AIVendor, string> = {
-  [AIVendor.OPENAI]: 'OpenAI',
-  [AIVendor.ANTHROPIC]: 'Anthropic',
-  [AIVendor.ALIBABA]: '阿里云',
-  [AIVendor.DEEPSEEK]: 'DeepSeek',
-  [AIVendor.MINIMAX]: 'MiniMax',
-  [AIVendor.MIMO]: '小米 MiMo',
-  [AIVendor.VOLCENGINE]: '火山引擎',
-  [AIVendor.ZHIPU]: '智谱 AI',
-}
-
-const defaultModelIds: Record<AIVendor, string> = {
-  [AIVendor.OPENAI]: 'gpt-4o',
-  [AIVendor.ANTHROPIC]: 'claude-3-5-sonnet-20241022',
-  [AIVendor.ALIBABA]: 'qwen-max',
-  [AIVendor.DEEPSEEK]: 'deepseek-v4-flash',
-  [AIVendor.MINIMAX]: 'MiniMax-Text-01',
-  [AIVendor.MIMO]: 'mimo-v2.5',
-  [AIVendor.VOLCENGINE]: 'ark-code-latest',
-  [AIVendor.ZHIPU]: 'GLM-4.5-Air',
-}
-
-const defaultApiEndpoints: Partial<Record<AIVendor, string>> = {
-  [AIVendor.MIMO]: 'https://token-plan-cn.xiaomimimo.com/v1',
-  [AIVendor.VOLCENGINE]: 'https://ark.cn-beijing.volces.com/api/coding/v3',
-  [AIVendor.ZHIPU]: 'https://open.bigmodel.cn/api/paas/v4',
-}
-
-const defaultEmbeddingModelIds: Partial<Record<AIVendor, string>> = {
-  [AIVendor.OPENAI]: 'text-embedding-3-small',
-}
-
-const defaultEmbeddingApiEndpoints: Partial<Record<AIVendor, string>> = {
-  [AIVendor.MIMO]: 'https://token-plan-cn.xiaomimimo.com/v1',
-  [AIVendor.VOLCENGINE]: 'https://ark.cn-beijing.volces.com/api/coding/v3',
-  [AIVendor.ZHIPU]: 'https://open.bigmodel.cn/api/paas/v4',
-}
-
-const defaultEmbeddingApiKeys: Partial<Record<AIVendor, string>> = {
-  [AIVendor.OPENAI]: '',
-}
-
-const defaultEmbeddingDimensions = 256
 
 export default function SettingsPage() {
   const [configs, setConfigs] = useState<AIConfig[]>([])
@@ -84,36 +59,26 @@ export default function SettingsPage() {
   const [showModal, setShowModal] = useState(false)
   const [editingConfig, setEditingConfig] = useState<AIConfig | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const [testingConfigId, setTestingConfigId] = useState<number | null>(null)
+  const [testing, setTesting] = useState(false)
   const [defaultingConfigId, setDefaultingConfigId] = useState<number | null>(null)
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [vendorFilter, setVendorFilter] = useState<VendorFilter>('ALL')
+  const [showApiKey, setShowApiKey] = useState(false)
 
-  const [formData, setFormData] = useState<{
-    name: string
-    vendor: AIVendor
-    modelId: string
-    apiKey: string
-    apiEndpoint: string
-    embeddingVendor: AIVendor | null | undefined
-    embeddingApiKey: string
-    embeddingApiEndpoint: string
-    embeddingModelId: string
-    embeddingDimensions: string
-    isDefault: boolean
-  }>({
+  const [formData, setFormData] = useState<AIConfigFormData>({
     name: '',
     vendor: AIVendor.DEEPSEEK,
-    modelId: '',
+    modelId: defaultModelIds[AIVendor.DEEPSEEK],
     apiKey: '',
-    apiEndpoint: '',
+    apiEndpoint: defaultApiEndpoints[AIVendor.DEEPSEEK] || '',
     embeddingVendor: AIVendor.OPENAI,
     embeddingApiKey: '',
-    embeddingApiEndpoint: '',
-    embeddingModelId: '',
+    embeddingApiEndpoint: defaultEmbeddingApiEndpoints[AIVendor.OPENAI] || '',
+    embeddingModelId: defaultEmbeddingModelIds[AIVendor.DEEPSEEK] || '',
     embeddingDimensions: String(defaultEmbeddingDimensions),
     isDefault: false,
   })
-  const [showApiKey, setShowApiKey] = useState(false)
 
   const fetchConfigs = useCallback(async () => {
     setLoading(true)
@@ -133,6 +98,18 @@ export default function SettingsPage() {
   useEffect(() => {
     fetchConfigs()
   }, [fetchConfigs])
+
+  const defaultConfig = useMemo(() => configs.find(c => c.isDefault), [configs])
+
+  const filteredConfigs = useMemo(() => {
+    return configs.filter(config => {
+      const matchSearch = !searchQuery ||
+        config.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        config.modelId.toLowerCase().includes(searchQuery.toLowerCase())
+      const matchVendor = vendorFilter === 'ALL' || config.vendor === vendorFilter
+      return matchSearch && matchVendor
+    })
+  }, [configs, searchQuery, vendorFilter])
 
   const openModal = (config?: AIConfig) => {
     setTestResult(null)
@@ -176,51 +153,43 @@ export default function SettingsPage() {
       setTestResult({ success: false, message: '请先填写模型 ID' })
       return
     }
-
     if (!editingConfig && !formData.apiKey) {
       setTestResult({ success: false, message: '请填写 API Key' })
       return
     }
 
-    // 编辑模式且有配置 ID，直接调用单个配置的测试接口
-    if (editingConfig) {
-      await handleTestConfig(editingConfig)
-      return
-    }
-
-    setTestingConfigId(-1) // -1 表示新配置测试
+    setTesting(true)
     setTestResult(null)
 
     try {
-      const res = await fetch('/api/novel/ai-configs/test', {
+      const url = editingConfig
+        ? `/api/novel/ai-configs/${editingConfig.id}/test`
+        : '/api/novel/ai-configs/test'
+      const body = editingConfig
+        ? undefined
+        : JSON.stringify({
+            vendor: formData.vendor,
+            modelId: formData.modelId,
+            apiKey: formData.apiKey,
+            apiEndpoint: formData.apiEndpoint || undefined,
+          })
+
+      const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        vendor: formData.vendor,
-        modelId: formData.modelId,
-        apiKey: formData.apiKey,
-        apiEndpoint: formData.apiEndpoint || undefined,
-        embeddingVendor: formData.embeddingVendor || undefined,
-        embeddingApiKey: formData.embeddingApiKey || undefined,
-        embeddingApiEndpoint: formData.embeddingApiEndpoint || undefined,
-        embeddingModelId: formData.embeddingModelId || undefined,
-        embeddingDimensions: formData.embeddingDimensions
-          ? Number(formData.embeddingDimensions)
-          : undefined,
-      }),
+        headers: body ? { 'Content-Type': 'application/json' } : undefined,
+        body,
       })
 
       const data = await res.json()
-
       if (data.success) {
-        setTestResult({ success: true, message: data.data.response || '测试成功！' })
+        setTestResult({ success: true, message: data.data.response || '测试成功！连接正常。' })
       } else {
         setTestResult({ success: false, message: data.error?.message || '测试失败' })
       }
-    } catch (error) {
+    } catch {
       setTestResult({ success: false, message: '网络错误，请重试' })
     } finally {
-      setTestingConfigId(null)
+      setTesting(false)
     }
   }
 
@@ -243,8 +212,8 @@ export default function SettingsPage() {
         ? `/api/novel/ai-configs/${editingConfig.id}`
         : '/api/novel/ai-configs'
       const body = editingConfig
-        ? { 
-            ...formData, 
+        ? {
+            ...formData,
             id: editingConfig.id,
             apiKey: formData.apiKey.trim() || undefined,
             embeddingApiKey: formData.embeddingApiKey.trim() || undefined,
@@ -277,10 +246,11 @@ export default function SettingsPage() {
       if (data.success) {
         setShowModal(false)
         fetchConfigs()
+        toast.success(editingConfig ? '配置已更新' : '配置已添加')
       } else {
         setTestResult({ success: false, message: data.error?.message || '保存失败' })
       }
-    } catch (error) {
+    } catch {
       setTestResult({ success: false, message: '网络错误，请重试' })
     } finally {
       setSubmitting(false)
@@ -301,8 +271,7 @@ export default function SettingsPage() {
       } else {
         toast.error(data.error?.message || '删除失败')
       }
-    } catch (error) {
-      console.error('删除失败:', error)
+    } catch {
       toast.error('删除失败')
     }
   }
@@ -320,45 +289,25 @@ export default function SettingsPage() {
       } else {
         toast.error(result.error?.message || '设置默认失败')
       }
-    } catch (error) {
-      console.error('设置默认失败:', error)
+    } catch {
       toast.error('设置默认失败')
     } finally {
       setDefaultingConfigId(null)
     }
   }
 
-  const handleTestConfig = async (config: AIConfig) => {
-    setTestingConfigId(config.id)
+  const handleTestConfig = async (configId: number): Promise<{ success: boolean; message: string }> => {
     try {
-      const res = await fetch(`/api/novel/ai-configs/${config.id}/test`, {
+      const res = await fetch(`/api/novel/ai-configs/${configId}/test`, {
         method: 'POST',
       })
       const data = await res.json()
       if (data.success) {
-        // 如果是在模态框内测试，设置 testResult 显示在模态框内
-        if (editingConfig?.id === config.id) {
-          setTestResult({ success: true, message: data.data.response || '测试成功！' })
-        } else {
-          alert('测试成功！')
-        }
-      } else {
-        const errorMsg = data.error?.message || '未知错误'
-        if (editingConfig?.id === config.id) {
-          setTestResult({ success: false, message: errorMsg })
-        } else {
-          alert('测试失败: ' + errorMsg)
-        }
+        return { success: true, message: data.data.response || '测试成功！' }
       }
-    } catch (error) {
-      const errorMsg = '网络错误，请重试'
-      if (editingConfig?.id === config.id) {
-        setTestResult({ success: false, message: errorMsg })
-      } else {
-        alert(errorMsg)
-      }
-    } finally {
-      setTestingConfigId(null)
+      return { success: false, message: data.error?.message || '测试失败' }
+    } catch {
+      return { success: false, message: '网络错误' }
     }
   }
 
@@ -367,29 +316,27 @@ export default function SettingsPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">系统设置</h1>
-          <p className="text-sm text-gray-500">管理 AI 配置</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">管理 AI 配置</p>
         </div>
       </div>
 
       <div className="max-w-5xl mx-auto space-y-6">
-        {!loading && configs.length > 0 && (
-          <Card className={configs.some(c => c.isDefault) ? 'border-blue-200 bg-blue-50/50' : 'border-amber-200 bg-amber-50/50'}>
+        {!loading && (
+          <Card className={defaultConfig ? 'border-blue-200 bg-blue-50/50' : 'border-amber-200 bg-amber-50/50'}>
             <CardContent className="p-4">
-              {configs.some(c => c.isDefault) ? (
+              {defaultConfig ? (
                 <div className="flex items-center gap-3">
-                  <Zap className="h-5 w-5 text-blue-500 shrink-0" />
-                  <div>
+                  <span className="text-xl">{vendorMeta[defaultConfig.vendor]?.icon || '🤖'}</span>
+                  <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-blue-700">
                       当前默认配置：
-                      <span className="font-bold">
-                        {configs.find(c => c.isDefault)!.name}
-                      </span>
-                      <Badge variant="outline" className="ml-2">
-                        {vendorLabels[configs.find(c => c.isDefault)!.vendor]}
+                      <span className="font-bold">{defaultConfig.name}</span>
+                      <Badge variant="outline" className="ml-2 text-xs">
+                        {vendorMeta[defaultConfig.vendor]?.label || defaultConfig.vendor}
                       </Badge>
                     </p>
                     <p className="text-xs text-blue-500 mt-0.5">
-                      模型 {configs.find(c => c.isDefault)!.modelId}，所有 AI 功能将默认使用此配置
+                      模型 {defaultConfig.modelId}，所有 AI 功能将默认使用此配置
                     </p>
                   </div>
                 </div>
@@ -408,115 +355,76 @@ export default function SettingsPage() {
           </Card>
         )}
 
-        <div className="flex justify-end">
-          <Button type="button" onClick={() => openModal()}>
-            <Plus className="h-4 w-4 mr-2" />
-            添加配置
-          </Button>
-        </div>
-
-        {testResult && (
-          <Card className={testResult.success ? 'border-green-200' : 'border-red-200'}>
-            <CardContent className="p-5">
-              <div className="flex items-center gap-2">
-                {testResult.success ? (
-                  <CheckCircle className="h-5 w-5 text-green-500" />
-                ) : (
-                  <XCircle className="h-5 w-5 text-red-500" />
-                )}
-                <span className={testResult.success ? 'text-green-700' : 'text-red-700'}>
-                  {testResult.message}
-                </span>
-              </div>
-            </CardContent>
-          </Card>
+        {!loading && configs.length > 0 && (
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="搜索配置名称或模型..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-8 h-10 rounded-lg border border-gray-300 text-sm bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+            <Select
+              options={vendorFilterOptions}
+              value={vendorFilter}
+              onChange={(e) => setVendorFilter(e.target.value as VendorFilter)}
+              className="w-full sm:w-44"
+            />
+            <Button type="button" onClick={() => openModal()} className="shrink-0">
+              <Plus className="h-4 w-4 mr-1.5" />
+              添加配置
+            </Button>
+          </div>
         )}
 
         {loading ? (
           <div className="text-center py-12 text-gray-500">加载中...</div>
-        ) : configs.length === 0 ? (
+        ) : filteredConfigs.length === 0 ? (
           <Card>
             <CardContent className="p-8 text-center">
-              <Key className="h-12 w-12 mx-auto text-gray-300 mb-4" />
-              <h3 className="font-medium mb-2">暂无 AI 配置</h3>
-              <p className="text-sm text-gray-500 mb-4">添加您的第一个 AI API 配置</p>
-              <Button type="button" onClick={() => openModal()}>
-                <Plus className="h-4 w-4 mr-2" />
-                添加配置
-              </Button>
+              {configs.length === 0 ? (
+                <>
+                  <Key className="h-12 w-12 mx-auto text-gray-300 mb-4" />
+                  <h3 className="font-medium mb-2">暂无 AI 配置</h3>
+                  <p className="text-sm text-gray-500 mb-4">添加您的第一个 AI API 配置</p>
+                  <Button type="button" onClick={() => openModal()}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    添加配置
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Search className="h-12 w-12 mx-auto text-gray-300 mb-4" />
+                  <h3 className="font-medium mb-2">没有匹配的配置</h3>
+                  <p className="text-sm text-gray-500">尝试调整搜索条件或清除筛选</p>
+                </>
+              )}
             </CardContent>
           </Card>
         ) : (
           <div className="space-y-3">
-            {configs.map((config) => (
-              <Card key={config.id}>
-                <CardContent className="p-5">
-                  <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
-                    <div className="min-w-0 space-y-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium text-gray-900 dark:text-white">{config.name}</span>
-                        <Badge variant="outline">{vendorLabels[config.vendor]}</Badge>
-                        {config.isDefault && <Badge variant="success">默认</Badge>}
-                      </div>
-                      <div className="grid gap-1 text-sm text-gray-500">
-                        <p>模型: {config.modelId}</p>
-                        <p>API Key: {config.apiKey ? '已配置' : '未设置'}</p>
-                        {config.apiEndpoint && <p>端点: {config.apiEndpoint}</p>}
-                        {config.embeddingVendor ? <p>Embedding 提供商: {vendorLabels[config.embeddingVendor as AIVendor]}</p> : null}
-                        {config.embeddingApiEndpoint && <p>Embedding 端点: {config.embeddingApiEndpoint}</p>}
-                        {config.embeddingApiKey && <p>Embedding Key: 已配置</p>}
-                        {config.embeddingModelId && <p>Embedding: {config.embeddingModelId}</p>}
-                        {config.embeddingDimensions && <p>Embedding 维度: {config.embeddingDimensions}</p>}
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap gap-2 lg:justify-end">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleTestConfig(config)}
-                        disabled={testingConfigId !== null}
-                      >
-                        {testingConfigId === config.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Play className="h-4 w-4" />
-                        )}
-                        测试
-                      </Button>
-                      {!config.isDefault && (
-                        <Button
-                          type="button"
-                          variant="primary"
-                          size="sm"
-                          onClick={() => handleSetDefault(config.id)}
-                          loading={defaultingConfigId === config.id}
-                          disabled={defaultingConfigId !== null}
-                        >
-                          <Check className="h-4 w-4" />
-                          设为默认
-                        </Button>
-                      )}
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openModal(config)}
-                      >
-                        <Edit2 className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDelete(config.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+            {filteredConfigs.map((config) => (
+              <AIConfigCard
+                key={config.id}
+                config={config}
+                onEdit={openModal}
+                onDelete={handleDelete}
+                onSetDefault={handleSetDefault}
+                onTest={handleTestConfig}
+                defaultingId={defaultingConfigId}
+              />
             ))}
           </div>
         )}
@@ -525,146 +433,24 @@ export default function SettingsPage() {
       <Modal
         open={showModal}
         onClose={() => setShowModal(false)}
-        title={editingConfig ? '编辑配置' : '添加配置'}
-      >
-        <div className="space-y-4">
-          <Input
-            label="配置名称"
-            placeholder="如：我的 DeepSeek"
-            value={formData.name}
-            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-          />
-
-          <Select
-            label="AI 提供商"
-            options={vendorOptions}
-            value={formData.vendor}
-              onChange={(e) => setFormData({
-                ...formData,
-                vendor: e.target.value as AIVendor,
-                modelId: defaultModelIds[e.target.value as AIVendor],
-                apiEndpoint: defaultApiEndpoints[e.target.value as AIVendor] || '',
-              })}
-            />
-
-          <Input
-            label="模型 ID"
-            placeholder="如：deepseek-chat"
-            value={formData.modelId}
-            onChange={(e) => setFormData({ ...formData, modelId: e.target.value })}
-          />
-
-          <Input
-            label="API Key"
-            type={showApiKey ? "text" : "password"}
-            placeholder={editingConfig ? "留空则保持不变，或输入新的 API Key" : "请输入您的 API Key"}
-            value={formData.apiKey}
-            onChange={(e) => setFormData({ ...formData, apiKey: e.target.value })}
-            rightAction={
-              <button
-                type="button"
-                onClick={() => setShowApiKey(!showApiKey)}
-                className="text-gray-500 hover:text-gray-700 focus:outline-none"
-              >
-                {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            }
-          />
-
-          <Input
-            label="API 端点 (可选)"
-            placeholder="如：https://ark.cn-beijing.volces.com/api/coding/v3"
-            value={formData.apiEndpoint}
-            onChange={(e) => setFormData({ ...formData, apiEndpoint: e.target.value })}
-          />
-
-          <div className="space-y-3 rounded-md border border-border p-3">
-            <div>
-              <p className="text-sm font-medium text-gray-900 dark:text-white">RAG 向量化设置</p>
-              <p className="text-xs text-gray-500 mt-1">
-                用于章节检索和记忆召回。可单独指定 embedding 提供商、端点和密钥。
-              </p>
-            </div>
-            <Select
-              label="Embedding 提供商"
-              options={vendorOptions}
-              value={formData.embeddingVendor || AIVendor.OPENAI}
-              onChange={(e) => {
-                const embeddingVendor = e.target.value as AIVendor
-                setFormData({
-                  ...formData,
-                  embeddingVendor,
-                  embeddingApiEndpoint: formData.embeddingApiEndpoint || defaultEmbeddingApiEndpoints[embeddingVendor] || '',
-                  embeddingApiKey: formData.embeddingApiKey || defaultEmbeddingApiKeys[embeddingVendor] || '',
-                  embeddingModelId: formData.embeddingModelId || defaultEmbeddingModelIds[embeddingVendor] || '',
-                })
-              }}
-            />
-            <Input
-              label="Embedding API Key（可选）"
-              type={showApiKey ? "text" : "password"}
-              placeholder="如：向量服务对应的 API Key"
-              value={formData.embeddingApiKey}
-              onChange={(e) => setFormData({ ...formData, embeddingApiKey: e.target.value })}
-            />
-            <Input
-              label="Embedding 端点 (可选)"
-              placeholder="如：https://api.openai.com/v1"
-              value={formData.embeddingApiEndpoint}
-              onChange={(e) => setFormData({ ...formData, embeddingApiEndpoint: e.target.value })}
-            />
-            <Input
-              label="Embedding 模型 ID（可选）"
-              placeholder="如：text-embedding-3-small"
-              value={formData.embeddingModelId}
-              onChange={(e) => setFormData({ ...formData, embeddingModelId: e.target.value })}
-            />
-            <Input
-              label="Embedding 维度（可选）"
-              type="number"
-              min={64}
-              max={3072}
-              placeholder="256"
-              value={formData.embeddingDimensions}
-              onChange={(e) => setFormData({ ...formData, embeddingDimensions: e.target.value })}
-            />
-          </div>
-
+        title={
           <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="isDefault"
-              checked={formData.isDefault}
-              onChange={(e) => setFormData({ ...formData, isDefault: e.target.checked })}
-            />
-            <label htmlFor="isDefault" className="text-sm text-gray-600">
-              设为默认配置
-            </label>
+            <span>{vendorMeta[formData.vendor]?.icon || '🤖'}</span>
+            <span>{editingConfig ? '编辑配置' : '添加配置'}</span>
           </div>
-
-          {testResult && (
-            <div className={`p-3 rounded ${testResult.success ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
-              {testResult.message}
-            </div>
-          )}
-
-          <div className="flex gap-3 justify-end">
-            <Button type="button" variant="outline" onClick={handleTest} disabled={testingConfigId !== null || submitting}>
-              {(testingConfigId === -1 || (editingConfig && testingConfigId === editingConfig.id)) ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Play className="h-4 w-4 mr-2" />
-              )}
-              测试连接
-            </Button>
-            <Button type="button" variant="primary" onClick={handleSubmit} disabled={submitting || testingConfigId !== null}>
-              {submitting ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : null}
-              保存
-            </Button>
-          </div>
-        </div>
+        }
+      >
+        <AIConfigForm
+          formData={formData}
+          onChange={setFormData}
+          editing={!!editingConfig}
+          onTest={handleTest}
+          onSubmit={handleSubmit}
+          onCancel={() => setShowModal(false)}
+          submitting={submitting}
+          testing={testing}
+          testResult={testResult}
+        />
       </Modal>
     </>
   )
