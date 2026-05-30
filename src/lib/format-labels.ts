@@ -74,8 +74,9 @@ export const speedModeLabels: Record<string, string> = {
   FINAL_POLISH: '精修成稿',
 }
 
-// Agent 类型
+// Agent 类型 - 同时支持大写和小写
 export const agentTypeLabels: Record<string, string> = {
+  // 大写
   PLANNER: '策划',
   WRITER: '写作',
   POLISHER: '润色',
@@ -84,12 +85,22 @@ export const agentTypeLabels: Record<string, string> = {
   RESEARCHER: '研究',
   REVIEWER: '审稿',
   DESLOPPER: '去AI味',
+  // 小写
+  planner: '策划',
+  writer: '写作',
+  polisher: '润色',
+  validator: '校验',
+  summarizer: '摘要',
+  researcher: '研究',
+  reviewer: '审稿',
+  deslopper: '去AI味',
 }
 
 /**
  * 格式化章节状态
  */
 export function formatChapterStatus(status: string): string {
+  if (!status) return ''
   return chapterStatusLabels[status] || status
 }
 
@@ -97,6 +108,7 @@ export function formatChapterStatus(status: string): string {
  * 格式化生成阶段
  */
 export function formatGenerationPhase(phase: string): string {
+  if (!phase) return ''
   return generationPhaseLabels[phase] || phase
 }
 
@@ -104,13 +116,15 @@ export function formatGenerationPhase(phase: string): string {
  * 格式化流水线步骤
  */
 export function formatPipelineStep(step: string): string {
-  return pipelineStepLabels[step] || step || '等待中'
+  if (!step) return '等待中'
+  return pipelineStepLabels[step] || step
 }
 
 /**
  * 格式化流水线状态
  */
 export function formatPipelineStatus(status: string): string {
+  if (!status) return ''
   return pipelineStatusLabels[status] || status
 }
 
@@ -118,14 +132,17 @@ export function formatPipelineStatus(status: string): string {
  * 格式化生成模式
  */
 export function formatSpeedMode(mode: string): string {
+  if (!mode) return ''
   return speedModeLabels[mode] || mode
 }
 
 /**
- * 格式化 Agent 类型
+ * 格式化 Agent 类型 - 支持大小写
  */
 export function formatAgentType(agent: string): string {
-  return agentTypeLabels[agent] || agent
+  if (!agent) return ''
+  // 先尝试直接查找，再尝试大写
+  return agentTypeLabels[agent] || agentTypeLabels[agent.toUpperCase()] || agent
 }
 
 /**
