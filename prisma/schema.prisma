@@ -451,17 +451,18 @@ model Plotline {
 }
 
 model StoryState {
-  id             String       @id @default(cuid())
-  projectId      Int          @unique
-  emotionalArc   Json         @default("[]")
-  mainConflict   String?
-  subConflicts   Json?        @default("[]")
-  currentChapter Int          @default(0)
-  totalPlanned   Int          @default(100)
-  metadata       Json?        @default("{}")
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  project        NovelProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  id                      String       @id @default(cuid())
+  projectId               Int          @unique
+  emotionalArc            Json         @default("[]")
+  emotionalArcSummaries   Json?        @default("[]")
+  mainConflict            String?
+  subConflicts            Json?        @default("[]")
+  currentChapter          Int          @default(0)
+  totalPlanned            Int          @default(100)
+  metadata                Json?        @default("{}")
+  createdAt               DateTime     @default(now())
+  updatedAt               DateTime     @updatedAt
+  project                 NovelProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@map("story_states")
 }

@@ -38,6 +38,9 @@ import { buildChapterCompletionReport } from './chapter-completion'
 import { getPendingOrStartedArcEvents, buildArcEventPromptContext, advanceArcEvent } from './arc-event-ledger'
 import { getCheatAbilityState, appendCheatUsage, buildCheatAbilityPromptContext } from './cheat-ability-state'
 import { runRuleFantasyValidator } from './rule-fantasy-validator'
+import { validateChapterContent } from './content-validator'
+import { getWorldState, getVillains, getWorldExpansionContext, getVillainContext } from './long-novel-integration'
+import { updateWorldStateAfterChapter } from './world-state-updater'
 
 const MAX_RETRY_COUNT = 3
 const MAX_REPAIR_ATTEMPTS = 2
@@ -173,11 +176,12 @@ export async function runChapterGenerationPipeline(
   }
   const directorContext = isRetry ? null : await directChapter(chapterNo, projectId).catch(() => null)
   const directorDirective = directorContext?.fullDirective || ''
+  const dynamicRecentCount = chapterNo <= 10 ? 3 : chapterNo <= 30 ? 5 : 7
   const memoryPack = isRetry
     ? options!._retryMemoryPack!
     : await buildChapterMemoryPack(projectId, chapterNo, {
-        recentChapterCount: 3,
-        recentVolumeCount: 2,
+        recentChapterCount: dynamicRecentCount,
+        recentVolumeCount: chapterNo <= 50 ? 2 : 3,
         characterLimit: 10,
         plotlineLimit: 10,
         researchLimit: 3,
@@ -189,11 +193,16 @@ export async function runChapterGenerationPipeline(
   const cheatPromptContext = buildCheatAbilityPromptContext(cheatState)
   const arcEventPromptContext = buildArcEventPromptContext(arcEvents)
 
+  const worldState = await getWorldState(projectId)
+  const villains = await getVillains(projectId)
+  const worldExpansionContext = getWorldExpansionContext(worldState, chapterNo, totalChapters)
+  const villainPromptContext = getVillainContext(villains, chapterNo, totalChapters)
+
   const emotionalArc = memoryPack.storyState?.emotionalArc || []
-  const plannerMemoryContext = [memoryPack.plannerContext, cheatPromptContext, arcEventPromptContext, directorDirective ? `## 导演指令\n${directorDirective}` : '']
+  const plannerMemoryContext = [memoryPack.plannerContext, cheatPromptContext, arcEventPromptContext, directorDirective ? `## 导演指令\n${directorDirective}` : '', worldExpansionContext, villainPromptContext]
     .filter(Boolean)
     .join('\n\n')
-  const writerMemoryContext = [memoryPack.writerContext, cheatPromptContext, directorDirective ? `## 导演指令\n${directorDirective}` : '']
+  const writerMemoryContext = [memoryPack.writerContext, cheatPromptContext, directorDirective ? `## 导演指令\n${directorDirective}` : '', worldExpansionContext, villainPromptContext]
     .filter(Boolean)
     .join('\n\n')
   const validatorMemoryContext = [memoryPack.validatorContext, cheatPromptContext, directorDirective ? `## 导演指令\n${directorDirective}` : '']
@@ -711,6 +720,60 @@ export async function runChapterGenerationPipeline(
       previousMainConflict: undefined,
     })
 
+    const progressRatio = totalChapters > 0 ? chapterNo / totalChapters : 0
+    const contentValidationResult = validateChapterContent({
+      chapterNumber: chapterNo,
+      title: outline.chapterTitle,
+      content: finalContent,
+      progressRatio,
+      finalBossNames: villains.filter(v => v.isFinalBoss).map(v => v.name),
+      protectedVillainNames: villains.filter(v => v.tier === 'arc' && v.lifecycle === 'active').map(v => v.name),
+      openPlotlines: memoryPack.openPlotlines.map(p => ({
+        description: p.description,
+        plannedAt: null,
+        plantedAt: null,
+        status: 'OPEN',
+      })),
+    })
+
+    if (contentValidationResult.shouldReroll) {
+      emit({
+        type: 'quality_gate_failed',
+        data: {
+          errors: [contentValidationResult.violations.join('; ')],
+          message: '正文内容稳定性校验未通过，疑似过早收束',
+        },
+      })
+
+      await prisma.novelChapter.update({
+        where: { id: chapter.id },
+        data: {
+          content: finalContent,
+          status: ChapterStatus.REVIEWING,
+          wordCount: countChineseWords(finalContent),
+          lastAgentType: 'VALIDATOR',
+        },
+      })
+
+      emitProgress(emit, 'failed', chapterNo, totalChapters, completedChaptersCount, countChineseWords(finalContent), chapterTargetWordCount, '正文稳定性校验未通过，已标记人工审核')
+
+      return {
+        success: true,
+        chapterId: chapter.id,
+        content: finalContent,
+        error: '正文稳定性校验未通过，疑似过早收束，已标记人工审核',
+      }
+    }
+
+    if (!contentValidationResult.passed) {
+      emit({
+        type: 'hook_warning',
+        data: {
+          warnings: [...contentValidationResult.warnings, ...contentValidationResult.violations.slice(0, 3)],
+        },
+      })
+    }
+
     const ruleFantasyResult = runRuleFantasyValidator({
       chapterNo,
       content: finalContent,
@@ -883,6 +946,8 @@ export async function runChapterGenerationPipeline(
         chapterNo,
         content: finalContent,
       })
+
+      await updateWorldStateAfterChapter(projectId, finalContent).catch(() => {})
     })
 
     // 章节完成
