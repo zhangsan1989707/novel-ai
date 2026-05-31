@@ -56,6 +56,73 @@ export function quickScore(content: string): number {
 export type { ChapterDeslopInput as DeslopInput, ChapterDeslopResult as DeslopResult, DeslopChange }
 
 /**
+ * 尝试把常见的 malformed JSON（例如 revisedContent 中含有未转义换行）修成可解析格式
+ */
+function tryRepairMalformedJsonObject(source: string): string | null {
+  const revisedMatch = source.match(/"revisedContent"\s*:\s*"([\s\S]*?)"/)
+  if (!revisedMatch || revisedMatch.index === undefined) return null
+
+  const rawBody = revisedMatch[1]
+  const escapedBody = rawBody.replace(/\\/g, '\\\\').replace(/\r?\n/g, '\\n').replace(/\t/g, '\\t')
+  const repaired = source.slice(0, revisedMatch.index) + '"revisedContent": "' + escapedBody + '"' + source.slice(revisedMatch.index + revisedMatch[0].length)
+
+  try {
+    JSON.parse(repaired)
+    return repaired
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 从模型返回内容中提取 deslop JSON 负载
+ */
+function extractDeslopPayload(raw: string): { revisedContent?: string; changes: DeslopChange[] } | null {
+  const trimmed = raw.trim()
+
+  const fenceMatch = trimmed.match(/^```(?:json)?\s*\n([\s\S]*?)\n?```\s*$/)
+  const candidateSource = fenceMatch ? fenceMatch[1].trim() : trimmed
+
+  const repairedCandidate = tryRepairMalformedJsonObject(candidateSource)
+  const candidates = [
+    candidateSource,
+    ...Array.from(candidateSource.matchAll(/\{[\s\S]*?\}/g)).map(m => m[0]),
+    ...(repairedCandidate ? [repairedCandidate] : []),
+  ].filter(Boolean)
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate) as {
+        revisedContent?: unknown
+        changes?: unknown
+      }
+
+      const revisedContent = typeof parsed.revisedContent === 'string' ? parsed.revisedContent.trim() : undefined
+      const changes = Array.isArray(parsed.changes)
+        ? parsed.changes.filter(
+            (c): c is DeslopChange =>
+              typeof c === 'object' &&
+              c !== null &&
+              'type' in c &&
+              'original' in c &&
+              'revised' in c &&
+              'reason' in c &&
+              ['word', 'pattern', 'structure', 'rhythm', 'immersive'].includes((c as DeslopChange).type),
+          )
+        : []
+
+      if (revisedContent || changes.length) {
+        return { revisedContent, changes }
+      }
+    } catch {
+      continue
+    }
+  }
+
+  return null
+}
+
+/**
  * 章节去AI味处理
  */
 export async function chapterDeslopper(input: ChapterDeslopInput): Promise<ChapterDeslopResult> {
@@ -100,24 +167,12 @@ export async function chapterDeslopper(input: ChapterDeslopInput): Promise<Chapt
   let revisedContent = content
   let changes: DeslopChange[] = []
 
-  const jsonMatch = result.content.match(/\{[\s\S]*\}/)
-  if (jsonMatch) {
-    try {
-      const parsed = JSON.parse(jsonMatch[0])
-      if (typeof parsed.revisedContent === 'string') {
-        revisedContent = parsed.revisedContent
-      }
-      if (Array.isArray(parsed.changes)) {
-        changes = parsed.changes.filter(
-          (c: DeslopChange) =>
-            c.type && c.original && c.revised && c.reason &&
-            ['word', 'pattern', 'structure', 'rhythm', 'immersive'].includes(c.type)
-        )
-      }
-    } catch {
-      // 解析失败，尝试直接使用返回内容
-      revisedContent = result.content
+  const parsedPayload = extractDeslopPayload(result.content)
+  if (parsedPayload) {
+    if (parsedPayload.revisedContent) {
+      revisedContent = parsedPayload.revisedContent
     }
+    changes = parsedPayload.changes
   } else {
     revisedContent = result.content
   }

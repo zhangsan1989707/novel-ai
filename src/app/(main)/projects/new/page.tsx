@@ -7,6 +7,7 @@ import { Button, Input, Select, Textarea, toast, CollapsibleSection } from '@/co
 import { ArrowLeft, Sparkles, Settings } from 'lucide-react'
 import { genreOptions, writingStyleOptions } from '@/components/project'
 import { InspirationPanel } from '@/components/inspiration'
+import { TitleCandidatePanel } from '@/components/project/TitleCandidatePanel'
 import type { Platform, LengthType } from '@/types'
 import { PLATFORM_LABELS, LENGTH_TYPE_LABELS } from '@/types'
 import type { HotInspiration } from '@/lib/inspiration/data'
@@ -72,6 +73,38 @@ function inferLengthType(platform: Platform | '', genre: string, corePitch: stri
   return /(悬疑|都市|轻小说|日常|科幻)/.test(text) ? 'long' : 'ultra_long'
 }
 
+function inferGenre(corePitch: string): string {
+  const text = corePitch.trim()
+  if (!text) return ''
+  if (/(规则|怪谈|悬疑|推理|刑侦|惊悚|密室|恐怖)/.test(text)) return '悬疑'
+  if (/(修仙|修真|仙侠|御剑|灵气|筑基|渡劫)/.test(text)) return '仙侠'
+  if (/(玄幻|高武|斗气|魔法|异世界|系统|无敌|升级|觉醒)/.test(text)) return '玄幻'
+  if (/(穿越|重生|穿书|穿成|回到过去)/.test(text)) return '都市'
+  if (/(豪门|总裁|婚恋|恋爱|甜宠|虐恋|追妻|离婚|退婚|真假千金|替身|团宠)/.test(text)) return '言情'
+  if (/(古言|古代|朝堂|宫斗|宅斗|种田经商|嫡女|庶女)/.test(text)) return '古言'
+  if (/(末世|丧尸|废土|灾变|生存)/.test(text)) return '科幻'
+  if (/(科幻|未来|星际|机甲|赛博|太空|AI|机器人)/.test(text)) return '科幻'
+  if (/(历史|三国|大唐|明朝|架空历史|争霸)/.test(text)) return '历史'
+  if (/(游戏|电竞|网游|副本|地下城|LitRPG)/.test(text)) return '游戏'
+  if (/(都市|职场|娱乐圈|校园|现代)/.test(text)) return '都市'
+  if (/(克苏鲁|无限流|恐怖|灵异)/.test(text)) return '悬疑'
+  return ''
+}
+
+function inferPlatform(targetAudience: string | undefined, corePitch: string): Platform | '' {
+  const text = corePitch.trim()
+  // keyword-based override
+  if (/(赘婿|系统|无敌|签到|打卡|抽奖|模拟器)/.test(text)) return 'fanqie'
+  if (/(古言|宫斗|宅斗|纯爱|嫡女|庶女|双男主|百合)/.test(text)) return 'jinjiang'
+  if (/(万古|神帝|修仙|仙尊|长生|大道|渡劫|筑基)/.test(text)) return 'qidian'
+  if (/(快穿|短篇|短打|微小说)/.test(text)) return 'feilu'
+  if (/(种田|年代|轻松日常|乡村|田园)/.test(text)) return 'qimao'
+  // default by channel
+  if (targetAudience === 'FEMALE') return 'jinjiang'
+  if (targetAudience === 'MALE') return 'fanqie'
+  return ''
+}
+
 export default function NewProjectPage() {
   const router = useRouter()
   const [submitting, setSubmitting] = useState(false)
@@ -104,6 +137,7 @@ export default function NewProjectPage() {
   const platform = useWatch({ control, name: 'platform' })
   const lengthType = useWatch({ control, name: 'lengthType' })
   const selectedAiModelId = useWatch({ control, name: 'aiModelId' })
+  const formValues = useWatch({ control })
 
   const handleInspirationSelect = useCallback(async (inspiration: HotInspiration) => {
     setGeneratingTitle(true)
@@ -113,7 +147,11 @@ export default function NewProjectPage() {
     setValue('genre', inspiration.sampleGenre, { shouldDirty: true, shouldValidate: true })
     setValue('writingStyle', inspiration.sampleWritingStyle, { shouldDirty: true, shouldValidate: true })
     setValue('lengthType', inferLengthType(platform, inspiration.sampleGenre, inspiration.aiInsight || inspiration.description), { shouldDirty: true, shouldValidate: true })
-    setValue('targetAudience', inspiration.category === 'male' ? 'MALE' : inspiration.category === 'female' ? 'FEMALE' : undefined, { shouldDirty: true, shouldValidate: true })
+    const resolvedAudience = inspiration.category === 'male' ? 'MALE' as const : inspiration.category === 'female' ? 'FEMALE' as const : undefined
+    setValue('targetAudience', resolvedAudience, { shouldDirty: true, shouldValidate: true })
+    const pitch = inspiration.aiInsight || `${inspiration.title}：${inspiration.description}`
+    const inferredPlatform = inferPlatform(resolvedAudience, pitch)
+    if (inferredPlatform) setValue('platform', inferredPlatform, { shouldDirty: true, shouldValidate: true })
     try {
       const res = await fetch('/api/novel/ai/generate-title', {
         method: 'POST',
@@ -144,6 +182,23 @@ export default function NewProjectPage() {
     toast.success(`已应用灵感「${inspiration.title}」`)
   }, [platform, selectedAiModelId, setValue])
 
+  // 自动推导题材 + 平台
+  const corePitchValue = formValues.corePitch || ''
+  const targetAudienceValue = formValues.targetAudience
+  useEffect(() => {
+    if (!corePitchValue.trim()) return
+    const currentGenre = formValues.genre || ''
+    if (!currentGenre) {
+      const inferred = inferGenre(corePitchValue)
+      if (inferred) setValue('genre', inferred, { shouldDirty: true })
+    }
+    const currentPlatform = formValues.platform || ''
+    if (!currentPlatform) {
+      const inferredPlatform = inferPlatform(targetAudienceValue, corePitchValue)
+      if (inferredPlatform) setValue('platform', inferredPlatform, { shouldDirty: true })
+    }
+  }, [corePitchValue, targetAudienceValue, formValues.genre, formValues.platform, setValue])
+
   useEffect(() => {
     fetch('/api/novel/ai-configs')
       .then((res) => res.json())
@@ -155,10 +210,6 @@ export default function NewProjectPage() {
   const onSubmit = async (data: NewProjectForm) => {
     if (generatingTitle) {
       toast.error('书名仍在生成，请稍候再创建')
-      return
-    }
-    if (!data.platform) {
-      toast.error('请选择平台')
       return
     }
     setSubmitting(true)
@@ -173,14 +224,14 @@ export default function NewProjectPage() {
         body: JSON.stringify({
           title: data.title || undefined,
           description: data.description || undefined,
-          genre: data.genre || undefined,
+          genre: data.genre || inferGenre(normalizedCorePitch) || undefined,
           writingStyle: derivedWritingStyle || undefined,
           corePitch: normalizedCorePitch || undefined,
           targetAudience: data.targetAudience || undefined,
           targetWordCount: data.targetWordCount || undefined,
           chapterWordCount: data.chapterWordCount || undefined,
           aiModelId: data.aiModelId || undefined,
-          platform: PLATFORM_ENUM_MAP[data.platform],
+          platform: PLATFORM_ENUM_MAP[(data.platform || inferPlatform(data.targetAudience, normalizedCorePitch) || 'fanqie') as Platform],
           lengthType: LENGTH_TYPE_ENUM_MAP[derivedLengthType],
         }),
       })
@@ -224,34 +275,47 @@ export default function NewProjectPage() {
               <div className="space-y-5">
               <div>
                 <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  平台选择 <span className="text-red-500">*</span>
+                  平台
                 </label>
-                <div className="flex flex-wrap gap-2">
-                  {PLATFORM_LIST.map((p) => (
-                    <button
-                      key={p}
-                      type="button"
-                      onClick={() => setValue('platform', p, { shouldValidate: true })}
-                      className={`rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${
-                        platform === p
-                          ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
-                          : 'border-gray-200 bg-white text-gray-600 hover:border-blue-300 hover:text-blue-600 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300'
-                      }`}
-                    >
-                      {PLATFORM_LABELS[p]}
-                    </button>
-                  ))}
-                </div>
-                {errors.platform && <p className="mt-1 text-sm text-red-500">{errors.platform.message}</p>}
+                {platform ? (
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center rounded-full bg-indigo-50 dark:bg-indigo-900/30 px-3 py-1.5 text-sm font-medium text-indigo-700 dark:text-indigo-300">
+                      {PLATFORM_LABELS[platform as Platform]}
+                    </span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">AI 推荐，可在高级调校中覆盖</span>
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-400 dark:text-gray-500">填写方向后 AI 自动推荐</p>
+                )}
               </div>
 
-              <Select
-                label="题材"
-                options={genreOptions}
-                placeholder="选择题材"
-                error={errors.genre?.message}
-                {...register('genre', { required: '请选择题材' })}
-              />
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  小说标题
+                </label>
+                <Input
+                  placeholder={generatingTitle ? '正在生成书名...' : '留空则自动生成，也可从下方智能推荐中选择'}
+                  maxLength={200}
+                  disabled={generatingTitle}
+                  {...register('title')}
+                />
+                {generatingTitle && (
+                  <p className="text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1.5 mt-1">
+                    <span className="inline-block h-3 w-3 animate-spin rounded-full border border-blue-600 border-t-transparent" />
+                    AI 正在为你的小说生成书名...
+                  </p>
+                )}
+                <TitleCandidatePanel
+                  currentTitle={formValues.title}
+                  coreHook={formValues.corePitch || formValues.description || ''}
+                  genre={formValues.genre}
+                  platform={formValues.platform || undefined}
+                  channel={formValues.targetAudience === 'MALE' ? 'male' : formValues.targetAudience === 'FEMALE' ? 'female' : undefined}
+                  protagonistIdentity={undefined}
+                  aiModelId={formValues.aiModelId}
+                  onSelectTitle={(title) => setValue('title', title, { shouldDirty: true, shouldValidate: true })}
+                />
+              </div>
 
               <div>
                 <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -270,18 +334,54 @@ export default function NewProjectPage() {
             </div>
             </div>
 
-            <CollapsibleSection title="AI 高级调校" description="风格、长度、标题、字数、AI 模型（可选）">
+            <CollapsibleSection title="AI 高级调校" description="风格、长度、题材、平台、AI 模型（可选）">
               <div className="space-y-4 pt-1">
-                <Input
-                  label="小说标题"
-                  placeholder={generatingTitle ? '正在生成书名...' : '留空则自动生成，不会用灵感代替'}
-                  maxLength={200}
-                  disabled={generatingTitle}
-                  {...register('title')}
-                />
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  标题和灵感是两个字段；留空时系统会自动补一个标题。
-                </p>
+                <div className="rounded-lg border border-dashed border-gray-200 dark:border-gray-700 bg-gray-50/70 dark:bg-gray-900/30 p-3 text-xs text-gray-500 dark:text-gray-400">
+                  标题已提升到上方独立区域，支持 AI 智能推荐和评分选择。
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    题材 <span className="text-xs text-gray-400 font-normal">（AI 自动推导）</span>
+                  </label>
+                  {formValues.genre ? (
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center rounded-full bg-blue-50 dark:bg-blue-900/30 px-3 py-1.5 text-sm font-medium text-blue-700 dark:text-blue-300">
+                        {formValues.genre}
+                      </span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">根据方向自动识别，创建后 AI 可调整</span>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-400 dark:text-gray-500">填写方向后自动判断</p>
+                  )}
+                  <input type="hidden" {...register('genre')} />
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    平台 <span className="text-xs text-gray-400 font-normal">（AI 推荐，可手动覆盖）</span>
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {PLATFORM_LIST.map((p) => (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setValue('platform', p, { shouldValidate: true })}
+                        className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
+                          platform === p
+                            ? 'border-indigo-500 bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300'
+                            : 'border-gray-200 bg-white text-gray-600 hover:border-indigo-300 hover:text-indigo-600 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300'
+                        }`}
+                      >
+                        {PLATFORM_LABELS[p]}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    AI 根据方向推荐，手动选择可覆盖。
+                  </p>
+                  <input type="hidden" {...register('platform')} />
+                </div>
 
                 <Textarea
                   label="描述 / 世界观"

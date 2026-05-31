@@ -38,15 +38,25 @@ export function InspirationPanel({ onSelect, compact = false, limit = 6, classNa
         params.set('category', activeCategory)
       }
       params.set('limit', String(limit))
-
       if (random) {
         params.set('random', 'true')
       }
 
-      const res = await fetch(`/api/novel/inspiration?${params}`)
-      const data = await res.json()
-      if (data.success) {
-        setInspirations(data.data)
+      // 阶段一：静态数据秒回
+      params.set('mode', 'fast')
+      const fastRes = await fetch(`/api/novel/inspiration?${params}`)
+      const fastData = await fastRes.json()
+      if (fastData.success && fastData.data.length > 0) {
+        setInspirations(fastData.data)
+        setLoading(false)
+      }
+
+      // 阶段二：后台静默刷新实时+AI 数据
+      params.set('mode', 'full')
+      const fullRes = await fetch(`/api/novel/inspiration?${params}`)
+      const fullData = await fullRes.json()
+      if (fullData.success && fullData.data.length > 0) {
+        setInspirations(fullData.data)
       }
     } catch (error) {
       console.error('获取创作灵感失败:', error)

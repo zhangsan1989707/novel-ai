@@ -25,15 +25,40 @@ export interface ChapterProjectionResult {
   finalWordCount: number
 }
 
+function repairMalformedChapterJson(source: string): string | null {
+  const revisedMatch = source.match(/"revisedContent"\s*:\s*"([\s\S]*?)"/)
+  if (!revisedMatch || revisedMatch.index === undefined) return null
+
+  const rawBody = revisedMatch[1]
+  const escapedBody = rawBody.replace(/\\/g, '\\\\').replace(/\r?\n/g, '\\n').replace(/\t/g, '\\t')
+  const repaired = source.slice(0, revisedMatch.index) + '"revisedContent": "' + escapedBody + '"' + source.slice(revisedMatch.index + revisedMatch[0].length)
+
+  try {
+    JSON.parse(repaired)
+    return repaired
+  } catch {
+    return null
+  }
+}
+
+function stripOuterCodeFence(value: string): string {
+  const fenceMatch = value.match(/^```(?:json)?\s*\n([\s\S]*?)\n?```\s*$/)
+  return fenceMatch ? fenceMatch[1].trim() : value
+}
+
 function markFailure(status: ProjectionStatusMap, key: string, error: unknown): void {
   status[key] = `failed:${error instanceof Error ? error.message : String(error)}`
 }
 
 export function normalizeCommittedChapterContent(content: string): string {
-  const trimmed = content.trim()
+  const trimmed = stripOuterCodeFence(content.trim())
   if (!trimmed.startsWith('{')) return content
 
-  const parseCandidates = [trimmed, `${trimmed}"}`]
+  const parseCandidates = [
+    trimmed,
+    `${trimmed}"}`,
+    repairMalformedChapterJson(trimmed),
+  ].filter((candidate): candidate is string => Boolean(candidate))
 
   for (const candidate of parseCandidates) {
     try {

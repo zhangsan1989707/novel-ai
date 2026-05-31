@@ -35,6 +35,9 @@ export async function POST(request: NextRequest) {
       strictness: data.strictness,
     })
 
-    return result
+    return {
+      ...result,
+      content: result.revisedContent,
+    }
   })
 }

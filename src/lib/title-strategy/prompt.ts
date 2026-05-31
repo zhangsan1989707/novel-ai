@@ -95,7 +95,7 @@ export function buildTitleFactoryPrompt(input: TitleStrategyInput): string {
   ]
 }`)
   lines.push('')
-  lines.push('请生成 30 个候选标题，按点击潜力从高到低排序。')
+  lines.push('请生成 15 个候选标题，按点击潜力从高到低排序。')
 
   return lines.join('\n')
 }
