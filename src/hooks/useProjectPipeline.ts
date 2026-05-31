@@ -4,6 +4,7 @@ import { useState, useEffect, useLayoutEffect, useRef } from 'react'
 import { toast } from '@/components/ui'
 import type { PipelineRuntimeState } from '@/lib/engine/pipeline-runtime'
 import type { GenerationSpeedMode } from '@/lib/ai/speed-mode'
+import type { ProjectRuntimeSummary } from '@/lib/engine/project-runtime'
 
 export interface PipelineStatus {
   status: 'IDLE' | 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'PAUSED'
@@ -19,6 +20,7 @@ export interface PipelineStatus {
   pipelineJobId?: number
   speedMode?: GenerationSpeedMode
   runtime?: PipelineRuntimeState
+  runtimeSummary?: ProjectRuntimeSummary
   lastHeartbeatAt?: string | null
   updatedAt?: string
 }
@@ -225,6 +227,7 @@ export function useProjectPipeline(options: {
             speedMode: data.data.speedMode || selectedSpeedMode,
             streamRevision: 0,
           },
+          runtimeSummary: data.data.runtimeSummary,
         })
       } else {
         toast.error(data.error?.message || '启动失败')

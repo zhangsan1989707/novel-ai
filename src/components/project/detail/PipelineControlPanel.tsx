@@ -4,11 +4,13 @@ import { Button, Progress } from '@/components/ui'
 import { Play, Pause, Square, RotateCcw, Clock, Loader2, Zap } from 'lucide-react'
 import type { GenerationSpeedMode } from '@/lib/ai/speed-mode'
 import type { PipelineStatus } from '@/hooks/useProjectPipeline'
+import type { ProjectRuntimeSummary } from '@/lib/engine/project-runtime'
 import { formatPipelineStatus, formatTimeAgo, formatDuration, speedModeLabels, formatAgentType } from '@/lib/format-labels'
 import { useState, useEffect } from 'react'
 
 interface PipelineControlPanelProps {
   pipeline: PipelineStatus | null
+  runtimeSummary?: ProjectRuntimeSummary | null
   activeSpeedMode: GenerationSpeedMode
   selectedSpeedMode: GenerationSpeedMode
   speedModeOptions: Array<{ value: string; label: string; description: string }>
@@ -67,6 +69,7 @@ function getStaleStatus(lastHeartbeatAt: string | null | undefined): 'normal' | 
 
 export function PipelineControlPanel({
   pipeline,
+  runtimeSummary,
   activeSpeedMode,
   selectedSpeedMode,
   speedModeOptions,
@@ -98,9 +101,9 @@ export function PipelineControlPanel({
 
   const runtime = pipeline?.runtime
   const currentChapterRuntime = runtime?.currentChapter
-  const totalChapters = pipeline?.totalChapters || estimatedTotalChapters || 300
-  const completedChapters = pipeline?.completedChapters || 0
-  const currentChapterNo = pipeline?.currentChapter || currentChapterRuntime?.chapterNumber || 0
+  const totalChapters = runtimeSummary?.totalChapters || pipeline?.totalChapters || estimatedTotalChapters || 300
+  const completedChapters = runtimeSummary?.completedChapters ?? pipeline?.completedChapters ?? 0
+  const currentChapterNo = runtimeSummary?.currentChapterNo || pipeline?.currentChapter || currentChapterRuntime?.chapterNumber || 0
   const currentWordCount = currentChapterRuntime?.currentWordCount || 0
   const targetWordCount = currentChapterRuntime?.targetWordCount || 3000
   const currentPhase = currentChapterRuntime?.currentPhase || pipeline?.currentStep || ''
@@ -109,7 +112,10 @@ export function PipelineControlPanel({
     : pipeline?.currentChapterProgress || 0
   const staleStatus = pipeline ? getStaleStatus(pipeline.lastHeartbeatAt) : 'normal'
 
-  const canStart = !isRunning && !isPaused && hasBoundModel && !maintenanceActive && !flowBlockedReason
+  const canStart = runtimeSummary?.canStart ?? (!isRunning && !isPaused && hasBoundModel && !maintenanceActive && !flowBlockedReason)
+  const canPause = runtimeSummary?.canPause ?? isRunning
+  const canResume = runtimeSummary?.canResume ?? (isPaused || isFailed)
+  const canRepair = runtimeSummary?.canRepair ?? isFailed
   const borderColor = isRunning ? 'border-blue-200 dark:border-blue-800'
     : isPaused ? 'border-yellow-200 dark:border-yellow-800'
     : isFailed ? 'border-red-200 dark:border-red-800'
@@ -128,7 +134,7 @@ export function PipelineControlPanel({
           <div className="flex-1 min-w-0">
             <div className="text-sm font-medium text-gray-700 dark:text-gray-200">生成控制</div>
             <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">
-              当前模式：{speedModeLabels[selectedSpeedMode]}
+              当前状态：{runtimeSummary?.stageLabel || '准备就绪'} · 当前模式：{speedModeLabels[activeSpeedMode]}
               {speedModeOptions.find(o => o.value === selectedSpeedMode)?.description
                 ? ` — ${speedModeOptions.find(o => o.value === selectedSpeedMode)!.description}`
                 : ''}
@@ -221,7 +227,7 @@ export function PipelineControlPanel({
           {/* 左侧状态数据 */}
           <div className="flex items-center gap-5 text-xs text-gray-500 dark:text-gray-400">
             <span className="flex items-center gap-1">
-              状态：{formatPipelineStatus(pipeline?.status || 'IDLE')}
+              状态：{runtimeSummary?.stageLabel || formatPipelineStatus(pipeline?.status || 'IDLE')}
             </span>
             <span className="flex items-center gap-1">
               模式：
@@ -260,7 +266,7 @@ export function PipelineControlPanel({
                     重试当前章
                   </Button>
                 )}
-                <Button variant="outline" size="sm" onClick={handlePausePipeline} className="h-8 gap-1">
+                <Button variant="outline" size="sm" onClick={handlePausePipeline} disabled={!canPause} className="h-8 gap-1">
                   <Pause className="h-3.5 w-3.5" />
                   暂停
                 </Button>
@@ -272,7 +278,7 @@ export function PipelineControlPanel({
             )}
             {isPaused && (
               <>
-                <Button variant="primary" size="sm" onClick={handleResumePipeline} className="h-8 gap-1">
+                <Button variant="primary" size="sm" onClick={handleResumePipeline} disabled={!canResume} className="h-8 gap-1">
                   <Play className="h-3.5 w-3.5" />
                   继续
                 </Button>
@@ -288,7 +294,7 @@ export function PipelineControlPanel({
                   <RotateCcw className="h-3.5 w-3.5" />
                   重新开始
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => handleRecoverPipeline('continue')} className="h-8 gap-1">
+                <Button variant="outline" size="sm" onClick={() => handleRecoverPipeline('continue')} disabled={!canRepair} className="h-8 gap-1">
                   <Loader2 className="h-3.5 w-3.5" />
                   断点恢复
                 </Button>

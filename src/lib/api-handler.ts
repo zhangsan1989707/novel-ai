@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { ErrorHandler, ErrorCategory } from './errors'
+import { ErrorHandler } from './errors/handler'
+import { ErrorCategory } from './errors/types'
 
 type ApiHandler<T = unknown> = (
   request: Request,

@@ -5,7 +5,7 @@ import { AllErrors } from './codes';
 export class ErrorHandler {
   static normalize(error: RawError): AppError {
     if ('code' in error && 'category' in error) {
-      return error as AppError;
+      return error as unknown as AppError;
     }
 
     const category = this.categorize(error);
@@ -112,9 +112,8 @@ export class ErrorHandler {
     overrides?: Partial<AppError>
   ): AppError {
     const baseError = ErrorMessages[code] || ErrorMessages[ErrorCategory.INTERNAL];
-    const allErrors = AllErrors as any;
-    const errorDef = Object.values(allErrors).find(
-      (e: any) => e.code === code
+    const errorDef = Object.values(AllErrors as Record<string, { code: string; category: ErrorCategory }>).find(
+      e => e.code === code
     );
 
     return {

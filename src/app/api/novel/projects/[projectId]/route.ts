@@ -10,6 +10,7 @@ import { getDefaultAIConfigRecord } from '@/lib/ai/factory'
 import { ensureProjectMaintenanceQueued, getProjectMaintenanceSummary } from '@/lib/engine/auto-maintenance'
 import { buildStoryRoadmap } from '@/lib/engine/story-roadmap'
 import { resolveProjectPlanningTargets } from '@/lib/engine/project-length'
+import { readProjectPipelineSnapshot } from '@/lib/engine/project-pipeline-snapshot'
 
 function buildProjectPreflight(project: {
   aiModelConfig: unknown
@@ -276,6 +277,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     })
 
     const maintenanceSummary = await getProjectMaintenanceSummary(id)
+    const maintenanceActive = Boolean(
+      maintenanceSummary.bootstrapQueued ||
+      maintenanceSummary.bootstrapRunning ||
+      maintenanceSummary.ragQueued ||
+      maintenanceSummary.ragRunning
+    )
     const planningTargets = resolveProjectPlanningTargets({
       lengthType: project.lengthType,
       targetWordCount: project.targetWordCount,
@@ -326,6 +333,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         } | null,
       }))
     )
+    const pipelineSnapshot = await readProjectPipelineSnapshot(id, { maintenanceActive })
 
     // 返回带计算后字数的项目数据
     return NextResponse.json({
@@ -341,6 +349,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         estimatedTotalChapters: planningTargets.effectiveTotalChapters,
         expectedStageCount: planningTargets.stageSequence.length,
         maintenanceSummary,
+        runtimeSummary: pipelineSnapshot?.runtimeSummary,
       }
     })
   } catch (error) {

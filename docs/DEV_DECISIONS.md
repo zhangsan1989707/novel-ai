@@ -24,3 +24,26 @@
 
 - 决策：所有新增 API/页面代码遵循 Next.js 16 本地文档：动态路由 `params` 作为 Promise 处理，Route Handler 默认请求时执行。
   - 原因：项目 `AGENTS.md` 明确提醒 Next 版本差异，不能依赖旧版本记忆。
+
+## 2026-06-01 第二阶段实现
+
+- 决策：新增 `project-pipeline-snapshot.ts`，由 API status 和 SSE stream 共用，而不是继续维护两份相似代码。
+  - 原因：状态漂移的主要来源之一就是 status 和 stream 各自计算章节数、job、runtime。
+
+- 决策：项目详情 API 通过额外读取 pipeline snapshot 返回 `runtimeSummary`。
+  - 原因：详情页首屏需要统一运行态；额外查询比把运行态逻辑塞进巨大 project route 更可回滚。
+
+- 决策：`runtimeSummary.canStart` 包含模型绑定、蓝图确认、ArcPlan 确认、维护任务、任务运行态。
+  - 原因：按钮禁用规则必须从统一模型来，避免顶部按钮和控制面板不一致。
+
+- 决策：当维护任务 active 时，详情页优先使用项目详情 API 中带 maintenance 语义的 `runtimeSummary`。
+  - 原因：pipeline status 端点不读取维护任务，不能覆盖初始化中的项目级运行态。
+
+- 决策：修复 `npm run build` 暴露的 `ErrorHandler` 导入歧义，但只改错误处理入口和类型收窄。
+  - 原因：`src/lib/errors.ts` 与 `src/lib/errors/` 目录同名导致 `./errors` 解析到旧文件，阻断构建；改为显式导入 `./errors/handler`、`./errors/types` 最小且可回滚。
+
+- 决策：保留本地 `.env` 中 `NODE_TLS_REJECT_UNAUTHORIZED=0` 引发的构建告警，不修改环境配置。
+  - 原因：用户明确禁止修改真实环境配置；该告警不阻断本阶段验收。
+
+- 决策：修复 planner/validator 测试与当前 Agent 接口的偏差，并让 `plannerAgent` 把直接传入的角色档案合并进记忆上下文。
+  - 原因：完整测试发现旧测试仍按历史接口断言；角色档案是长篇一致性的核心输入，直接忽略会削弱章节策划稳定性。

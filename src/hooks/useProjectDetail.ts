@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { toast } from '@/components/ui'
 import type { ProjectBaseInfoFormData } from '@/components/project'
 import type { GenerationSpeedMode } from '@/lib/ai/speed-mode'
+import type { ProjectRuntimeSummary } from '@/lib/engine/project-runtime'
 
 export interface ProjectChapter {
   id: number
@@ -178,6 +179,7 @@ export interface ProjectDetail {
   arcPlans?: ProjectArcPlan[]
   storyRoadmap?: ProjectStoryRoadmapItem[]
   preflight?: ProjectPreflight
+  runtimeSummary?: ProjectRuntimeSummary
   maintenanceSummary?: ProjectMaintenanceSummary
   blueprintConsole?: { generatedAt?: string | null } & Record<string, unknown>
   createdAt: string

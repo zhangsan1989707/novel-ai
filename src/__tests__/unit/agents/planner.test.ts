@@ -1,5 +1,4 @@
 import { describe, it, expect, vi } from 'vitest';
-import type { AIGenerateOptions } from '@/lib/ai/types';
 
 const mockGenerate = vi.fn();
 
@@ -14,7 +13,7 @@ vi.mock('@/lib/ai/factory', () => ({
 
 describe('plannerAgent', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    mockGenerate.mockReset();
   });
 
   describe('basic functionality', () => {
@@ -76,8 +75,10 @@ describe('plannerAgent', () => {
         characterProfiles: [],
         openPlotlines: [],
         emotionalArc: [],
-        targetWordCount: 3000
-      }, undefined, { generate: mockGenerate } as any);
+        targetWordCount: 3000,
+        recentChapterSummaries: [],
+        provider: { generate: mockGenerate } as any
+      } as any);
 
       expect(result).toBeDefined();
       expect(result.outline).toBeDefined();
@@ -98,8 +99,13 @@ describe('plannerAgent', () => {
       const result = await plannerAgent({
         projectId: 1,
         chapterNo: 1,
-        targetWordCount: 3000
-      } as any, undefined, { generate: mockGenerate } as any);
+        characterProfiles: [],
+        openPlotlines: [],
+        emotionalArc: [],
+        targetWordCount: 3000,
+        recentChapterSummaries: [],
+        provider: { generate: mockGenerate } as any
+      } as any);
 
       expect(result).toBeDefined();
       expect(result.outline.chapterTitle).toBe('测试章节');
@@ -116,8 +122,13 @@ describe('plannerAgent', () => {
         plannerAgent({
           projectId: 1,
           chapterNo: 1,
-          targetWordCount: 3000
-        }, undefined, { generate: mockGenerate } as any)
+          characterProfiles: [],
+          openPlotlines: [],
+          emotionalArc: [],
+          targetWordCount: 3000,
+          recentChapterSummaries: [],
+          provider: { generate: mockGenerate } as any
+        } as any)
       ).rejects.toThrow('AI provider unavailable');
     });
 
@@ -126,13 +137,20 @@ describe('plannerAgent', () => {
 
       mockGenerate.mockResolvedValueOnce({
         content: 'invalid json response'
+      }).mockResolvedValueOnce({
+        content: 'still invalid'
       });
 
       const result = await plannerAgent({
         projectId: 1,
         chapterNo: 1,
-        targetWordCount: 3000
-      }, undefined, { generate: mockGenerate } as any);
+        characterProfiles: [],
+        openPlotlines: [],
+        emotionalArc: [],
+        targetWordCount: 3000,
+        recentChapterSummaries: [],
+        provider: { generate: mockGenerate } as any
+      } as any);
 
       expect(result).toBeDefined();
     });
@@ -155,14 +173,18 @@ describe('plannerAgent', () => {
         characterProfiles: [
           { name: '张三', role: 'PROTAGONIST', personality: '坚毅' }
         ],
-        targetWordCount: 3000
+        openPlotlines: [],
+        emotionalArc: [],
+        targetWordCount: 3000,
+        recentChapterSummaries: [],
+        provider: { generate: mockGenerate } as any
       };
 
-      await plannerAgent(input, undefined, { generate: mockGenerate } as any);
+      await plannerAgent(input as any);
 
       expect(mockGenerate).toHaveBeenCalled();
       const callArgs = mockGenerate.mock.calls[0][0];
-      expect(callArgs.prompt).toContain('张三');
+      expect(callArgs).toContain('张三');
     });
   });
 
@@ -183,14 +205,17 @@ describe('plannerAgent', () => {
         openPlotlines: [
           { id: 'pl-001', description: '主角身世之谜' }
         ],
-        targetWordCount: 3000
+        emotionalArc: [],
+        targetWordCount: 3000,
+        recentChapterSummaries: [],
+        provider: { generate: mockGenerate } as any
       };
 
-      await plannerAgent(input, undefined, { generate: mockGenerate } as any);
+      await plannerAgent(input as any);
 
       expect(mockGenerate).toHaveBeenCalled();
       const callArgs = mockGenerate.mock.calls[0][0];
-      expect(callArgs.prompt).toContain('主角身世之谜');
+      expect(callArgs).toContain('主角身世之谜');
     });
   });
 });

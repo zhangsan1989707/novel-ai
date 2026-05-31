@@ -2,6 +2,28 @@
 
 更新时间：2026-06-01
 
+## 2026-06-01 第二阶段进展：统一项目运行态
+
+已完成：
+
+- 新增 `src/lib/engine/project-runtime.ts`，定义 `ProjectRuntimeStage`、`ChapterRuntimeStatus`、`ProjectRuntimeSummary`。
+- 新增 `src/lib/engine/project-pipeline-snapshot.ts`，让 `/pipeline/status` 和 `/pipeline/stream` 共用同一份项目流水线快照构建逻辑。
+- `/api/novel/projects/[projectId]` 已返回 `runtimeSummary`，详情页可以从项目详情直接获得统一运行态。
+- `/api/novel/projects/[projectId]/pipeline/start` 返回初始 `runtimeSummary`，避免启动瞬间 UI 无运行态。
+- 项目详情页顶部 badge、生成控制面板、侧栏进度已接入 `runtimeSummary`。
+- 新增 `src/__tests__/unit/project-runtime.test.ts`，覆盖蓝图等待、写作中、修复中、批次完成、全书完成。
+- 修复 `src/lib/api-handler.ts` 的错误处理导入歧义，并补齐 `src/lib/errors/handler.ts` 的 TypeScript 收窄问题。
+- 修复 `plannerAgent` 直接传入角色档案时未进入策划 prompt 的问题，并更新 planner/validator 测试以匹配当前 Agent 接口。
+
+验证：
+
+- `npm run test -- src/__tests__/unit/project-runtime.test.ts` 通过，5/5。
+- `npm run test -- src/__tests__/unit/project-runtime.test.ts src/__tests__/unit/errors.test.ts` 通过，22/22。
+- `npm run test -- src/__tests__/unit/agents/planner.test.ts src/__tests__/unit/agents/validator.test.ts` 通过，16/16。
+- `npm run test` 通过，35 个测试文件、280 个测试全部通过。
+- `npm run lint` 通过退出码 0；仓库仍有 245 个历史 warning。
+- `npm run build` 通过；构建日志仍提示本地 `.env` 设置了 `NODE_TLS_REJECT_UNAUTHORIZED=0`，该环境告警未在本阶段修改。
+
 ## 1. 当前项目实际架构图
 
 ```mermaid

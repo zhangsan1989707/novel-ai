@@ -305,6 +305,9 @@ ${ch.content || ''}
   const reviewingChapters = project.chapters.filter(c => c.status === 'REVIEWING').length
   const arcGroups = groupChaptersByArc(project)
   const liveChapter = pipeline?.runtime?.currentChapter || null
+  const runtimeSummary = maintenanceActive
+    ? (project.runtimeSummary || pipeline?.runtimeSummary || null)
+    : (pipeline?.runtimeSummary || project.runtimeSummary || null)
   const activeSpeedMode = pipeline?.speedMode || pipeline?.runtime?.speedMode || selectedSpeedMode
   const hasBoundModel = Boolean(project.aiModelConfig)
   const isAnalyzeMode = project.projectMode === 'ANALYZE'
@@ -327,6 +330,20 @@ ${ch.content || ''}
         : !project.arcPlanConfirmedAt
           ? '故事路线图未确认前，不允许生成章节目录'
           : null
+  const runtimeStageVariant: 'default' | 'primary' | 'secondary' | 'success' | 'warning' | 'danger' =
+    runtimeSummary?.stage === 'FAILED'
+      ? 'danger'
+      : runtimeSummary?.stage === 'COMPLETED'
+        ? 'success'
+        : runtimeSummary?.stage === 'PAUSED'
+          ? 'warning'
+          : runtimeSummary?.stage === 'IDLE'
+            ? 'secondary'
+            : 'primary'
+  const fallbackCanStartGeneration = (
+    !pipeline || !['RUNNING', 'PENDING', 'PAUSED'].includes(pipeline.status)
+  ) && hasBoundModel && !maintenanceActive && !flowBlockedReason
+  const canStartGeneration = runtimeSummary?.canStart ?? fallbackCanStartGeneration
   const steeringValues = {
     pace: project.pace ?? defaultSteeringValues.pace,
     darkness: project.darkness ?? defaultSteeringValues.darkness,
@@ -358,13 +375,9 @@ ${ch.content || ''}
             <Badge variant={projectStatusMap[project.status].variant}>
               {projectStatusMap[project.status].label}
             </Badge>
-            {workflowPhase !== 'WRITING' ? (
-              <Badge variant="secondary">{workflowPhaseLabel.statusBadge}</Badge>
-            ) : pipeline ? (
-              <Badge variant={pipeline.status === 'RUNNING' ? 'primary' : pipeline.status === 'FAILED' ? 'danger' : 'secondary'}>
-                {getPipelineStatusLabel(pipeline.status)}
-              </Badge>
-            ) : null}
+            <Badge variant={runtimeStageVariant}>
+              {runtimeSummary?.stageLabel || (workflowPhase !== 'WRITING' ? workflowPhaseLabel.statusBadge : getPipelineStatusLabel(pipeline?.status || 'IDLE'))}
+            </Badge>
           </div>
           <p className="mt-1 text-sm text-gray-500">
             {project.genre || '未设定题材'} · {project.writingStyle || '未设定风格'} · 更新于 {formatDisplayDate(project.updatedAt)}
@@ -390,7 +403,7 @@ ${ch.content || ''}
                   arcPlanConfirmedAt: project.arcPlanConfirmedAt,
                 })}
                 loading={pipelineStarting}
-                disabled={pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING' || pipeline?.status === 'PAUSED' || !hasBoundModel || maintenanceActive || Boolean(flowBlockedReason)}
+                disabled={!canStartGeneration}
                 className="gap-1.5"
                 title={flowBlockedReason || undefined}
               >
@@ -584,6 +597,7 @@ ${ch.content || ''}
                   {workflowPhase === 'WRITING' && (<>
                     <PipelineControlPanel
                       pipeline={pipeline}
+                      runtimeSummary={runtimeSummary}
                       activeSpeedMode={activeSpeedMode}
                       selectedSpeedMode={selectedSpeedMode}
                       speedModeOptions={speedModeOptions}
@@ -740,6 +754,7 @@ ${ch.content || ''}
                 sidebarCollapsed={sidebarCollapsed}
                 onToggleSidebar={setSidebarCollapsed}
                 workflowPhase={workflowPhase}
+                runtimeSummary={runtimeSummary}
               />
             </div>
           </div>

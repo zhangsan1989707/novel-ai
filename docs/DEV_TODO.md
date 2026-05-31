@@ -4,17 +4,20 @@
 
 ## P0：必须马上修
 
-- [ ] 新增统一运行态类型：`ProjectRuntimeStage`、`ChapterRuntimeStatus`、`ProjectRuntimeSummary`。
-- [ ] 新增纯函数构建项目运行态摘要，不依赖 React，不直接写数据库。
-- [ ] 让 `/api/novel/projects/[projectId]/pipeline/status` 使用统一运行态摘要。
-- [ ] 让 `/api/novel/projects/[projectId]/pipeline/stream` 使用同一份快照构建逻辑。
-- [ ] 让 `/api/novel/projects/[projectId]` 返回 `runtimeSummary`。
-- [ ] 项目详情页顶部 badge 使用 `runtimeSummary.stageLabel`。
-- [ ] 流水线控制面板使用 `runtimeSummary.canStart/canPause/canResume/canRepair/canExport`。
-- [ ] 侧栏进度优先展示 `runtimeSummary.overallProgress`。
-- [ ] 章节目录识别当前实时章节，展示更清晰的运行中状态。
-- [ ] 增加运行态单元测试。
-- [ ] 更新 `docs/DEV_PROGRESS.md`、`docs/DEV_TODO.md`、`docs/DEV_DECISIONS.md`。
+- [x] 新增统一运行态类型：`ProjectRuntimeStage`、`ChapterRuntimeStatus`、`ProjectRuntimeSummary`。
+- [x] 新增纯函数构建项目运行态摘要，不依赖 React，不直接写数据库。
+- [x] 让 `/api/novel/projects/[projectId]/pipeline/status` 使用统一运行态摘要。
+- [x] 让 `/api/novel/projects/[projectId]/pipeline/stream` 使用同一份快照构建逻辑。
+- [x] 让 `/api/novel/projects/[projectId]` 返回 `runtimeSummary`。
+- [x] 项目详情页顶部 badge 使用 `runtimeSummary.stageLabel`。
+- [x] 流水线控制面板使用 `runtimeSummary.canStart/canPause/canResume/canRepair/canExport`。
+- [x] 侧栏进度优先展示 `runtimeSummary.overallProgress`。
+- [x] 章节目录识别当前实时章节，展示更清晰的运行中状态。
+- [x] 增加运行态单元测试。
+- [x] 修复 planner/validator Agent 单元测试与当前接口不一致的问题。
+- [x] 修复 planner 直接传入角色档案时未进入章节策划 prompt 的问题。
+- [x] 更新 `docs/DEV_PROGRESS.md`、`docs/DEV_TODO.md`、`docs/DEV_DECISIONS.md`。
+- [x] 修复基线构建阻断：`src/lib/api-handler.ts` 导入了未导出的 `ErrorHandler`。
 
 ## P1：下一步增强
 
@@ -42,4 +45,3 @@
 - [ ] 建立生产级观测面板、成本预算告警和任务追踪。
 - [ ] 对市场、灵感、封面、风格等外围能力做产品线整理。
 - [ ] 增加完整 Playwright 端到端生成回归。
-

@@ -7,6 +7,7 @@ import { formatLargeNumber } from '@/lib/utils'
 import type { ProjectDetail } from '@/hooks/useProjectDetail'
 import type { ProjectWorkflowPhase } from '@/components/project/detail/constants'
 import { workflowPhaseLabels } from '@/components/project/detail/constants'
+import type { ProjectRuntimeSummary } from '@/lib/engine/project-runtime'
 
 interface ProjectSidebarProps {
   project: ProjectDetail
@@ -16,6 +17,7 @@ interface ProjectSidebarProps {
   sidebarCollapsed: boolean
   onToggleSidebar: (collapsed: boolean) => void
   workflowPhase?: ProjectWorkflowPhase
+  runtimeSummary?: ProjectRuntimeSummary | null
 }
 
 export function ProjectSidebar({
@@ -26,7 +28,10 @@ export function ProjectSidebar({
   sidebarCollapsed,
   onToggleSidebar,
   workflowPhase,
+  runtimeSummary,
 }: ProjectSidebarProps) {
+  const displayedProgress = runtimeSummary?.overallProgress ?? progress
+
   return (
     <>
       <div className={`space-y-4 transition-all duration-300 ${sidebarCollapsed ? 'hidden' : ''}`}>
@@ -48,11 +53,34 @@ export function ProjectSidebar({
                 {workflowPhase && workflowPhase !== 'WRITING' ? workflowPhaseLabels[workflowPhase].sidebarTitle : '写作进度'}
               </h3>
               <span className="text-lg font-bold text-blue-600">
-                {workflowPhase && workflowPhase !== 'WRITING' ? workflowPhaseLabels[workflowPhase].title : progress !== null ? `${progress}%` : '-'}
+                {runtimeSummary ? `${runtimeSummary.overallProgress}%` : workflowPhase && workflowPhase !== 'WRITING' ? workflowPhaseLabels[workflowPhase].title : displayedProgress !== null ? `${displayedProgress}%` : '-'}
               </span>
             </div>
 
-            {workflowPhase && workflowPhase !== 'WRITING' ? (
+            {runtimeSummary ? (
+              <div className="rounded-xl border border-blue-200 bg-white/80 p-4 text-sm dark:border-blue-900/40 dark:bg-slate-950/40">
+                <div className="mb-2 text-sm font-medium text-gray-900 dark:text-white">{runtimeSummary.stageLabel}</div>
+                <Progress value={runtimeSummary.overallProgress} max={100} size="sm" />
+                <div className="mt-3 grid grid-cols-2 gap-3 text-gray-700 dark:text-gray-200">
+                  <div>
+                    <div className="text-xs text-gray-500">已完成</div>
+                    <div className="font-semibold">{runtimeSummary.completedChapters}/{runtimeSummary.totalChapters} 章</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-gray-500">当前章节</div>
+                    <div className="font-semibold">{runtimeSummary.currentChapterNo ? `第${runtimeSummary.currentChapterNo}章` : '-'}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-gray-500">待处理</div>
+                    <div className="font-semibold">{runtimeSummary.failedChapters} 章</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-gray-500">排队中</div>
+                    <div className="font-semibold">{runtimeSummary.queuedChapters} 章</div>
+                  </div>
+                </div>
+              </div>
+            ) : workflowPhase && workflowPhase !== 'WRITING' ? (
               <div className="rounded-xl border border-blue-200 bg-white/80 p-4 text-sm dark:border-blue-900/40 dark:bg-slate-950/40">
                 <div className="space-y-3 text-gray-700 dark:text-gray-200">
                   <div className="flex items-start justify-between gap-3">

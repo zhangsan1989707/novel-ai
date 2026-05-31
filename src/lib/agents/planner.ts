@@ -71,6 +71,9 @@ export async function plannerAgent(
   input: PlannerInput
 ): Promise<{ outline: ChapterOutline; tokens?: number }> {
   const { projectId, chapterNo, ...context } = input
+  const characterProfiles = input.characterProfiles || []
+  const openPlotlines = input.openPlotlines || []
+  const emotionalArc = input.emotionalArc || []
 
   // 获取可追踪的 AI Provider
   const provider = input.provider || await AIService.createProvider({
@@ -89,13 +92,18 @@ export async function plannerAgent(
   const prompt = buildPlannerPrompt({
     ...context, projectTitle: context.projectTitle || "",
     chapterNo,
-    memoryContext: input.memoryContext,
     recentChapterSummaries: recentChapters.map(ch => ({
       chapterNo: ch.chapterNo,
       summary: ch.summary,
     })),
-    openPlotlines: input.openPlotlines,
-    emotionalArc: input.emotionalArc,
+    openPlotlines,
+    emotionalArc,
+    memoryContext: [
+      input.memoryContext,
+      characterProfiles.length > 0
+        ? `## 角色档案\n${characterProfiles.map(character => `- ${character.name}（${character.role}）：${character.description || ''}`).join('\n')}`
+        : '',
+    ].filter(Boolean).join('\n\n') || undefined,
     popularFictionProfile: input.popularFictionProfile,
   })
 

@@ -137,7 +137,7 @@ describe('validatorAgent', () => {
 
       expect(mockProvider.generate).toHaveBeenCalled();
       const callArgs = mockProvider.generate.mock.calls[0][0];
-      expect(callArgs.prompt).toContain('张三');
+      expect(callArgs).toContain('张三');
     });
   });
 
@@ -178,7 +178,7 @@ describe('validatorAgent', () => {
 
       expect(mockProvider.generate).toHaveBeenCalled();
       const callArgs = mockProvider.generate.mock.calls[0][0];
-      expect(callArgs.prompt).toContain('主角身世之谜');
+      expect(callArgs).toContain('主角身世之谜');
     });
   });
 

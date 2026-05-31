@@ -4,6 +4,7 @@ import { createJob, failStaleRunningJobs, resumeJob, updateJobStep } from '@/lib
 import { runProductionPipeline } from '@/lib/engine/production-pipeline'
 import { getProjectMaintenanceSummary } from '@/lib/engine/auto-maintenance'
 import { getWorkflowBlockReason } from '@/lib/engine/project-flow'
+import { readProjectPipelineSnapshot } from '@/lib/engine/project-pipeline-snapshot'
 import { normalizeGenerationSpeedMode, generationSpeedModes } from '@/lib/ai/speed-mode'
 import { z } from 'zod'
 
@@ -135,6 +136,7 @@ export async function POST(
         const payload = activeJob.payload && typeof activeJob.payload === 'object'
           ? activeJob.payload as Record<string, unknown>
           : {}
+        const snapshot = await readProjectPipelineSnapshot(projectId)
         return NextResponse.json({
           success: true,
           data: {
@@ -142,6 +144,8 @@ export async function POST(
             projectId,
             status: activeJob.status,
             speedMode: normalizeGenerationSpeedMode(payload.speedMode),
+            totalChapters: snapshot?.totalChapters,
+            runtimeSummary: snapshot?.runtimeSummary,
           },
         })
       } else if (activeJob.status === 'PAUSED') {
@@ -156,6 +160,7 @@ export async function POST(
       const payload = activeJob.payload && typeof activeJob.payload === 'object'
         ? activeJob.payload as Record<string, unknown>
         : {}
+      const snapshot = await readProjectPipelineSnapshot(projectId)
       return NextResponse.json({
         success: true,
         data: {
@@ -163,6 +168,8 @@ export async function POST(
           projectId,
           status: activeJob.status,
           speedMode: normalizeGenerationSpeedMode(payload.speedMode),
+          totalChapters: snapshot?.totalChapters,
+          runtimeSummary: snapshot?.runtimeSummary,
         },
       })
     }
@@ -174,6 +181,7 @@ export async function POST(
       )
     }
 
+    const snapshot = await readProjectPipelineSnapshot(projectId)
     return NextResponse.json({
       success: true,
       data: {
@@ -182,6 +190,8 @@ export async function POST(
         status: 'PENDING',
         speedMode,
         runner: process.env.NOVEL_AI_PIPELINE_INLINE === 'false' ? 'external' : 'inline',
+        totalChapters: snapshot?.totalChapters,
+        runtimeSummary: snapshot?.runtimeSummary,
       },
     })
   } catch (error) {
