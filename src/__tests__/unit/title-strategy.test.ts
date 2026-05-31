@@ -75,7 +75,7 @@ describe('title-strategy prompt', () => {
     expect(prompt).toContain('番茄小说')
     expect(prompt).toContain('女频')
     expect(prompt).toContain('言情')
-    expect(prompt).toContain('30 个候选标题')
+    expect(prompt).toContain('15 个候选标题')
     expect(prompt).toContain('真千金')
     expect(prompt).toContain('JSON')
   })
