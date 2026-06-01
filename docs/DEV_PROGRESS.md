@@ -151,3 +151,28 @@ flowchart TD
 - 用户能明确知道能否开始、暂停、继续、修复、导出。
 - 没有新增生产环境配置、密钥或部署动作。
 - 新增逻辑有单元测试，至少 `npm run test -- src/__tests__/unit/project-runtime.test.ts` 通过。
+
+## 12. 2026-06-01 项目详情 500 修复记录
+
+### 现象
+
+- 用户打开项目详情页时，`src/app/(main)/projects/[projectId]/page.tsx` 的 `fetchProject` 收到 `/api/novel/projects/[projectId]` 500。
+
+### 根因判断
+
+- 本地旧数据库可能缺少 `story_states.emotionalArcSummaries` 等新迁移列。
+- Prisma 在 `storyState: true` 时会读取 `StoryState` 全部列；只要旧库缺新增列，项目详情 API、蓝图控制台、健康报告和部分流水线规划都会被连带打断。
+- 当前目标是让主链路稳定可用，因此不能要求用户手动先修库再打开详情页。
+
+### 本次修复
+
+- `/api/novel/projects/[projectId]` 改为只读取详情页实际需要的 `StoryState` 字段。
+- `blueprint-console`、`project-health`、`production-pipeline` 中面向主链路的 `StoryState` 读取也改为必要字段 select。
+- 保留现有迁移和本地修库脚本，不修改生产配置、不提交密钥、不触碰未跟踪的 `fix-db.js`。
+
+### 验证结果
+
+- `npm run test -- src/__tests__/unit/project-health.test.ts src/__tests__/unit/project-runtime.test.ts` 通过。
+- `npm run lint` 被未跟踪的本地 `fix-db.js` 阻断；本次触碰的 4 个代码文件用 `npx eslint ...` 单独检查通过，仅保留既有 `production-pipeline.ts` unused warning。
+- `npm run build` 通过；仍保留本地 `.env` 的 TLS 告警，不改环境配置。
+- 本地运行服务 `http://127.0.0.1:3200` 下，项目 `45`、`17`、`10` 的详情 API 和详情页均返回 200。

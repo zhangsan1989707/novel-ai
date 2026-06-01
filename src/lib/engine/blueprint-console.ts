@@ -7,6 +7,19 @@ import { initStoryState, initWorldState } from '@/lib/engine/story-state'
 
 type ProjectWithContext = Awaited<ReturnType<typeof loadProjectForBlueprintConsole>>
 
+const storyStateConsoleSelect = {
+  id: true,
+  projectId: true,
+  emotionalArc: true,
+  mainConflict: true,
+  subConflicts: true,
+  currentChapter: true,
+  totalPlanned: true,
+  metadata: true,
+  createdAt: true,
+  updatedAt: true,
+} as const
+
 export interface BlueprintConsoleSnapshot {
   blueprintCard: {
     category: string
@@ -166,7 +179,7 @@ export async function loadProjectForBlueprintConsole(projectId: number) {
     include: {
       aiModelConfig: true,
       bookBlueprint: true,
-      storyState: true,
+      storyState: { select: storyStateConsoleSelect },
       worldState: true,
       arcPlans: {
         orderBy: { arcNumber: 'asc' },
@@ -392,7 +405,10 @@ export async function refreshBlueprintConsole(
       },
     })
 
-    const storyState = await tx.storyState.findUnique({ where: { projectId } })
+    const storyState = await tx.storyState.findUnique({
+      where: { projectId },
+      select: { metadata: true },
+    })
     const currentMetadata = (storyState?.metadata as Record<string, unknown> | null | undefined) || {}
     await tx.storyState.upsert({
       where: { projectId },

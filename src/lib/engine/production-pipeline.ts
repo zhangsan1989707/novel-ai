@@ -463,7 +463,16 @@ async function planChapterBatch(
         where: { status: 'OPEN' },
         orderBy: [{ plannedAt: 'asc' }, { plantedAt: 'asc' }],
       },
-      storyState: true,
+      storyState: {
+        select: {
+          id: true,
+          projectId: true,
+          currentChapter: true,
+          totalPlanned: true,
+          mainConflict: true,
+          metadata: true,
+        },
+      },
       villains: true,
       worldState: true,
     },

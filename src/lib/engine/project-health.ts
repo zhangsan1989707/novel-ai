@@ -635,7 +635,16 @@ export async function loadProjectHealthReport(projectId: number): Promise<Projec
     include: {
       aiModelConfig: true,
       bookBlueprint: true,
-      storyState: true,
+      storyState: {
+        select: {
+          id: true,
+          projectId: true,
+          currentChapter: true,
+          totalPlanned: true,
+          mainConflict: true,
+          metadata: true,
+        },
+      },
       worldState: true,
       chapters: {
         select: {

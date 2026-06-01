@@ -52,6 +52,19 @@ function buildProjectPreflight(project: {
   return buildProjectHealthReport(project)
 }
 
+const storyStateDetailSelect = {
+  id: true,
+  projectId: true,
+  emotionalArc: true,
+  mainConflict: true,
+  subConflicts: true,
+  currentChapter: true,
+  totalPlanned: true,
+  metadata: true,
+  createdAt: true,
+  updatedAt: true,
+} as const
+
 // ============================================
 // Schema 验证
 // ============================================
@@ -120,7 +133,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       include: {
         aiModelConfig: true,
         bookBlueprint: true,
-        storyState: true,
+        storyState: { select: storyStateDetailSelect },
         worldState: true,
         chapters: {
           orderBy: { chapterNumber: 'asc' },
@@ -171,7 +184,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           include: {
             aiModelConfig: true,
             bookBlueprint: true,
-            storyState: true,
+            storyState: { select: storyStateDetailSelect },
             worldState: true,
             chapters: {
               orderBy: { chapterNumber: 'asc' },

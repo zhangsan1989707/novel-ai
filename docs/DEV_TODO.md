@@ -18,6 +18,7 @@
 - [x] 修复 planner 直接传入角色档案时未进入章节策划 prompt 的问题。
 - [x] 更新 `docs/DEV_PROGRESS.md`、`docs/DEV_TODO.md`、`docs/DEV_DECISIONS.md`。
 - [x] 修复基线构建阻断：`src/lib/api-handler.ts` 导入了未导出的 `ErrorHandler`。
+- [x] 修复项目详情 500：避免 `StoryState` 全量列查询被本地 schema 漂移打断。
 
 ## P1：下一步增强
 
