@@ -8,6 +8,7 @@ import * as storyState from './story-state'
 import type { ChapterCommitPayload } from './chapter-commit'
 import { indexChapterContent } from './rag-vector'
 import { resolveCommittedChapterTitle } from './chapter-metadata'
+import { normalizeChapterContentForUser } from '@/lib/chapter-content-normalizer'
 
 export type ProjectionStatusMap = Record<string, string>
 
@@ -25,75 +26,12 @@ export interface ChapterProjectionResult {
   finalWordCount: number
 }
 
-function repairMalformedChapterJson(source: string): string | null {
-  const revisedMatch = source.match(/"revisedContent"\s*:\s*"([\s\S]*?)"/)
-  if (!revisedMatch || revisedMatch.index === undefined) return null
-
-  const rawBody = revisedMatch[1]
-  const escapedBody = rawBody.replace(/\\/g, '\\\\').replace(/\r?\n/g, '\\n').replace(/\t/g, '\\t')
-  const repaired = source.slice(0, revisedMatch.index) + '"revisedContent": "' + escapedBody + '"' + source.slice(revisedMatch.index + revisedMatch[0].length)
-
-  try {
-    JSON.parse(repaired)
-    return repaired
-  } catch {
-    return null
-  }
-}
-
-function stripOuterCodeFence(value: string): string {
-  const fenceMatch = value.match(/^```(?:json)?\s*\n([\s\S]*?)\n?```\s*$/)
-  return fenceMatch ? fenceMatch[1].trim() : value
-}
-
 function markFailure(status: ProjectionStatusMap, key: string, error: unknown): void {
   status[key] = `failed:${error instanceof Error ? error.message : String(error)}`
 }
 
 export function normalizeCommittedChapterContent(content: string): string {
-  const trimmed = stripOuterCodeFence(content.trim())
-  if (!trimmed.startsWith('{')) return content
-
-  const parseCandidates = [
-    trimmed,
-    `${trimmed}"}`,
-    repairMalformedChapterJson(trimmed),
-  ].filter((candidate): candidate is string => Boolean(candidate))
-
-  for (const candidate of parseCandidates) {
-    try {
-      const parsed = JSON.parse(candidate) as {
-        revisedContent?: unknown
-        content?: unknown
-      }
-
-      if (typeof parsed.revisedContent === 'string' && parsed.revisedContent.trim()) {
-        return parsed.revisedContent.trim()
-      }
-
-      if (typeof parsed.content === 'string' && parsed.content.trim()) {
-        return parsed.content.trim()
-      }
-    } catch {
-      // Keep trying fallback candidates below.
-    }
-  }
-
-  try {
-    const revisedPrefix = trimmed.match(/^\{\s*"revisedContent"\s*:\s*"/)
-    if (revisedPrefix) {
-      return JSON.parse(`"${trimmed.slice(revisedPrefix[0].length)}"`).trim()
-    }
-
-    const contentPrefix = trimmed.match(/^\{\s*"content"\s*:\s*"/)
-    if (contentPrefix) {
-      return JSON.parse(`"${trimmed.slice(contentPrefix[0].length)}"`).trim()
-    }
-  } catch {
-    return content
-  }
-
-  return content
+  return normalizeChapterContentForUser(content)
 }
 
 export function normalizePersistedAgentType(agentType?: string): AgentType | undefined {
@@ -111,6 +49,21 @@ export function normalizePersistedAgentType(agentType?: string): AgentType | und
     default:
       return undefined
   }
+}
+
+function mergeOutlineContinuity(payload: ChapterCommitPayload): Prisma.InputJsonValue | undefined {
+  if (!payload.outline) return undefined
+  if (!payload.continuityAudit && !payload.continuitySnapshot) {
+    return payload.outline as unknown as Prisma.InputJsonValue
+  }
+
+  return {
+    ...(payload.outline as unknown as Record<string, unknown>),
+    continuity: {
+      audit: payload.continuityAudit || null,
+      snapshot: payload.continuitySnapshot || null,
+    },
+  } as unknown as Prisma.InputJsonValue
 }
 
 export async function runChapterProjectionWriters(
@@ -141,7 +94,7 @@ export async function runChapterProjectionWriters(
         summary: context.payload.summaryData?.summary || context.chapter.summary || '',
         status: chapterReady ? 'COMPLETED' : 'REVIEWING',
         validationReport: context.payload.validationReport as Prisma.InputJsonValue | undefined,
-        chapterOutline: context.payload.outline as Prisma.InputJsonValue | undefined,
+        chapterOutline: mergeOutlineContinuity(context.payload),
         wordCount: finalWordCount,
         lastAgentType: normalizePersistedAgentType(context.payload.agentType),
       },

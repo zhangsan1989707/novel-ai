@@ -36,7 +36,18 @@ export function buildSummarizerPrompt(input: SummarizerPromptInput): string {
   }
 
   parts.push(`\n【章节内容】`)
-  parts.push(input.chapterContent.slice(0, 5000)) // 限制内容长度
+  // 取首尾两部分确保覆盖章节结构：开头 + 高潮/结尾
+  // 之前只取前 5000 字会遗漏长章节的结尾钩子
+  const contentLength = input.chapterContent.length
+  if (contentLength <= 5000) {
+    parts.push(input.chapterContent)
+  } else {
+    const head = input.chapterContent.slice(0, 3000)
+    const tail = input.chapterContent.slice(-2000)
+    parts.push(head)
+    parts.push(`\n（中间省略 ${contentLength - 5000} 字符）\n`)
+    parts.push(tail)
+  }
 
   parts.push(`\n【任务】`)
   parts.push(`请生成本章摘要（${SUMMARY_WORD_COUNT.L1_CHAPTER_MIN}-${SUMMARY_WORD_COUNT.L1_CHAPTER_MAX}字），包含：`)

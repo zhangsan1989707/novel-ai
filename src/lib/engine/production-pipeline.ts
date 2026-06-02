@@ -30,7 +30,7 @@ import { canStartGeneration, getWorkflowBlockReason } from './project-flow'
 import { normalizeArcPlanOutputs, resolveProjectPlanningTargets } from './project-length'
 import { buildPopularFictionPromptBlock, normalizePopularFictionProfile } from './popular-fiction'
 import type { PopularFictionProfile } from './popular-fiction'
-import type { ChapterOutline, BlueprintOutput, ArcPlanOutput, PlotlineGuard, ResumePlan } from './pipeline-types'
+import type { ChapterOutline, BlueprintOutput, ArcPlanOutput, PlotlineGuard } from './pipeline-types'
 import { STRATEGY_PREFIXES, STAGE_BATCH_RANGES } from './pipeline-types'
 import { isJobPaused, resolveResumePlan } from './pipeline-checkpoint'
 import { normalizeChapterTitle } from './chapter-metadata'
@@ -432,15 +432,21 @@ Book Blueprint：
   return created
 }
 
-function resolveResumeChapter(
-  chapters: Array<{ chapterNumber: number; status: string }>,
+function isChapterAlreadyProduced(chapter: { status: string; wordCount?: number | null; content?: string | null }) {
+  if (chapter.status === 'COMPLETED') return true
+  if (chapter.status !== 'REVIEWING') return false
+  return Boolean((chapter.wordCount || 0) > 0 || chapter.content?.trim())
+}
+
+export function resolveResumeChapter(
+  chapters: Array<{ chapterNumber: number; status: string; wordCount?: number | null; content?: string | null }>,
   resumeFromChapterNumber?: number
 ) {
   const sorted = [...chapters].sort((a, b) => a.chapterNumber - b.chapterNumber)
 
   const minChapter = resumeFromChapterNumber || 1
   const firstIncomplete = sorted.find(
-    chapter => chapter.chapterNumber >= minChapter && chapter.status !== 'COMPLETED'
+    chapter => chapter.chapterNumber >= minChapter && !isChapterAlreadyProduced(chapter)
   )
   if (firstIncomplete) return firstIncomplete.chapterNumber
 
@@ -961,6 +967,7 @@ export async function runProductionPipeline(
       setCurrentChapter(outline.chapterNumber, outline.title)
       const result = await runChapterGenerationPipeline(projectId, outline.chapterNumber, handlePipelineEvent, {
         speedMode,
+        forceRegenerate: resumePlan.forceRegenerateChapterNumber === outline.chapterNumber,
       })
       await persistChain
       if (!result.success) {

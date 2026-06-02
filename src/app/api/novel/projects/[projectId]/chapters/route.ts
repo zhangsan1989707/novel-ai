@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { logError } from '@/lib/logger'
 import { countChapterWords, syncProjectChapterWordCount } from '@/lib/novel/chapter-word-count'
+import { normalizeChapterContentForUser } from '@/lib/chapter-content-normalizer'
 
 // ============================================
 // Schema 验证
@@ -60,7 +61,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       },
     })
 
-    return NextResponse.json({ success: true, data: chapters })
+    return NextResponse.json({
+      success: true,
+      data: chapters.map(chapter => ({
+        ...chapter,
+        content: includeContent ? normalizeChapterContentForUser(chapter.content) : undefined,
+      })),
+    })
   } catch (error) {
     logError(error instanceof Error ? error : new Error(String(error)), { type: 'list_chapters', projectId: projectIdNum })
     return NextResponse.json(
@@ -119,11 +126,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       )
     }
 
-    const chapterWordCount = countChapterWords(validatedData.content)
+    const content = normalizeChapterContentForUser(validatedData.content)
+    const chapterWordCount = countChapterWords(content)
 
     const chapter = await prisma.novelChapter.create({
       data: {
         ...validatedData,
+        content,
         projectId: projectIdNum,
         wordCount: chapterWordCount,
       },

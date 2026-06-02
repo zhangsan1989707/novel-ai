@@ -89,8 +89,15 @@ export function resolveModelIdForRole(input: {
   return resolveMiMoModelId(input.speedMode || 'FINAL_POLISH', input.role)
 }
 
+/**
+ * 根据目标中文字数估算 maxTokens
+ *
+ * 背景：中文 LLM 中 1 个中文字符约等于 1.5-2 个 token，
+ * 加上标点、换行等开销，取 2.5x 系数确保模型有足够 token 预算完成目标字数。
+ * 之前 1.1x 系数严重低估，导致章节在 ~60% 字数时被硬截断。
+ */
 export function estimateMaxTokensForTargetWordCount(targetWordCount: number): number {
-  return Math.ceil(Math.max(1, targetWordCount) * 1.1)
+  return Math.ceil(Math.max(1, targetWordCount) * 2.5)
 }
 
 export function resolveEffectiveChapterWordCount(

@@ -38,9 +38,9 @@ export function useNextStepState({
     return {
       badgeVariant: 'warning',
       badgeLabel: '建议处理',
-      title: '快速验收已完成生成，建议进行去AI味处理',
-      description: `当前共有 ${project.chapters.filter(c => c.status === 'COMPLETED' && c.content).length} 章已完成。快速验收模式跳过了去AI味和对抗审查环节，建议批量处理以提升文本质量、降低平台AI检测风险。${hasReviewingChapters ? `另有 ${project.chapters.filter(c => c.status === 'REVIEWING').length} 章待审稿需要单独处理。` : ''}`,
-      ctaLabel: '一键批量去AI味',
+      title: '快速验收已完成生成，建议进行文风精修',
+      description: `当前共有 ${project.chapters.filter(c => c.status === 'COMPLETED' && c.content).length} 章已完成。快速验收模式跳过了深度审稿与文风精修环节，建议批量处理以提升文本自然度和阅读质感。${hasReviewingChapters ? `另有 ${project.chapters.filter(c => c.status === 'REVIEWING').length} 章待审稿需要单独处理。` : ''}`,
+      ctaLabel: '一键批量精修',
       ctaAction: 'batchDeslop',
     }
   }
@@ -102,11 +102,16 @@ export function useNextStepState({
   }
 
   if (pipeline?.status === 'RUNNING') {
+    const currentChapter = pipeline.runtime?.currentChapter
+    const currentTask = currentChapter
+      ? `当前任务：第${currentChapter.chapterNumber}章${currentChapter.currentPhase?.includes('deslop') ? '文风精修' : '生成与润色'}`
+      : '当前任务：推进当前批次章节'
+
     return {
       badgeVariant: 'primary',
       badgeLabel: '生产中',
-      title: '当前正在自动写作',
-      description: '流水线正在推进中，不建议同时修改蓝图、路线图和章节结构，以免打断状态一致性。',
+      title: '正在自动创作中',
+      description: `系统正在生成并精修当前批次章节。${currentTask}；下一步会保存章节摘要并更新目录。生成期间建议不要修改大纲、主线和章节结构，以免影响上下文一致性。`,
       ctaLabel: '查看进度',
       ctaAction: 'focus',
     }

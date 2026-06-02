@@ -2,6 +2,7 @@ import { AIService } from '@/lib/ai/service'
 import type { AIProvider } from '@/lib/ai/types'
 import { scanForbiddenWords, scanForbiddenPatterns, scanWordsByLevel, getAntiAiPrompt, type ForbiddenWord } from '@/lib/knowledge/anti-ai'
 import { buildChapterDeslopPrompt } from '@/lib/prompts/deslop'
+import { normalizeChapterContentForUser } from '@/lib/chapter-content-normalizer'
 
 interface ChapterDeslopInput {
   projectId: number
@@ -170,11 +171,11 @@ export async function chapterDeslopper(input: ChapterDeslopInput): Promise<Chapt
   const parsedPayload = extractDeslopPayload(result.content)
   if (parsedPayload) {
     if (parsedPayload.revisedContent) {
-      revisedContent = parsedPayload.revisedContent
+      revisedContent = normalizeChapterContentForUser(parsedPayload.revisedContent)
     }
     changes = parsedPayload.changes
   } else {
-    revisedContent = result.content
+    revisedContent = normalizeChapterContentForUser(result.content)
   }
 
   // 计算改进后的评分

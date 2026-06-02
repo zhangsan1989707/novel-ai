@@ -15,6 +15,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import * as os from 'os'
 import AdmZip from 'adm-zip'
+import { normalizeChapterContentForUser } from '@/lib/chapter-content-normalizer'
 
 type ExportProject = Awaited<ReturnType<typeof loadProjectForExport>>
 type ExportChapter = NonNullable<ExportProject>['chapters'][number]
@@ -29,7 +30,7 @@ export async function loadProjectForExport(projectId: number) {
     include: {
       chapters: {
         where: {
-          status: { in: ['COMPLETED', 'REVIEWING'] },
+          status: 'COMPLETED',
           content: { not: null },
         },
         orderBy: { chapterNumber: 'asc' },
@@ -291,8 +292,9 @@ function buildTxtContent(
       lines.push(`第${chapter.chapterNumber}章 ${chapter.title}`)
       lines.push('-'.repeat(40))
     }
-    if (chapter.content) {
-      lines.push(chapter.content)
+    const content = normalizeChapterContentForUser(chapter.content)
+    if (content) {
+      lines.push(content)
     }
     lines.push('')
   }
@@ -336,8 +338,9 @@ function buildMarkdownContent(
       lines.push(`## 第${chapter.chapterNumber}章 ${chapter.title}`)
       lines.push('')
     }
-    if (chapter.content) {
-      lines.push(chapter.content)
+    const content = normalizeChapterContentForUser(chapter.content)
+    if (content) {
+      lines.push(content)
     }
     lines.push('')
     lines.push('---')
@@ -360,7 +363,7 @@ function buildJsonContent(
     chapters: chapters.map(ch => ({
       number: ch.chapterNumber,
       title: ch.title,
-      content: ch.content || '',
+      content: normalizeChapterContentForUser(ch.content),
       wordCount: ch.wordCount || 0,
     })),
   }
@@ -471,10 +474,10 @@ export async function exportForPlatform(
               }]
             : []),
           ...project.chapters
-          .filter(ch => ch.content && ch.content.trim().length > 0)
+          .filter(ch => normalizeChapterContentForUser(ch.content).trim().length > 0)
           .map(ch => ({
             title: formatChapterTitle(ch.chapterNumber, ch.title, platform),
-            data: (ch.content || '')
+            data: normalizeChapterContentForUser(ch.content)
               .split('\n')
               .filter(line => line.trim())
               .map(line => `<p style="text-indent:2em;margin:0.5em 0;">${line.trim()}</p>`)
@@ -531,8 +534,9 @@ export async function exportForPlatform(
       const chapterTitle = formatChapterTitle(chapter.chapterNumber, chapter.title, platform)
       lines.push(chapterTitle)
       lines.push('')
-      if (chapter.content) {
-        lines.push(chapter.content)
+      const content = normalizeChapterContentForUser(chapter.content)
+      if (content) {
+        lines.push(content)
       }
       lines.push('')
     }

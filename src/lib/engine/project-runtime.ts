@@ -92,7 +92,7 @@ const STAGE_LABELS: Record<ProjectRuntimeStage, string> = {
   WRITING: '正文写作中',
   POLISHING: '文风润色中',
   VALIDATING: '质量校验中',
-  DESLOPPING: '去 AI 味处理中',
+  DESLOPPING: '文风精修中',
   SUMMARIZING: '摘要与入库中',
   REPAIRING: '章节修复中',
   PAUSED: '已暂停',
@@ -318,4 +318,3 @@ export function buildProjectRuntimeSummary(input: RuntimeProjectInput): ProjectR
     canExport: completedChapters > 0 && !runningOrPending,
   }
 }
-

@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { logError } from '@/lib/logger'
 import { countChapterWords, syncProjectChapterWordCount } from '@/lib/novel/chapter-word-count'
+import { normalizeChapterContentForUser } from '@/lib/chapter-content-normalizer'
 
 const normalizeSchema = z.object({
   chapters: z.array(z.object({
@@ -34,15 +35,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       await tx.novelChapter.deleteMany({ where: { projectId: projectIdNum! } })
 
       await tx.novelChapter.createMany({
-        data: chapters.map((chapter, index) => ({
-          projectId: projectIdNum!,
-          chapterNumber: index + 1,
-          sortOrder: index,
-          title: chapter.title.trim(),
-          content: chapter.content.trim(),
-          wordCount: countChapterWords(chapter.content),
-          status: 'REVIEWING',
-        })),
+        data: chapters.map((chapter, index) => {
+          const content = normalizeChapterContentForUser(chapter.content).trim()
+          return {
+            projectId: projectIdNum!,
+            chapterNumber: index + 1,
+            sortOrder: index,
+            title: chapter.title.trim(),
+            content,
+            wordCount: countChapterWords(content),
+            status: 'REVIEWING',
+          }
+        }),
       })
 
       await Promise.all([

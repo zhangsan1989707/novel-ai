@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { ErrorHandler } from '../../lib/errors/handler';
 import { ErrorCategory } from '../../lib/errors/types';
 
@@ -117,8 +117,7 @@ describe('ErrorHandler', () => {
     });
 
     it('should extract details in development mode', () => {
-      const originalEnv = process.env.NODE_ENV;
-      process.env.NODE_ENV = 'development';
+      vi.stubEnv('NODE_ENV', 'development');
 
       const error = {
         message: 'Test error',
@@ -129,7 +128,7 @@ describe('ErrorHandler', () => {
 
       expect(result.details).toBeDefined();
 
-      process.env.NODE_ENV = originalEnv;
+      vi.unstubAllEnvs();
     });
   });
 

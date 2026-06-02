@@ -6,6 +6,7 @@ import { ExportFormat } from '@/lib/export/types'
 import type { PlatformKey } from '@/lib/export/adapters/index'
 import AdmZip from 'adm-zip'
 import { logError } from '@/lib/logger'
+import { normalizeChapterContentForUser } from '@/lib/chapter-content-normalizer'
 
 interface RouteParams {
   params: Promise<{ projectId: string }>
@@ -48,7 +49,7 @@ function buildExportDataResponse(project: NonNullable<Awaited<ReturnType<typeof 
     chapters: project.chapters.map((chapter) => ({
       chapterNumber: chapter.chapterNumber,
       title: chapter.title,
-      content: chapter.content,
+      content: normalizeChapterContentForUser(chapter.content),
     })),
   }
 }
@@ -246,7 +247,7 @@ async function exportEpub(projectId: number): Promise<NextResponse> {
     // 4. 生成章节 XHTML 文件
     for (let i = 0; i < project.chapters.length; i++) {
       const ch = project.chapters[i]
-      const contentHtml = (ch.content || '')
+      const contentHtml = normalizeChapterContentForUser(ch.content)
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')

@@ -305,6 +305,7 @@ ${ch.content || ''}
   const reviewingChapters = project.chapters.filter(c => c.status === 'REVIEWING').length
   const arcGroups = groupChaptersByArc(project)
   const liveChapter = pipeline?.runtime?.currentChapter || null
+  const pipelineActive = pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING'
   const runtimeSummary = maintenanceActive
     ? (project.runtimeSummary || pipeline?.runtimeSummary || null)
     : (pipeline?.runtimeSummary || project.runtimeSummary || null)
@@ -408,7 +409,7 @@ ${ch.content || ''}
                 title={flowBlockedReason || undefined}
               >
                 <Rocket className="h-4 w-4" />
-                {projectInitializing ? '初始化中' : '开始生成'}
+                {pipelineActive ? '生成中' : projectInitializing ? '初始化中' : '开始生成'}
               </Button>
               <Button variant="outline" size="sm" onClick={() => openModal('toolbox')} className="gap-1.5">
                 <Wrench className="h-4 w-4" />
@@ -644,7 +645,7 @@ ${ch.content || ''}
                             className="gap-1.5"
                           >
                             <Wand2 className="h-4 w-4" />
-                            批量去AI味
+                            批量精修
                           </Button>
                         )}
                       </div>
@@ -655,6 +656,7 @@ ${ch.content || ''}
                         groups={arcGroups}
                         selectedChapterNumber={selectedChapterNumber}
                         liveChapter={liveChapter}
+                        pipelineRunning={pipelineActive}
                         completedChapters={completedChapters}
                         reviewingChapters={reviewingChapters}
                         flowBlockedReason={flowBlockedReason}

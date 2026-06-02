@@ -20,8 +20,47 @@ export interface ChapterCompletionReport {
 }
 
 function detectEndingHook(content: string): boolean {
-  const tail = content.slice(-300)
-  return /[？?！!]|然而|没想到|下一刻|忽然|却在这时/.test(tail)
+  const tail = content.slice(-400) // 扩大检查范围到 400 字
+
+  // 1. 悬念式钩子：未解答的问题、不确定性结尾
+  const suspensePatterns = [
+    /(?:不知道|不清楚|无法确定|难以预料|还未).*(?:什么|怎么|如何|为何|会不会)/,
+    /(?:究竟|到底|莫非|难道).*[？?]/,
+    /(?:会不会|是不是|能不能).*[？?]/,
+    /(?:到底|究竟)发生了什么/,
+    /[？?](?![\s]*[。！\n])/, // 以问号结尾（后面没有其他完整句号）
+  ]
+
+  // 2. 转折式钩子：新信息、意外发现、反转
+  const twistPatterns = [
+    /然而.{5,}$/,
+    /没想到.{5,}$/,
+    /却.{5,}$/,
+    /但.{5,}$/,
+    /(?:突然|忽然|就在这时|正在这时).{10,}$/,
+    /(?:只见|定睛一看|仔细一瞧).{10,}$/,
+    /(?:竟然|居然|万万).{5,}$/,
+    /(?:殊不知|哪里知道|哪曾想).{5,}$/,
+  ]
+
+  // 3. 承诺式钩子：建立下一章预期
+  const promisePatterns = [
+    /(?:明天|明日|下一次|下一章|接下来|等着.{2,4}的)将会/,
+    /(?:而|但|可).*(?:等着|等待|即将|就要)/,
+    /他.{1,3}(?:不知道|尚未知晓|完全没意识到)的是/,
+    /(?:真正的|更大的|新的).*(?:挑战|危机|危险|考验|阴谋).*(?:才|刚|正|即将)/,
+  ]
+
+  // 4. 情感式钩子：情绪高潮结尾
+  const emotionPatterns = [
+    /[！!]{2,}$/, // 双感叹号结尾
+    /(?:泪水|眼泪|怒吼|嘶吼|颤抖|握紧).{0,10}[！!]/,
+    /……$/,
+    /——$/,
+  ]
+
+  const allPatterns = [...suspensePatterns, ...twistPatterns, ...promisePatterns, ...emotionPatterns]
+  return allPatterns.some(p => p.test(tail))
 }
 
 function detectAbruptTruncation(content: string): boolean {

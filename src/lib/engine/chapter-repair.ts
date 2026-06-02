@@ -146,6 +146,14 @@ export async function continueChapter(params: {
   chapterTitle: string
   chapterNo: number
   provider: AIProvider
+  /** 章节大纲（用于保持情节一致） */
+  chapterOutline?: string
+  /** 角色档案（用于保持人物一致） */
+  characterProfiles?: string
+  /** 最近章节摘要（用于保持上下文连贯） */
+  recentSummaries?: string
+  /** 上一章结尾原文（用于跨章衔接） */
+  previousChapterEnding?: string
 }): Promise<RepairResult> {
   const { content, targetWordCount, currentWordCount, chapterTitle, chapterNo, provider } = params
   
@@ -154,25 +162,56 @@ export async function continueChapter(params: {
     return { success: true, content, wordCount: currentWordCount, action: 'none' }
   }
 
-  // 取最后 500 字作为上下文
-  const lastContext = content.slice(-500)
+  // 取最后 800 字作为续写起点（修复前为 500）
+  const lastContext = content.slice(-800)
 
-  const prompt = `你是小说续写专家。以下章节被截断了，请继续完成。
+  const parts: string[] = []
 
-章节标题：${chapterTitle}（第${chapterNo}章）
-当前字数：${currentWordCount}
-目标字数：${targetWordCount}
+  parts.push(`你是小说续写专家。以下章节被截断了，请根据完整上下文继续完成。`)
+  parts.push(``)
+  
+  if (params.previousChapterEnding) {
+    parts.push(`## 上一章结尾（本章开篇应承接此内容）`)
+    parts.push(params.previousChapterEnding)
+    parts.push(``)
+  }
 
-续写要求：
-1. 从截断处继续，保持情节连贯
-2. 完成当前场景或情节
-3. 确保章节有完整的结尾
-4. 保持原文风格和语气
+  if (params.chapterOutline) {
+    parts.push(`## 本章大纲（续写必须遵循大纲规划）`)
+    parts.push(params.chapterOutline)
+    parts.push(``)
+  }
 
-截断位置（最后 500 字）：
-${lastContext}
+  if (params.characterProfiles) {
+    parts.push(`## 本章出场角色`)
+    parts.push(params.characterProfiles)
+    parts.push(``)
+  }
 
-请从截断处继续写，输出续写内容（不需要重复已有内容）。`
+  if (params.recentSummaries) {
+    parts.push(`## 前情摘要`)
+    parts.push(params.recentSummaries)
+    parts.push(``)
+  }
+
+  parts.push(`## 续写任务`)
+  parts.push(`章节标题：${chapterTitle}（第${chapterNo}章）`)
+  parts.push(`当前字数：${currentWordCount}`)
+  parts.push(`目标字数：${targetWordCount}`)
+  parts.push(`需要续写：约 ${needWords} 字`)
+  parts.push(``)
+  parts.push(`## 续写要求`)
+  parts.push(`1. 从截断处自然继续，保持情节、风格、人物一致`)
+  parts.push(`2. 完成当前场景或情节后再自然收尾`)
+  parts.push(`3. 不要重复已有内容，直接继续写`)
+  parts.push(`4. 确保章节有完整的结尾钩子（悬念/承诺/转折）`)
+  parts.push(``)
+  parts.push(`## 截断位置（已有内容的最后 800 字）`)
+  parts.push(lastContext)
+  parts.push(``)
+  parts.push(`请从截断处直接继续写，输出续写内容（不需要重复已有内容）。`)
+
+  const prompt = parts.join('\n')
 
   try {
     const result = await provider.generate(prompt, {

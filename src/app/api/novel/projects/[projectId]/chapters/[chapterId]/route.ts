@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { logError } from '@/lib/logger'
 import { countChapterWords, syncProjectChapterWordCount } from '@/lib/novel/chapter-word-count'
 import { sanitizePipelineRuntime } from '@/lib/engine/pipeline-runtime'
+import { normalizeChapterContentForUser } from '@/lib/chapter-content-normalizer'
 
 // ============================================
 // Schema 验证
@@ -110,7 +111,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     // 返回章节数据，包含实时内容
     const responseData = {
       ...chapter,
-      liveContent,
+      content: normalizeChapterContentForUser(chapter.content),
+      liveContent: normalizeChapterContentForUser(liveContent),
       draftContent: null, // 预留字段，当前数据库无此字段
     }
 
@@ -159,7 +161,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
     // 计算字数变化
     const oldWordCount = countChapterWords(oldChapter.content)
-    const newContent = validatedData.content !== undefined ? validatedData.content : oldChapter.content
+    const newContent = validatedData.content !== undefined
+      ? normalizeChapterContentForUser(validatedData.content)
+      : oldChapter.content
     const newWordCount = countChapterWords(newContent)
 
     // 保存版本记录（如果内容有变化）
@@ -183,6 +187,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       where: { id: chapterIdNum },
       data: {
         ...validatedData,
+        ...(validatedData.content !== undefined ? { content: newContent } : {}),
         wordCount: newWordCount,
       },
     })

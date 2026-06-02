@@ -4,6 +4,7 @@
  */
 
 import { countChineseWords } from '@/lib/utils'
+import { normalizeChapterContentForUser } from '@/lib/chapter-content-normalizer'
 
 // 章节原始数据接口（来自 API）
 export interface ChapterRawData {
@@ -48,10 +49,11 @@ export interface ChapterDisplayData {
  */
 export function normalizeChapterDisplay(chapter: ChapterRawData): ChapterDisplayData {
   // 内容优先级：content > liveContent > draftContent
-  const content = chapter.content 
-    || chapter.liveContent 
-    || chapter.draftContent 
+  const rawContent = chapter.content
+    || chapter.liveContent
+    || chapter.draftContent
     || ''
+  const content = normalizeChapterContentForUser(rawContent)
 
   // 摘要优先级：summary > chapterOutline.chapterGoal > content 前120字
   const summary = chapter.summary 

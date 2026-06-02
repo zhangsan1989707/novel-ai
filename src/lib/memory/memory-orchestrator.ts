@@ -7,6 +7,30 @@ import { getRecentChapterSummaries } from './chapter-summary'
 import { getStoryState } from '@/lib/engine/story-state'
 import { buildRAGContext } from '@/lib/engine/rag-vector'
 import { decaySummary } from '@/lib/engine/context-compression'
+import {
+  buildContinuityAnchor,
+  formatContinuityAnchorSection,
+  type ContinuityAnchor,
+} from '@/lib/engine/chapter-continuity'
+
+/**
+ * 获取上一章的结尾原文（用于跨章衔接）
+ * 取最后 500 字作为衔接上下文
+ */
+async function getPreviousChapterEnding(
+  projectId: number,
+  chapterNo: number
+): Promise<string | null> {
+  if (chapterNo <= 1) return null
+  const prevChapter = await prisma.novelChapter.findFirst({
+    where: { projectId, chapterNumber: chapterNo - 1, status: 'COMPLETED' },
+    select: { content: true },
+  })
+  if (!prevChapter?.content) return null
+  const trimmed = prevChapter.content.trimEnd()
+  // 取最后 500 字 — 既能捕获结尾钩子，又不会太占上下文
+  return trimmed.slice(-500)
+}
 
 export type MemoryPackRole = 'planner' | 'writer' | 'validator' | 'summarizer'
 
@@ -73,6 +97,10 @@ export interface MemoryPack {
     context: string
     sources: Array<{ chapterNo: number; type: string; relevance: number }>
   } | null
+  /** 上一章结尾原文（最后 500 字），用于跨章衔接 */
+  previousChapterEnding: string | null
+  /** 章节连续性锚点，用于防止跨章断裂 */
+  continuityAnchor: ContinuityAnchor | null
   sections: MemoryPackSection[]
   plannerContext: string
   writerContext: string
@@ -235,6 +263,17 @@ function buildRagSection(ragContext: NonNullable<MemoryPack['ragContext']>): str
 function pickMemorySections(pack: MemoryPack, role: MemoryPackRole): MemoryPackSection[] {
   const sections: MemoryPackSection[] = []
 
+  // 连续性锚点（仅 planner / writer 需要，用于跨章衔接）
+  if ((role === 'planner' || role === 'writer') && pack.continuityAnchor) {
+    sections.push(buildSection(
+      'continuity-anchor',
+      '章节连续性锚点',
+      formatContinuityAnchorSection(pack.continuityAnchor),
+      0,  // 最高优先级
+      role === 'writer' ? 1200 : 900
+    ))
+  }
+
   sections.push(buildSection(
     'blueprint',
     '创作合同',
@@ -277,11 +316,11 @@ function pickMemorySections(pack: MemoryPack, role: MemoryPackRole): MemoryPackS
   // 衰减模式下展示所有已衰减的摘要（旧章节已被压缩，总量可控）
   const recentSummaryLimit = pack.enableDecay
     ? pack.recentChapterSummaries.length
-    : role === 'summarizer' ? 2 : role === 'validator' ? 4 : 3
+    : role === 'summarizer' ? 3 : role === 'validator' ? 5 : 5  // writer/planner 从 3 提升到 5
   const summaryLabel = pack.enableDecay ? '章节记忆（含衰减）' : `最近${recentSummaryLimit}章摘要`
   const summaryBudget = pack.enableDecay
-    ? (role === 'writer' ? 3200 : 2400)
-    : (role === 'writer' ? 2200 : 1600)
+    ? (role === 'writer' ? 4800 : 3200)  // 提升 writer 预算
+    : (role === 'writer' ? 3200 : 2400)  // 提升 writer 预算
   sections.push(buildSection(
     'recent-chapters',
     summaryLabel,
@@ -417,6 +456,7 @@ export async function buildChapterMemoryPack(
     characterProfiles,
     storyState,
     researchRefs,
+    previousChapterEnding,
   ] = await Promise.all([
     getBookSummary(projectId),
     getAllVolumeSummaries(projectId),
@@ -430,6 +470,7 @@ export async function buildChapterMemoryPack(
       take: researchLimit,
       select: { topic: true, summary: true, keyFacts: true, creativeMaterials: true },
     }),
+    getPreviousChapterEnding(projectId, chapterNo),
   ])
 
   const currentVolume = calculateVolume(
@@ -470,6 +511,12 @@ export async function buildChapterMemoryPack(
     }))
 
   const trimmedPlotlines = openPlotlines.slice(0, plotlineLimit)
+  const continuityAnchor = buildContinuityAnchor({
+    chapterNo,
+    previousChapterEnding,
+    characterProfiles: trimmedCharacters,
+    protagonistProfile: project.protagonistProfile,
+  })
   const ragQuery = buildRagQuery({
     projectTitle: project.title,
     genre: project.genre,
@@ -529,6 +576,8 @@ export async function buildChapterMemoryPack(
           sources: ragContext.sources,
         }
       : null,
+    previousChapterEnding,
+    continuityAnchor,
     sections: [],
     plannerContext: '',
     writerContext: '',

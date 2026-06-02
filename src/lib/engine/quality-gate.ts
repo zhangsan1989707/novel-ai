@@ -5,6 +5,7 @@
 import { countChineseWords } from '@/lib/utils'
 import { isLikelyTruncated, type TruncationCheckResult } from './truncation-detector'
 import type { ChapterGenerationContract } from './chapter-contract'
+import type { ContinuityAuditResult } from './chapter-continuity'
 
 export type QualityGateStatus = 'passed' | 'failed' | 'needs_repair'
 
@@ -16,6 +17,7 @@ export interface QualityGateResult {
     chapterNo: { passed: boolean; message?: string }
     title: { passed: boolean; message?: string }
     chapterLeak: { passed: boolean; message?: string }
+    continuity: { passed: boolean; result?: ContinuityAuditResult; message?: string }
   }
   canSave: boolean
   needsRepair: 'expand' | 'compress' | 'continue' | null
@@ -29,8 +31,9 @@ export function runQualityGate(params: {
   content: string
   contract: ChapterGenerationContract
   finishReason?: string
+  continuityAudit?: ContinuityAuditResult | null
 }): QualityGateResult {
-  const { content, contract, finishReason } = params
+  const { content, contract, finishReason, continuityAudit } = params
   const errors: string[] = []
   
   // 1. 字数范围校验
@@ -70,8 +73,21 @@ export function runQualityGate(params: {
     errors.push('内容中出现了下一章的内容')
   }
 
+  // 6. 章节连续性校验
+  const continuityPassed = continuityAudit?.passed ?? true
+  let continuityMessage: string | undefined
+  if (!continuityPassed && continuityAudit) {
+    continuityMessage = continuityAudit.issues
+      .filter(issue => issue.severity === 'critical' || issue.severity === 'major')
+      .map(issue => issue.description)
+      .join('；')
+    if (continuityMessage) {
+      errors.push(`章节连续性失败：${continuityMessage}`)
+    }
+  }
+
   // 判断是否可以保存
-  const canSave = wordCountPassed && !truncationResult.isTruncated && chapterNoPassed && titlePassed && chapterLeakPassed
+  const canSave = wordCountPassed && !truncationResult.isTruncated && chapterNoPassed && titlePassed && chapterLeakPassed && continuityPassed
   
   // 判断需要什么修复
   let needsRepair: 'expand' | 'compress' | 'continue' | null = null
@@ -93,6 +109,7 @@ export function runQualityGate(params: {
       chapterNo: { passed: chapterNoPassed },
       title: { passed: titlePassed },
       chapterLeak: { passed: chapterLeakPassed },
+      continuity: { passed: continuityPassed, result: continuityAudit || undefined, message: continuityMessage },
     },
     canSave,
     needsRepair,
@@ -102,6 +119,8 @@ export function runQualityGate(params: {
 
 /**
  * 检查内容中是否出现错误的章节号
+ * 只在明显出现未来章节号时才报错（章节泄露），允许回忆前文章节。
+ * 例如：第 10 章正文中提到"第 5 章时"是正常的，但提到"第 12 章"则是泄露。
  */
 function hasWrongChapterNumber(content: string, expectedChapterNo: number): boolean {
   // 匹配 "第X章" 格式
@@ -110,8 +129,9 @@ function hasWrongChapterNumber(content: string, expectedChapterNo: number): bool
   
   for (const match of chapterMatches) {
     const num = parseInt(match.replace('第', '').replace('章', ''))
-    // 如果出现的章节号与当前章节号相差超过 1，可能是错误的
-    if (Math.abs(num - expectedChapterNo) > 1) {
+    // 只检查明显大于当前章节号的（可能是泄露到下一章）
+    // 小于当前章节号的是正常的前文回忆
+    if (num > expectedChapterNo + 1) {
       return true
     }
   }

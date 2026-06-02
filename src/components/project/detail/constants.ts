@@ -35,7 +35,7 @@ export const pipelineStepMap: Record<string, string> = {
   SUMMARIZER: '摘要整理',
   DB_WRITE: '结果回写',
   RESEARCH: '资料整理',
-  DESLOPPER: '去AI味',
+  DESLOPPER: '文风精修',
   VALIDATOR: '一致性校验',
   POLISHER: '章节润色',
   REVIEWER: '对抗审稿',
@@ -61,7 +61,7 @@ export const speedModeOptions: Array<{
   {
     value: 'FINAL_POLISH',
     label: '精修成稿',
-    description: '完整多 Agent 审稿、润色、去 AI 味，适合定稿章节。',
+    description: '完整多 Agent 审稿、润色与文风精修，适合定稿章节。',
   },
 ]
 

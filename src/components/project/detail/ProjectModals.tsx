@@ -78,15 +78,15 @@ export function ProjectModals({
     },
     {
       id: 'deslop',
-      label: '去AI味',
+      label: '文风精修',
       description: '优化单章文本自然度',
       icon: <Wand2 className="h-4 w-4" />,
       onClick: () => openToolModal('deslop'),
     },
     {
       id: 'batchDeslop',
-      label: '批量去AI味',
-      description: '批量处理已完成章节',
+      label: '批量精修',
+      description: '批量精修已完成章节',
       icon: <Layers className="h-4 w-4" />,
       onClick: () => openToolModal('batchDeslop'),
     },
@@ -253,7 +253,7 @@ export function ProjectModals({
       <Modal
         open={modals.deslop}
         onClose={() => closeModal('deslop')}
-        title="去AI味"
+        title="文风精修"
         className="max-w-4xl"
       >
         <DeslopPanel projectId={projectId} />
@@ -262,8 +262,8 @@ export function ProjectModals({
       <Modal
         open={modals.batchDeslop}
         onClose={() => closeModal('batchDeslop')}
-        title="批量去AI味"
-        description={`选择已完成章节进行批量处理。共 ${project.chapters.filter(c => c.status === 'COMPLETED' && c.content).length} 章可处理。`}
+        title="批量精修"
+        description={`选择已完成章节进行批量精修。共 ${project.chapters.filter(c => c.status === 'COMPLETED' && c.content).length} 章可处理。`}
         className="max-w-3xl"
       >
         <BatchDeslopPanel

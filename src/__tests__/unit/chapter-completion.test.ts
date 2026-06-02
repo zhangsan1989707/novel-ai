@@ -4,7 +4,7 @@ import { buildChapterCompletionReport } from '@/lib/engine/chapter-completion'
 describe('buildChapterCompletionReport', () => {
   it('penalizes short chapters and missing ending hooks', () => {
     const report = buildChapterCompletionReport({
-      content: '主角进入了新的修炼空间，但没有完成目标。',
+      content: '主角进入了新的修炼空间，暂时整理物品。',
       targetWordCount: 3000,
       outline: {
         chapterTitle: '测试章节',

@@ -46,8 +46,8 @@ describe('generation speed mode strategy', () => {
   })
 
   it('estimates stream max tokens from requested word count', () => {
-    expect(estimateMaxTokensForTargetWordCount(2000)).toBe(2200)
-    expect(estimateMaxTokensForTargetWordCount(0)).toBe(2)
+    expect(estimateMaxTokensForTargetWordCount(2000)).toBe(5000)
+    expect(estimateMaxTokensForTargetWordCount(0)).toBe(3)
   })
 
   it('reduces the chapter target word count according to the speed mode', () => {

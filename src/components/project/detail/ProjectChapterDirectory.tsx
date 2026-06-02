@@ -9,7 +9,7 @@ import type { ProjectChapter } from '@/hooks/useProjectDetail'
 const INITIAL_VISIBLE_PROJECT_CHAPTERS_PER_GROUP = 10
 
 const chapterStatusMap: Record<ProjectChapter['status'], { label: string; variant: 'default' | 'primary' | 'success' | 'warning' }> = {
-  DRAFT: { label: '未写作', variant: 'default' },
+  DRAFT: { label: '待生成', variant: 'default' },
   GENERATING: { label: '生成中', variant: 'primary' },
   COMPLETED: { label: '已完成', variant: 'success' },
   REVIEWING: { label: '待审核', variant: 'warning' },
@@ -26,6 +26,7 @@ interface ProjectChapterDirectoryProps {
   groups: ChapterGroup[]
   selectedChapterNumber: number | null
   liveChapter: PipelineRuntimeState['currentChapter']
+  pipelineRunning?: boolean
   completedChapters: number
   reviewingChapters: number
   flowBlockedReason?: string | null
@@ -40,11 +41,61 @@ interface ProjectChapterDirectoryProps {
   onOpenGenerate: (chapterId: number) => void
 }
 
+const livePhaseLabels: Record<string, string> = {
+  writing: '正文生成中',
+  writer: '正文生成中',
+  polishing: '文风润色中',
+  polisher: '文风润色中',
+  validating: '质检中',
+  validator: '质检中',
+  reviewing: '内容复核中',
+  reviewer: '内容复核中',
+  deslopping: '文风精修中',
+  deslopper: '文风精修中',
+  summarizing: '摘要整理中',
+  summarizer: '摘要整理中',
+  committing: '保存入库中',
+}
+
+function formatLivePhase(phase?: string): string {
+  if (!phase) return '生成中'
+  return livePhaseLabels[phase] || livePhaseLabels[phase.toLowerCase()] || '生成中'
+}
+
+function LiveChapterPlaceholder({ liveChapter }: { liveChapter: NonNullable<PipelineRuntimeState['currentChapter']> }) {
+  const phaseLabel = formatLivePhase(liveChapter.currentPhase || liveChapter.currentAgent)
+
+  return (
+    <div className="rounded-lg border border-blue-200 bg-blue-50/70 px-4 py-3 dark:border-blue-900/40 dark:bg-blue-950/20">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <Badge variant="primary" className="text-xs gap-1">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              {phaseLabel}
+            </Badge>
+            <span className="text-sm font-semibold text-gray-900 dark:text-white">
+              第{liveChapter.chapterNumber}章 · {liveChapter.title || '暂未命名'}
+            </span>
+          </div>
+          <div className="mt-2 text-xs text-gray-600 dark:text-gray-300">
+            字数：{formatLargeNumber(liveChapter.currentWordCount)} / {formatLargeNumber(liveChapter.targetWordCount)} 字 · 摘要：正在随章节完成后生成
+          </div>
+        </div>
+        <div className="text-xs text-gray-500 dark:text-gray-400">
+          完成入库后可查看正文与审核
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function ProjectChapterDirectory({
   chapters,
   groups,
   selectedChapterNumber,
   liveChapter,
+  pipelineRunning,
   completedChapters,
   reviewingChapters,
   flowBlockedReason,
@@ -59,6 +110,32 @@ export function ProjectChapterDirectory({
   onOpenGenerate,
 }: ProjectChapterDirectoryProps) {
   if (chapters.length === 0) {
+    if (liveChapter) {
+      return (
+        <div className="space-y-4">
+          <div>
+            <div className="mb-2 text-xs font-semibold text-blue-600 dark:text-blue-400">生成中</div>
+            <LiveChapterPlaceholder liveChapter={liveChapter} />
+          </div>
+          <div className="rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300">
+            第{liveChapter.chapterNumber}章完成保存后会自动进入目录；下一步将生成章节摘要并开放审核入口。
+          </div>
+        </div>
+      )
+    }
+
+    if (pipelineRunning) {
+      return (
+        <div className="text-center py-12">
+          <Loader2 className="h-10 w-10 animate-spin text-blue-400 mx-auto mb-3" />
+          <p className="text-sm font-medium text-gray-700 dark:text-gray-200">正在准备章节流水线</p>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            章节生成后会先出现在这里，并标注生成、精修、待审核等状态。
+          </p>
+        </div>
+      )
+    }
+
     return (
       <div className="text-center py-12">
         <BookOpen className="h-10 w-10 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
@@ -84,8 +161,15 @@ export function ProjectChapterDirectory({
   return (
     <div className="space-y-6">
       <div className="rounded-lg border border-blue-100 bg-blue-50/50 px-4 py-3 text-xs text-blue-700 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-300">
-        点击章节可打开审核抽屉，进行阅读、审核和修改操作。
+        章节会按流水线状态更新：生成中、待审核、已完成。点击章节可打开审核抽屉。
       </div>
+
+      {pipelineRunning && liveChapter && !chapters.some(chapter => chapter.chapterNumber === liveChapter.chapterNumber) && (
+        <div>
+          <div className="mb-2 text-xs font-semibold text-blue-600 dark:text-blue-400">生成中</div>
+          <LiveChapterPlaceholder liveChapter={liveChapter} />
+        </div>
+      )}
 
       {groups.map((group, groupIdx) => {
         const groupKey = `${group.arcNumber || 0}-${group.arcName || 'chapters'}-${groupIdx}`
@@ -112,10 +196,10 @@ export function ProjectChapterDirectory({
               expandedLabel="收起目录"
               getKey={(chapter) => chapter.id}
               renderItem={(chapter) => {
-                const currentLiveChapter = liveChapter?.chapterNumber === chapter.chapterNumber ? liveChapter : null
+                const currentLiveChapter = pipelineRunning && liveChapter?.chapterNumber === chapter.chapterNumber ? liveChapter : null
                 const chapterBadgeVariant = currentLiveChapter ? 'primary' : chapterStatusMap[chapter.status].variant
                 const chapterBadgeLabel = currentLiveChapter
-                  ? '实时写作中'
+                  ? formatLivePhase(currentLiveChapter.currentPhase || currentLiveChapter.currentAgent)
                   : chapterStatusMap[chapter.status].label
                 const isReviewing = chapter.status === 'REVIEWING'
                 const isGenerating = chapter.status === 'GENERATING' || currentLiveChapter
@@ -182,7 +266,7 @@ export function ProjectChapterDirectory({
                           </button>
                         )}
 
-                        {isDraft && (
+                        {isDraft && !pipelineRunning && (
                           <button
                             type="button"
                             onClick={(e) => { e.stopPropagation(); onOpenGenerate(chapter.id) }}

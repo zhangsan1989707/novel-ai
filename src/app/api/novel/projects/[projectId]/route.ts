@@ -11,6 +11,7 @@ import { ensureProjectMaintenanceQueued, getProjectMaintenanceSummary } from '@/
 import { buildStoryRoadmap } from '@/lib/engine/story-roadmap'
 import { resolveProjectPlanningTargets } from '@/lib/engine/project-length'
 import { readProjectPipelineSnapshot } from '@/lib/engine/project-pipeline-snapshot'
+import { normalizeChapterContentForUser } from '@/lib/chapter-content-normalizer'
 
 function buildProjectPreflight(project: {
   aiModelConfig: unknown
@@ -353,6 +354,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       success: true,
       data: {
         ...project,
+        chapters: project.chapters.map(chapter => ({
+          ...chapter,
+          content: normalizeChapterContentForUser(chapter.content),
+        })),
         currentWordCount: totalWordCount, // 实时计算替换数据库字段
         effectiveTargetWordCount: planningTargets.effectiveTargetWordCount,
         recentCommits,

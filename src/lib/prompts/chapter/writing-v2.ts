@@ -133,6 +133,13 @@ export function buildWriterPrompt(input: WriterPromptInput): string {
 
   parts.push(`\n## 写作规范`)
   
+  parts.push(`\n### ⚠️ 章节衔接要求（最高优先级）`)
+  parts.push(`- 本章正文必须从上一章结尾处直接继续，不得跳过时间线`)
+  parts.push(`- 如果记忆上下文中包含"上一章结尾原文"，必须将其作为本章开篇的起点`)
+  parts.push(`- 开篇段落应自然承接上一章的最后一个场景/对话/情绪`)
+  parts.push(`- 不得在无过渡的情况下突然切入新场景或新时间线`)
+  parts.push(`- 如果上一章结尾是悬念/悬崖（hook），本章必须解决或深化该悬念`)
+
   parts.push(`\n### 节奏控制`)
   const setupEnd = Math.floor(input.targetWordCount * CHAPTER_PACING.SETUP)
   const devEnd = Math.floor(input.targetWordCount * (CHAPTER_PACING.SETUP + CHAPTER_PACING.DEVELOPMENT))
@@ -243,6 +250,12 @@ export function buildWriterPrompt(input: WriterPromptInput): string {
   parts.push(`目标字数：${input.targetWordCount}字`)
   parts.push(`允许范围：${Math.floor(input.targetWordCount * (1 - CHAPTER_WORD_COUNT.TOLERANCE))}-${Math.floor(input.targetWordCount * (1 + CHAPTER_WORD_COUNT.TOLERANCE))}字`)
   parts.push(`**请优先达到目标字数；如果内容还没写满，不要提前收尾，继续扩写到达要求。**`)
+  parts.push(``)
+  parts.push(`### ⚠️ 防止过早收束`)
+  parts.push(`- 在字数接近目标之前，不允许写"章节结尾"或收束式段落`)
+  parts.push(`- 如果当前已写内容未达到目标字数的 90%，禁止出现结尾式表述（如"这一战""从此以后""故事的最后"等总结语）`)
+  parts.push(`- 结尾必须是自然的高潮收束或悬念钩子，不能在字数不足时强行截断`)
+  parts.push(`- 先保证故事讲完一个完整的情节单元，再考虑结尾`)
 
   parts.push(`\n## 输出要求`)
   parts.push(`- 仅输出 Markdown 格式的章节正文`)

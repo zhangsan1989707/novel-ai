@@ -36,7 +36,7 @@ const phaseLabels: Record<string, string> = {
   'summarizing': '摘要整理',
   'reviewing': '内容复核',
   'validating': '质量校验',
-  'deslopping': '去AI味',
+  'deslopping': '文风精修',
   'word_count_check': '字数校验',
   'truncation_check': '截断检测',
   'quality_gate': '质量门禁',
@@ -49,8 +49,8 @@ const phaseLabels: Record<string, string> = {
   'validator': '质量校验',
   'summarizer': '摘要整理',
   'reviewer': '内容复核',
-  'deslopper': '去AI味',
-  'validator_deslopper': '校验+去AI味',
+  'deslopper': '文风精修',
+  'validator_deslopper': '质检与精修',
   'polisher_summarizer': '润色+摘要',
 }
 
@@ -65,6 +65,15 @@ function getStaleStatus(lastHeartbeatAt: string | null | undefined): 'normal' | 
   if (seconds > 180) return 'stale'
   if (seconds > 60) return 'warning'
   return 'normal'
+}
+
+function getNextStepLabel(phase: string): string {
+  const normalized = phase.toLowerCase()
+  if (normalized.includes('writing') || normalized.includes('writer')) return '进入文风润色'
+  if (normalized.includes('polish')) return '进入质检与精修'
+  if (normalized.includes('valid') || normalized.includes('review') || normalized.includes('deslop')) return '生成章节摘要并加入目录'
+  if (normalized.includes('summar') || normalized.includes('commit') || normalized.includes('db_write')) return '保存章节并推进下一章'
+  return '继续推进当前章节'
 }
 
 export function PipelineControlPanel({
@@ -110,6 +119,15 @@ export function PipelineControlPanel({
   const chapterProgress = currentChapterRuntime
     ? Math.round((currentWordCount / targetWordCount) * 100)
     : pipeline?.currentChapterProgress || 0
+  const displayedChapterProgress = Math.min(chapterProgress, 100)
+  const batchTotal = Math.max(
+    (runtimeSummary?.queuedChapters || 0) + (currentChapterNo > 0 ? 1 : 0),
+    runtime?.recentChapters?.length ? runtime.recentChapters.length + (currentChapterNo > 0 ? 1 : 0) : 0,
+    1
+  )
+  const batchPosition = currentChapterNo > 0 ? Math.min(batchTotal, Math.max(1, batchTotal - (runtimeSummary?.queuedChapters || 0))) : 0
+  const currentStepLabel = formatPhaseOrAgent(currentPhase || pipeline?.currentStep || '')
+  const nextStepLabel = getNextStepLabel(currentPhase || pipeline?.currentStep || '')
   const staleStatus = pipeline ? getStaleStatus(pipeline.lastHeartbeatAt) : 'normal'
 
   const canStart = runtimeSummary?.canStart ?? (!isRunning && !isPaused && hasBoundModel && !maintenanceActive && !flowBlockedReason)
@@ -174,7 +192,7 @@ export function PipelineControlPanel({
     <div className={`rounded-lg border ${borderColor} ${bgColor}`}>
       {/* 主区域 */}
       <div className="px-4 py-3 space-y-3">
-        {/* 顶部：整本进度 */}
+        {/* 顶部：当前批次进度 */}
         <div className="flex items-center gap-4">
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between text-sm mb-1.5">
@@ -189,12 +207,16 @@ export function PipelineControlPanel({
                 {isFailed && <span className="text-red-500 font-bold text-xs">✕ 失败</span>}
                 {isCompleted && <span className="text-green-500 font-bold text-xs">✓ 完成</span>}
                 <span className="font-medium text-gray-800 dark:text-gray-200">
-                  整本进度：{completedChapters} / {totalChapters} 章
+                  {isRunning && currentChapterNo > 0
+                    ? `正在创作第 ${currentChapterNo} 章`
+                    : `当前批次：${batchPosition || completedChapters} / ${batchTotal} 章`}
                 </span>
               </div>
-              <span className="text-xs text-gray-500 tabular-nums">{pipeline?.progress || 0}%</span>
+              <span className="text-xs text-gray-500 tabular-nums">
+                全书计划约 {totalChapters} 章
+              </span>
             </div>
-            <Progress value={pipeline?.progress || 0} max={100} size="sm" />
+            <Progress value={isRunning && currentChapterNo > 0 ? displayedChapterProgress : pipeline?.progress || 0} max={100} size="sm" />
           </div>
         </div>
 
@@ -205,19 +227,25 @@ export function PipelineControlPanel({
               <div className="flex items-center gap-2">
                 <Zap className="h-4 w-4 text-blue-500" />
                 <span className="text-sm font-medium text-blue-800 dark:text-blue-200">
-                  第 {currentChapterNo} 章
+                  第 {currentChapterNo} 章 · {currentChapterRuntime?.title || '暂未命名'}
                 </span>
               </div>
               <span className="text-sm text-blue-600 dark:text-blue-300">
-                {formatPhaseOrAgent(currentPhase)}
+                {currentStepLabel}
               </span>
             </div>
             <div className="flex items-center gap-3 text-sm">
               <span className="text-gray-600 dark:text-gray-400 whitespace-nowrap tabular-nums">
                 {currentWordCount.toLocaleString()} / {targetWordCount.toLocaleString()} 字
               </span>
-              <div className="flex-1"><Progress value={chapterProgress} max={100} size="sm" /></div>
-              <span className="text-xs text-gray-500 tabular-nums w-8 text-right">{chapterProgress}%</span>
+              <div className="flex-1"><Progress value={displayedChapterProgress} max={100} size="sm" /></div>
+              <span className="text-xs text-gray-500 tabular-nums w-14 text-right">
+                {chapterProgress >= 100 ? '已达标' : `${chapterProgress}%`}
+              </span>
+            </div>
+            <div className="mt-2 grid grid-cols-1 gap-2 text-xs text-blue-700 dark:text-blue-300 sm:grid-cols-2">
+              <span>最近更新：{formatTimeAgo(pipeline?.lastHeartbeatAt)}</span>
+              <span>下一步：{nextStepLabel}</span>
             </div>
           </div>
         )}
@@ -227,7 +255,7 @@ export function PipelineControlPanel({
           {/* 左侧状态数据 */}
           <div className="flex items-center gap-5 text-xs text-gray-500 dark:text-gray-400">
             <span className="flex items-center gap-1">
-              状态：{runtimeSummary?.stageLabel || formatPipelineStatus(pipeline?.status || 'IDLE')}
+              当前阶段：{runtimeSummary?.stageLabel || formatPipelineStatus(pipeline?.status || 'IDLE')}
             </span>
             <span className="flex items-center gap-1">
               模式：
@@ -245,7 +273,7 @@ export function PipelineControlPanel({
             </span>
             <span className="flex items-center gap-1">
               <Clock className="h-3 w-3" />
-              心跳：{formatTimeAgo(pipeline?.lastHeartbeatAt)}
+              最近更新：{formatTimeAgo(pipeline?.lastHeartbeatAt)}
               {staleStatus === 'warning' && <span className="text-yellow-500 ml-1">⚠</span>}
               {staleStatus === 'stale' && <span className="text-red-500 ml-1">⚠</span>}
             </span>

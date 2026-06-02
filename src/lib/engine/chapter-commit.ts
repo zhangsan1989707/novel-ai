@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import type { Prisma } from '@prisma/client'
 import type { ChapterOutline, ChapterSummaryData, ValidationReport } from './types'
+import type { ChapterContinuitySnapshot, ContinuityAuditResult } from './chapter-continuity'
 import { runChapterProjectionWriters } from './chapter-projections'
 
 export interface ChapterCommitPayload {
@@ -10,6 +11,8 @@ export interface ChapterCommitPayload {
   summaryData?: ChapterSummaryData | null
   validationReport?: ValidationReport | null
   outline?: ChapterOutline | null
+  continuityAudit?: ContinuityAuditResult | null
+  continuitySnapshot?: ChapterContinuitySnapshot | null
   phaseTimings?: Record<string, number>
   qualityStatus?: 'completed' | 'reviewing'
   warning?: string

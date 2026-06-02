@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 
 const mockGenerate = vi.fn();
 
@@ -33,7 +33,16 @@ describe('plannerAgent', () => {
       } as any;
 
       await expect(
-        plannerAgent(invalidInput, undefined, { generate: mockGenerate } as any)
+        plannerAgent({
+          ...invalidInput,
+          characterProfiles: [],
+          openPlotlines: [],
+          emotionalArc: [],
+          targetWordCount: 3000,
+          recentChapterSummaries: [],
+          recentChapterCount: 0,
+          provider: { generate: mockGenerate } as any
+        } as any)
       ).rejects.toThrow();
     });
 
@@ -46,7 +55,16 @@ describe('plannerAgent', () => {
       } as any;
 
       await expect(
-        plannerAgent(invalidInput, undefined, { generate: mockGenerate } as any)
+        plannerAgent({
+          ...invalidInput,
+          characterProfiles: [],
+          openPlotlines: [],
+          emotionalArc: [],
+          targetWordCount: 3000,
+          recentChapterSummaries: [],
+          recentChapterCount: 0,
+          provider: { generate: mockGenerate } as any
+        } as any)
       ).rejects.toThrow();
     });
   });

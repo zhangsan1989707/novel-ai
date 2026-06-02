@@ -68,22 +68,49 @@ export function isLikelyTruncated(
     }
   }
 
-  // 6. 检查是否有明显的悬断句式
-  const trailingPatterns = [
+  // 6. 检查是否有明显的悬断句式（真正的截断信号 — 句子语义不完整）
+  // 注意：已将"忽然/突然/只见/正在这时"移除，这些是网文正常的悬念结尾手法
+  const hardTrailingPatterns = [
     /他刚要说/,
     /她还没来得及/,
     /话还没说完/,
-    /只见/,
+    /正要开口/,
+    /还没反应过来/,
+    /还没等/,
+  ]
+
+  const last200Chars = trimmedContent.slice(-200)
+  for (const pattern of hardTrailingPatterns) {
+    if (pattern.test(last200Chars)) {
+      reasons.push(`结尾存在硬截断句式：${pattern.source}`)
+      break
+    }
+  }
+
+  // 7. 软信号检查：悬念式结尾（不判定为截断，仅作信息提示）
+  // 此类句式在正常网文中是合法的章节结尾技巧，不应触发截断修复
+  const softSuspensePatterns = [
     /忽然/,
     /突然/,
+    /只见/,
     /正在这时/,
+    /就在这时/,
   ]
-  
-  const last200Chars = trimmedContent.slice(-200)
-  for (const pattern of trailingPatterns) {
+
+  let hasSuspenseEnding = false
+  for (const pattern of softSuspensePatterns) {
     if (pattern.test(last200Chars)) {
-      reasons.push(`结尾存在悬断句式：${pattern.source}`)
+      hasSuspenseEnding = true
       break
+    }
+  }
+
+  // 如果只检测到软信号，且结尾符正常、引号闭合，则不算截断
+  if (hasSuspenseEnding && reasons.length === 0) {
+    // 检查结尾是否以省略号或正常句读结束（网文悬念结尾常见 ... 或 ——）
+    const suspenseEndings = ['…', '...', '——', '。', '！', '？', '"', '」', '』']
+    if (suspenseEndings.includes(lastChar)) {
+      return { isTruncated: false, reasons: [] }
     }
   }
 

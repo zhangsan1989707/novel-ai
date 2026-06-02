@@ -124,11 +124,18 @@ describe('validatorAgent', () => {
         worldSetting: '修仙世界',
         characterProfiles: [
           {
-            id: 1,
+            id: 'character-001',
             name: '张三',
             role: 'PROTAGONIST',
+            aliases: [],
             personality: '坚毅果敢',
-            appearance: ''
+            appearance: '',
+            catchphrases: [],
+            background: null,
+            relationships: {},
+            currentState: {},
+            firstChapter: 1,
+            lastUpdated: 1
           }
         ],
         recentSummaries: [],
@@ -169,9 +176,12 @@ describe('validatorAgent', () => {
         openPlotlines: [
           {
             id: 'pl-001',
+            type: 'FORESHADOW',
             description: '主角身世之谜',
+            plantedAt: 1,
+            resolvedAt: null,
+            plannedAt: null,
             status: 'OPEN',
-            plantedAt: 1
           }
         ]
       });

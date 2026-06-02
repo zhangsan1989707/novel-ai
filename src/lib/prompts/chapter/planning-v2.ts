@@ -132,6 +132,12 @@ export function buildPlannerPrompt(input: PlannerPromptInput): string {
     }
   }
 
+  parts.push(`\n## ⚠️ 章节衔接要求（最高优先级）`)
+  parts.push(`- 回忆上下文中"上一章结尾原文"的具体情节和情绪，本章必须从这里直接延续`)
+  parts.push(`- 如果上一章结尾为悬念/悬崖（hook），本章的开场场景必须解决或深化该悬念`)
+  parts.push(`- 不得规划与上文结尾无关的全新场景作为开篇`)
+  parts.push(`- 确保本章的情感基调与上一章结尾自然过渡，不能情绪突变（除非有剧情理由）`)
+
   parts.push(`\n## 章节结构设计指南`)
   
   parts.push(`\n### 开篇钩子设计（占章节前10%字数）`)

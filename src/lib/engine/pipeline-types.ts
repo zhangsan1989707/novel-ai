@@ -57,4 +57,5 @@ export const STAGE_BATCH_RANGES: Record<ReturnType<typeof toInternalArcStage>, {
 export type ResumePlan = {
   startFrom: 'blueprint' | 'arc_plan' | 'chapter_list' | 'write'
   resumeFromChapterNumber?: number
+  forceRegenerateChapterNumber?: number
 }

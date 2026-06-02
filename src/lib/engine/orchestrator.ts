@@ -41,6 +41,7 @@ import { runRuleFantasyValidator } from './rule-fantasy-validator'
 import { validateChapterContent } from './content-validator'
 import { getWorldState, getVillains, getWorldExpansionContext, getVillainContext } from './long-novel-integration'
 import { updateWorldStateAfterChapter } from './world-state-updater'
+import { auditChapterContinuity, buildChapterContinuitySnapshot, type ContinuityAuditResult } from './chapter-continuity'
 
 const MAX_RETRY_COUNT = 3
 const MAX_REPAIR_ATTEMPTS = 2
@@ -92,11 +93,13 @@ export async function runChapterGenerationPipeline(
   emit: SSEEmitter,
   options?: {
     speedMode?: GenerationSpeedMode
+    forceRegenerate?: boolean
     _retryMemoryPack?: Awaited<ReturnType<typeof buildChapterMemoryPack>>
   }
 ): Promise<GenerationResult> {
   const speedMode = options?.speedMode || 'FINAL_POLISH'
   const isRetry = !!options?._retryMemoryPack
+  const forceRegenerate = Boolean(options?.forceRegenerate || isRetry)
   const startTime = Date.now()
   let lastReportedWordCount = 0
 
@@ -220,6 +223,29 @@ export async function runChapterGenerationPipeline(
 
   // 上报进度：开始生成
   emitProgress(emit, 'chapter_contract', chapterNo, totalChapters, completedChaptersCount, 0, chapterTargetWordCount, `开始生成第 ${chapterNo} 章`)
+
+  const existingChapter = await prisma.novelChapter.findUnique({
+    where: { projectId_chapterNumber: { projectId, chapterNumber: chapterNo } },
+    select: { id: true, status: true, content: true, wordCount: true },
+  })
+
+  if (
+    existingChapter &&
+    !forceRegenerate &&
+    (
+      existingChapter.status === ChapterStatus.COMPLETED ||
+      (
+        existingChapter.status === ChapterStatus.REVIEWING &&
+        (Boolean(existingChapter.content?.trim()) || (existingChapter.wordCount || 0) > 0)
+      )
+    )
+  ) {
+    return {
+      success: true,
+      chapterId: existingChapter.id,
+      content: existingChapter.content || '',
+    }
+  }
 
   // 更新章节状态
   const chapter = await prisma.novelChapter.upsert({
@@ -466,36 +492,6 @@ export async function runChapterGenerationPipeline(
               provider: await getRoleProvider('reviewer'),
             }
           )
-
-          reviewedContent = ''
-          await writerAgent(
-            {
-              projectId,
-              chapterNo,
-              projectTitle: project.title,
-              genre: project.genre || undefined,
-              writingStyle: project.writingStyle || undefined,
-              memoryContext: writerMemoryContext,
-              worldSetting: project.worldSetting || undefined,
-              powerSystem: project.powerSystem || undefined,
-              protagonistProfile: project.protagonistProfile || undefined,
-              antagonistSetting: project.antagonistSetting || undefined,
-              targetWordCount: chapterTargetWordCount,
-              outline,
-              characterProfiles: memoryPack.characterProfiles,
-              recentSummaries: memoryPack.recentChapterSummaries,
-              provider: await getRoleProvider('writer'),
-              maxTokens: estimateMaxTokensForTargetWordCount(chapterTargetWordCount),
-              popularFictionProfile,
-              styleProfilePromptCard,
-              styleStrength: project.styleStrength,
-              styleSafetyMode: (project.styleSafetyMode as 'SAFE_ABSTRACT' | 'STRICT_PUBLIC_DOMAIN' | 'USER_LICENSED') || 'SAFE_ABSTRACT',
-            },
-            (token) => {
-              reviewedContent += token
-              emit({ type: 'token', data: { content: token } })
-            }
-          )
         } catch (reviewError) {
           emit({
             type: 'hook_warning',
@@ -539,7 +535,7 @@ export async function runChapterGenerationPipeline(
               projectId,
               chapterId: chapter.id,
               content: reviewedContent,
-              provider: await getRoleProvider('validator'),
+              provider: await getRoleProvider('deslopper'),
             })
           } catch (deslopError) {
             emit({
@@ -623,6 +619,7 @@ export async function runChapterGenerationPipeline(
     emitProgress(emit, 'quality_gate', chapterNo, totalChapters, completedChaptersCount, countChineseWords(finalContent), chapterTargetWordCount, '正在运行质量门禁检查')
     
     let qualityGateResult: QualityGateResult
+    let continuityAuditResult: ContinuityAuditResult | null = null
     let repairAttempts = 0
     let contentToCheck = finalContent
 
@@ -630,10 +627,16 @@ export async function runChapterGenerationPipeline(
     const writerProvider = await getRoleProvider('writer')
 
     while (repairAttempts <= MAX_REPAIR_ATTEMPTS) {
+      continuityAuditResult = auditChapterContinuity({
+        chapterNo,
+        content: contentToCheck,
+        anchor: memoryPack.continuityAnchor,
+      })
       qualityGateResult = runQualityGate({
         content: contentToCheck,
         contract,
         finishReason: undefined, // TODO: 从 writer 获取 finishReason
+        continuityAudit: continuityAuditResult,
       })
 
       if (qualityGateResult.canSave) {
@@ -641,7 +644,7 @@ export async function runChapterGenerationPipeline(
         break
       }
 
-      if (repairAttempts >= MAX_REPAIR_ATTEMPTS) {
+      if (repairAttempts >= MAX_REPAIR_ATTEMPTS || !qualityGateResult.needsRepair) {
         // 修复次数用尽，标记为待审核
         emit({
           type: 'quality_gate_failed',
@@ -658,6 +661,10 @@ export async function runChapterGenerationPipeline(
             content: contentToCheck,
             status: ChapterStatus.REVIEWING,
             wordCount: countChineseWords(contentToCheck),
+            validationReport: {
+              validationReport,
+              continuityAudit: continuityAuditResult,
+            } as unknown as Prisma.InputJsonValue,
             lastAgentType: 'VALIDATOR',
           },
         })
@@ -700,6 +707,17 @@ export async function runChapterGenerationPipeline(
           chapterTitle: outline.chapterTitle,
           chapterNo,
           provider: writerProvider,
+          // 传递完整上下文以便高质量续写
+          chapterOutline: outline
+            ? `章节目标：${outline.chapterGoal}\n主要冲突：${outline.mainConflict}\n结尾设计：${outline.ending || '无特定设计'}`
+            : undefined,
+          characterProfiles: memoryPack.characterProfiles
+            .map(c => `【${c.name}】${c.role}: ${c.appearance || ''} ${c.personality || ''}`)
+            .join('\n'),
+          recentSummaries: memoryPack.recentChapterSummaries
+            .map(s => `第${s.chapterNo}章：${s.summary}`)
+            .join('\n'),
+          previousChapterEnding: memoryPack.previousChapterEnding || undefined,
         })
       }
 
@@ -711,6 +729,13 @@ export async function runChapterGenerationPipeline(
 
       repairAttempts++
     }
+
+    finalContent = contentToCheck
+    const continuitySnapshot = buildChapterContinuitySnapshot({
+      chapterNo,
+      content: finalContent,
+      anchor: memoryPack.continuityAnchor,
+    })
 
     const completionReport = buildChapterCompletionReport({
       content: finalContent,
@@ -883,6 +908,8 @@ export async function runChapterGenerationPipeline(
         summaryData,
         validationReport: validationReport as unknown as EngineValidationReport | null,
         outline,
+        continuityAudit: continuityAuditResult,
+        continuitySnapshot,
         qualityStatus: 'completed',
         warning: undefined,
         targetWordCount: project.chapterWordCount || 3000,

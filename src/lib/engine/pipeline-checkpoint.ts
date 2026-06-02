@@ -28,7 +28,11 @@ export async function resolveResumePlan(jobId: number): Promise<ResumePlan> {
     return { startFrom: 'chapter_list' }
   }
   if (target?.mode === 'retry_chapter') {
-    return { startFrom: 'write', resumeFromChapterNumber: target.chapterNumber }
+    return {
+      startFrom: 'write',
+      resumeFromChapterNumber: target.chapterNumber,
+      forceRegenerateChapterNumber: target.chapterNumber,
+    }
   }
 
   if (!job) return { startFrom: 'blueprint' }

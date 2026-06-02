@@ -31,6 +31,13 @@ export function ProjectSidebar({
   runtimeSummary,
 }: ProjectSidebarProps) {
   const displayedProgress = runtimeSummary?.overallProgress ?? progress
+  const generationLocked = Boolean(runtimeSummary?.canPause)
+  const runtimeBatchTotal = runtimeSummary
+    ? Math.max(runtimeSummary.queuedChapters + (runtimeSummary.currentChapterNo ? 1 : 0), 1)
+    : 1
+  const runtimeBatchProgress = runtimeSummary?.currentChapterNo
+    ? Math.max(8, Math.round((1 / runtimeBatchTotal) * 100))
+    : runtimeSummary?.overallProgress || 0
 
   return (
     <>
@@ -53,30 +60,35 @@ export function ProjectSidebar({
                 {workflowPhase && workflowPhase !== 'WRITING' ? workflowPhaseLabels[workflowPhase].sidebarTitle : '写作进度'}
               </h3>
               <span className="text-lg font-bold text-blue-600">
-                {runtimeSummary ? `${runtimeSummary.overallProgress}%` : workflowPhase && workflowPhase !== 'WRITING' ? workflowPhaseLabels[workflowPhase].title : displayedProgress !== null ? `${displayedProgress}%` : '-'}
+                {runtimeSummary ? '创作中' : workflowPhase && workflowPhase !== 'WRITING' ? workflowPhaseLabels[workflowPhase].title : displayedProgress !== null ? `${displayedProgress}%` : '-'}
               </span>
             </div>
 
             {runtimeSummary ? (
               <div className="rounded-xl border border-blue-200 bg-white/80 p-4 text-sm dark:border-blue-900/40 dark:bg-slate-950/40">
-                <div className="mb-2 text-sm font-medium text-gray-900 dark:text-white">{runtimeSummary.stageLabel}</div>
-                <Progress value={runtimeSummary.overallProgress} max={100} size="sm" />
-                <div className="mt-3 grid grid-cols-2 gap-3 text-gray-700 dark:text-gray-200">
-                  <div>
-                    <div className="text-xs text-gray-500">已完成</div>
-                    <div className="font-semibold">{runtimeSummary.completedChapters}/{runtimeSummary.totalChapters} 章</div>
+                <div className="text-xs text-gray-500">当前阶段</div>
+                <div className="mt-1 text-sm font-medium text-gray-900 dark:text-white">
+                  {runtimeSummary.currentChapterNo ? `第${runtimeSummary.currentChapterNo}章 · ` : ''}{runtimeSummary.stageLabel}
+                </div>
+                <div className="mt-3">
+                  <div className="mb-1 flex items-center justify-between text-xs text-gray-500">
+                    <span>当前批次</span>
+                    <span>{runtimeSummary.currentChapterNo ? '进行中' : '等待中'}</span>
                   </div>
-                  <div>
-                    <div className="text-xs text-gray-500">当前章节</div>
-                    <div className="font-semibold">{runtimeSummary.currentChapterNo ? `第${runtimeSummary.currentChapterNo}章` : '-'}</div>
+                  <Progress value={runtimeBatchProgress} max={100} size="sm" />
+                </div>
+                <div className="mt-3 space-y-2 text-gray-700 dark:text-gray-200">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-gray-500">本批待生成</span>
+                    <span className="font-semibold">{runtimeSummary.queuedChapters} 章</span>
                   </div>
-                  <div>
-                    <div className="text-xs text-gray-500">待处理</div>
-                    <div className="font-semibold">{runtimeSummary.failedChapters} 章</div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-gray-500">待处理异常</span>
+                    <span className="font-semibold">{runtimeSummary.failedChapters} 章</span>
                   </div>
-                  <div>
-                    <div className="text-xs text-gray-500">排队中</div>
-                    <div className="font-semibold">{runtimeSummary.queuedChapters} 章</div>
+                  <div className="flex items-center justify-between gap-3 border-t border-gray-100 pt-2 dark:border-gray-800">
+                    <span className="text-gray-500">全书计划</span>
+                    <span className="text-right">约 {runtimeSummary.totalChapters} 章，已审核 {runtimeSummary.completedChapters} 章</span>
                   </div>
                 </div>
               </div>
@@ -117,8 +129,8 @@ export function ProjectSidebar({
                   <p className="text-xs text-gray-500">目标</p>
                 </div>
                 <div>
-                  <p className="text-sm font-bold">{estimatedTotalChapters?.toLocaleString() || '-'}</p>
-                  <p className="text-xs text-gray-500">预计章数</p>
+                  <p className="text-sm font-bold">{runtimeSummary ? runtimeBatchTotal : estimatedTotalChapters?.toLocaleString() || '-'}</p>
+                  <p className="text-xs text-gray-500">{runtimeSummary ? '当前批次' : '预计章数'}</p>
                 </div>
                 <div>
                   <p className="text-sm font-bold">{project.chapters.length}</p>
@@ -129,7 +141,9 @@ export function ProjectSidebar({
 
             {workflowPhase === 'WRITING' && estimatedTotalChapters && project.expectedStageCount ? (
               <p className="mt-3 text-xs text-gray-500">
-                当前按 {project.lengthType || 'LONG'} 口径规划，全书预计约 {estimatedTotalChapters} 章，默认拆分为 {project.expectedStageCount} 个阶段。
+                {runtimeSummary
+                  ? `当前优先展示批次进度；全书约 ${estimatedTotalChapters} 章、${project.expectedStageCount} 个阶段，可在设定中枢查看。`
+                  : `当前按 ${project.lengthType || 'LONG'} 口径规划，全书预计约 ${estimatedTotalChapters} 章，默认拆分为 ${project.expectedStageCount} 个阶段。`}
               </p>
             ) : null}
           </CardContent>
@@ -166,6 +180,13 @@ export function ProjectSidebar({
               <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-3">
                 {project.protagonistProfile}
               </p>
+              <details className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                <summary className="cursor-pointer text-blue-600 dark:text-blue-400">查看完整设定</summary>
+                <p className="mt-2 whitespace-pre-wrap leading-5 text-gray-600 dark:text-gray-300">{project.protagonistProfile}</p>
+              </details>
+              {generationLocked && (
+                <p className="mt-2 text-xs text-gray-400">生成中暂不可修改，避免影响上下文一致性。</p>
+              )}
             </CardContent>
           </Card>
         )}
@@ -180,6 +201,13 @@ export function ProjectSidebar({
               <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-3">
                 {project.worldSetting}
               </p>
+              <details className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                <summary className="cursor-pointer text-blue-600 dark:text-blue-400">查看完整设定</summary>
+                <p className="mt-2 whitespace-pre-wrap leading-5 text-gray-600 dark:text-gray-300">{project.worldSetting}</p>
+              </details>
+              {generationLocked && (
+                <p className="mt-2 text-xs text-gray-400">生成中暂不可修改，避免影响上下文一致性。</p>
+              )}
             </CardContent>
           </Card>
         )}
