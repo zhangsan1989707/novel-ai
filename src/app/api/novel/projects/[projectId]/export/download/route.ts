@@ -9,7 +9,7 @@ interface RouteParams {
 }
 
 const downloadSchema = z.object({
-  format: z.enum(['txt', 'md', 'json']).default('txt'),
+  format: z.enum(['txt', 'md', 'json', 'docx']).default('txt'),
   includeMetadata: z.enum(['true', 'false']).default('true').transform(value => value === 'true'),
   includeChapterTitles: z.enum(['true', 'false']).default('true').transform(value => value === 'true'),
 })
@@ -47,6 +47,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         { success: false, error: { code: 'EXPORT_FAILED', message: result.error || '导出失败' } },
         { status: 400 }
       )
+    }
+
+    if (result.isBase64 && result.content) {
+      const binaryData = Buffer.from(result.content, 'base64')
+      return new NextResponse(binaryData, {
+        status: 200,
+        headers: {
+          'Content-Type': result.contentType || 'application/octet-stream',
+          'Content-Disposition': `attachment; filename="${encodeURIComponent(result.fileName)}"`,
+          'Cache-Control': 'no-store',
+        },
+      })
     }
 
     return new NextResponse(result.content, {

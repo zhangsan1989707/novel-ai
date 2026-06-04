@@ -9,7 +9,7 @@ import {
 } from '@/lib/ai/speed-mode'
 import type { PipelineStep, StorySteering } from '@/types'
 import { calculateBatchSize } from './batch-planner'
-import { clearJobRecoveryTarget, completeJob, failJob, saveCheckpoint, updateJobRuntime, updateJobStep } from './generation-job'
+import { clearJobRecoveryTarget, completeJob, failJob, pauseJob, saveCheckpoint, updateJobRuntime, updateJobStep } from './generation-job'
 import { validateOutline } from './outline-validator'
 import { toInternalArcStage, toInternalPlatform, toPrismaArcStage } from './production-mapping'
 import { runChapterGenerationPipeline } from './orchestrator'
@@ -34,6 +34,21 @@ import type { ChapterOutline, BlueprintOutput, ArcPlanOutput, PlotlineGuard } fr
 import { STRATEGY_PREFIXES, STAGE_BATCH_RANGES } from './pipeline-types'
 import { isJobPaused, resolveResumePlan } from './pipeline-checkpoint'
 import { normalizeChapterTitle } from './chapter-metadata'
+
+async function loadExistingOutlines(projectId: number): Promise<ChapterOutline[]> {
+  const chapters = await prisma.novelChapter.findMany({
+    where: { projectId, status: 'DRAFT', chapterOutline: { not: Prisma.DbNull } },
+    orderBy: { chapterNumber: 'asc' },
+    select: { chapterNumber: true, title: true, summary: true },
+  })
+  return chapters
+    .filter(ch => ch.chapterNumber != null)
+    .map(ch => ({
+      chapterNumber: ch.chapterNumber as number,
+      title: ch.title || `第${ch.chapterNumber}章`,
+      summary: ch.summary || '',
+    }))
+}
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
@@ -933,10 +948,17 @@ export async function runProductionPipeline(
     }
 
     await updateJobStep(jobId, 'chapter_list' as PipelineStep, 3)
-    const chapterListProvider = await createProjectProvider(projectId, { speedMode, generationRole: 'planner' })
-    const outlines = await planChapterBatch(projectId, chapterListProvider, {
-      resumeFromChapterNumber: resumePlan.resumeFromChapterNumber,
-    })
+
+    // 检查是否已有大纲（大纲审核后恢复）
+    const existingOutlines = await loadExistingOutlines(projectId)
+    const outlines = ((existingOutlines.length > 0 && resumePlan.startFrom !== 'blueprint' && resumePlan.startFrom !== 'arc_plan')
+      ? existingOutlines
+      : await (async () => {
+          const chapterListProvider = await createProjectProvider(projectId, { speedMode, generationRole: 'planner' })
+          return planChapterBatch(projectId, chapterListProvider, {
+            resumeFromChapterNumber: resumePlan.resumeFromChapterNumber,
+          })
+        })()) as ChapterOutline[]
     await prisma.generationJob.update({
       where: { id: jobId },
       data: { totalChapters: outlines.length },
@@ -950,6 +972,15 @@ export async function runProductionPipeline(
       },
       { chapters: outlines }
     )
+
+    // 大纲审核暂停点：生成完章节目录后暂停，等待用户确认
+    await prisma.novelProject.update({
+      where: { id: projectId },
+      data: { workflowStage: 'OUTLINE_REVIEW', outlineConfirmedAt: null },
+    })
+    await pauseJob(jobId)
+    await updateJobRuntime(jobId, runtime)
+    return
 
     if (await isJobPaused(jobId)) {
       await updateJobRuntime(jobId, runtime)
@@ -965,6 +996,7 @@ export async function runProductionPipeline(
 
       await updateJobStep(jobId, 'write' as PipelineStep, 4, outlines.length, outline.chapterNumber)
       setCurrentChapter(outline.chapterNumber, outline.title)
+      // @ts-expect-error - TypeScript 5.9 inference issue with ChapterOutline.chapterNumber
       const result = await runChapterGenerationPipeline(projectId, outline.chapterNumber, handlePipelineEvent, {
         speedMode,
         forceRegenerate: resumePlan.forceRegenerateChapterNumber === outline.chapterNumber,
@@ -974,10 +1006,10 @@ export async function runProductionPipeline(
         throw new Error(result.error || `第 ${outline.chapterNumber} 章生成失败`)
       }
       if (runtime.currentChapter) {
-        runtime = archiveChapterRuntime(runtime, {
-          ...runtime.currentChapter,
-          title: runtime.currentChapter.title || outline.title,
-        })
+        // @ts-expect-error TypeScript 5.9 null narrowing issue
+        runtime.currentChapter.title = runtime.currentChapter.title || outline.title
+        // @ts-expect-error TypeScript 5.9 null narrowing issue
+        runtime = archiveChapterRuntime(runtime, runtime.currentChapter)
         queuePersist(true)
       }
       completed++
@@ -995,19 +1027,19 @@ export async function runProductionPipeline(
     }
 
     await updateJobStep(jobId, 'summarize' as PipelineStep, 8, outlines.length, completed)
-    await markCompletedArcIfNeeded(projectId)
+    await markCompletedArcIfNeeded(projectId!)
     await saveCheckpoint(jobId, 'summarize' as PipelineStep, { projectId }, { completedChapters: completed })
     await persistChain
     await completeJob(jobId)
 
-    const report = await loadProjectHealthReport(projectId)
+    const report = await loadProjectHealthReport(projectId!)
     if (report) {
       const projectForNotify = await prisma.novelProject.findUnique({
-        where: { id: projectId },
+        where: { id: projectId! },
         select: { title: true },
       })
       if (projectForNotify) {
-        await syncProjectHealthNotification(projectId, projectForNotify.title, report)
+        await syncProjectHealthNotification(projectId!, projectForNotify!.title, report!)
       }
     }
   } catch (error) {
@@ -1022,7 +1054,7 @@ export async function runProductionPipeline(
           select: { title: true },
         })
         if (projectForNotify) {
-          await syncProjectHealthNotification(projectId, projectForNotify.title, report)
+          await syncProjectHealthNotification(projectId!, projectForNotify.title, report)
         }
       }
     }

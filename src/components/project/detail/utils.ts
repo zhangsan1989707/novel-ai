@@ -4,9 +4,10 @@ import type { ProjectWorkflowPhase } from './constants'
 import type { GenerationSpeedMode } from '@/lib/ai/speed-mode'
 
 interface WorkflowPhaseProject {
-  workflowStage?: 'BLUEPRINT_CONFIRM' | 'ARC_PLAN_CONFIRM' | 'GENERATE'
+  workflowStage?: string
   blueprintConfirmedAt?: string | null
   arcPlanConfirmedAt?: string | null
+  outlineConfirmedAt?: string | null
   bookBlueprint?: unknown
   arcPlans?: unknown[]
   storyRoadmap?: unknown[]
@@ -53,6 +54,10 @@ export function resolveWorkflowPhase(
 
   if (!project.arcPlanConfirmedAt && project.workflowStage === 'ARC_PLAN_CONFIRM') {
     return Array.isArray(project.storyRoadmap) && project.storyRoadmap.length > 0 ? 'ROADMAP_READY' : 'BLUEPRINT_GENERATING'
+  }
+
+  if (project.workflowStage === 'OUTLINE_REVIEW' && !project.outlineConfirmedAt) {
+    return 'OUTLINE_REVIEW'
   }
 
   if (project.maintenanceSummary?.bootstrapFailed || project.maintenanceSummary?.ragFailed) {

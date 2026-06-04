@@ -217,6 +217,39 @@ export async function createCharacterProfile(
 }
 
 /**
+ * 基于相关性筛选角色（长篇小说优化）
+ * 始终保留主角和反派，其余按近期提及频率排序
+ */
+export function selectRelevantCharacters(
+  characters: CharacterProfile[],
+  limit: number,
+  context: { recentSummaries: string[]; currentChapterNo: number }
+): CharacterProfile[] {
+  if (characters.length <= limit) return characters
+
+  const summaryText = context.recentSummaries.join('\n')
+
+  const essential = characters.filter(c => c.role === 'PROTAGONIST' || c.role === 'ANTAGONIST')
+  const optional = characters.filter(c => c.role !== 'PROTAGONIST' && c.role !== 'ANTAGONIST')
+
+  const scored = optional.map(c => {
+    let score = 0
+    if (summaryText.includes(c.name)) score += 3
+    for (const alias of c.aliases) {
+      if (summaryText.includes(alias)) { score += 2; break }
+    }
+    if (c.lastUpdated && context.currentChapterNo - c.lastUpdated <= 10) score += 2
+    if (c.currentState && Object.keys(c.currentState).length > 0) score += 1
+    return { character: c, score }
+  })
+
+  scored.sort((a, b) => b.score - a.score)
+
+  const remaining = limit - essential.length
+  return [...essential, ...scored.slice(0, Math.max(0, remaining)).map(s => s.character)]
+}
+
+/**
  * 角色声音指纹接口
  */
 export interface CharacterVoice {

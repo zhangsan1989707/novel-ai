@@ -49,7 +49,17 @@ export async function POST(
       )
     }
 
-    await runVirtualWriterTraining(id)
+    if (writer.trainingStatus === TrainingStatus.TRAINING) {
+      return NextResponse.json(
+        { success: false, error: { code: 'ALREADY_TRAINING', message: '训练正在进行中' } },
+        { status: 409 }
+      )
+    }
+
+    // 异步执行训练，不阻塞请求
+    runVirtualWriterTraining(id).catch(error => {
+      logError(error instanceof Error ? error : new Error(String(error)), { type: 'training_background', writerId: id })
+    })
 
     return NextResponse.json({
       success: true,

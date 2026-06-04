@@ -8,6 +8,7 @@ import type {
   ExportedStoryState,
   ExportReusableContext,
 } from './types'
+import { ExportFormat } from './types'
 import { logError } from '@/lib/logger'
 import { getPlatformConfig, formatChapterTitle, type PlatformKey } from './adapters/index'
 import Epub from 'epub-gen'
@@ -16,6 +17,7 @@ import * as path from 'path'
 import * as os from 'os'
 import AdmZip from 'adm-zip'
 import { normalizeChapterContentForUser } from '@/lib/chapter-content-normalizer'
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from 'docx'
 
 type ExportProject = Awaited<ReturnType<typeof loadProjectForExport>>
 type ExportChapter = NonNullable<ExportProject>['chapters'][number]
@@ -222,6 +224,16 @@ export async function exportNovel(
         fileName = `${sanitizedTitle}_${timestamp}.json`
         contentType = 'application/json; charset=utf-8'
         break
+      case 'docx': {
+        const docxBase64 = await buildDocxContent(project, chapters, options, metadata.reusableContext)
+        return {
+          success: true,
+          fileName: `${sanitizedTitle}_${timestamp}.docx`,
+          content: docxBase64,
+          contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          isBase64: true,
+        }
+      }
       default:
         return { success: false, fileName: '', error: `不支持的格式: ${options.format}` }
     }
@@ -410,6 +422,16 @@ export async function exportChapters(
         extension = 'md'
         contentType = 'text/markdown; charset=utf-8'
         break
+      case 'docx': {
+        const docxBase64 = await buildDocxContent(project!, chapters, options)
+        return {
+          success: true,
+          fileName: `${sanitizedTitle}_chapters_${Date.now()}.docx`,
+          content: docxBase64,
+          contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          isBase64: true,
+        }
+      }
       default:
         return { success: false, fileName: '', error: `不支持的格式: ${options.format}` }
     }
@@ -518,6 +540,22 @@ export async function exportForPlatform(
 
     const lines: string[] = []
 
+    if (config.formats.includes(ExportFormat.DOCX as (typeof config.formats)[number])) {
+      const docxBase64 = await buildDocxContent(project, project.chapters, {
+        format: 'docx' as ExportFormat,
+        includeMetadata: options?.includeMetadata !== false,
+        includeChapterTitles: true,
+        compress: false,
+      }, metadata.reusableContext)
+      return {
+        success: true,
+        fileName: `${sanitizedTitle}_${platform}_${timestamp}.docx`,
+        content: docxBase64,
+        contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        isBase64: true,
+      }
+    }
+
     if (options?.includeMetadata !== false) {
       lines.push(project.title)
       lines.push('='.repeat(40))
@@ -555,4 +593,80 @@ export async function exportForPlatform(
     logError(error instanceof Error ? error : new Error(String(error)), { type: 'export_platform', projectId })
     return { success: false, fileName: '', error: error instanceof Error ? error.message : '导出失败' }
   }
+}
+
+function buildChapterParagraphs(content: string): Paragraph[] {
+  return content
+    .split('\n')
+    .filter(line => line.trim())
+    .map(line => new Paragraph({
+      children: [new TextRun({ text: line.trim(), font: 'SimSun', size: 24 })],
+      indent: { firstLine: 480 },
+      spacing: { after: 120 },
+    }))
+}
+
+async function buildDocxContent(
+  project: ExportProjectCore,
+  chapters: ExportChapter[],
+  options: ExportOptions,
+  reusableContext?: ExportReusableContext
+): Promise<string> {
+  const children: Paragraph[] = []
+
+  if (options.includeMetadata) {
+    children.push(new Paragraph({
+      heading: HeadingLevel.TITLE,
+      alignment: AlignmentType.CENTER,
+      children: [new TextRun({ text: project.title, bold: true, font: 'SimHei', size: 44 })],
+    }))
+    children.push(new Paragraph({ spacing: { after: 200 } }))
+
+    if (project.genre) {
+      children.push(new Paragraph({
+        alignment: AlignmentType.CENTER,
+        children: [new TextRun({ text: `类型：${project.genre}`, font: 'SimSun', size: 24 })],
+      }))
+    }
+    if (project.description) {
+      children.push(new Paragraph({
+        alignment: AlignmentType.CENTER,
+        children: [new TextRun({ text: `简介：${project.description}`, font: 'SimSun', size: 24 })],
+      }))
+    }
+
+    if (reusableContext) {
+      children.push(new Paragraph({ spacing: { before: 400 } }))
+      children.push(new Paragraph({
+        heading: HeadingLevel.HEADING_2,
+        children: [new TextRun({ text: '创作复用信息', font: 'SimHei', size: 32 })],
+      }))
+      for (const line of buildReusableContextText(reusableContext)) {
+        children.push(new Paragraph({
+          children: [new TextRun({ text: line, font: 'SimSun', size: 22 })],
+          spacing: { after: 60 },
+        }))
+      }
+    }
+
+    children.push(new Paragraph({ pageBreakBefore: true }))
+  }
+
+  for (const chapter of chapters) {
+    if (options.includeChapterTitles) {
+      children.push(new Paragraph({
+        heading: HeadingLevel.HEADING_1,
+        spacing: { before: 240, after: 200 },
+        children: [new TextRun({ text: `第${chapter.chapterNumber}章 ${chapter.title}`, font: 'SimHei', size: 32 })],
+      }))
+    }
+    const content = normalizeChapterContentForUser(chapter.content)
+    if (content) {
+      children.push(...buildChapterParagraphs(content))
+    }
+    children.push(new Paragraph({ pageBreakBefore: true }))
+  }
+
+  const doc = new Document({ sections: [{ children }] })
+  return Packer.toBase64String(doc)
 }

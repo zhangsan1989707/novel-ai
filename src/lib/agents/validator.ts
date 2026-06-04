@@ -6,6 +6,8 @@ import type { AIProvider } from '@/lib/ai/types'
 import { buildValidatorPrompt as buildValidatorPromptV2, type ValidationReport as ValidationReportV2 } from '../prompts/chapter/validating-v2'
 import type { CharacterProfile, PlotlineData } from '../engine/types'
 import type { PopularFictionProfile } from '../engine/popular-fiction'
+import type { CharacterVoice } from '../memory/character-memory'
+import { formatCharacterVoiceConstraint } from '../memory/character-memory'
 import { parseAiJsonObject } from '@/lib/engine/ai-json'
 
 interface ValidatorInput {
@@ -22,6 +24,7 @@ interface ValidatorInput {
   useEnhancedPrompt?: boolean
   provider?: AIProvider
   popularFictionProfile?: PopularFictionProfile | null
+  characterVoices?: CharacterVoice[]
 }
 
 // 默认使用增强版校验
@@ -39,10 +42,23 @@ export async function validatorAgent(
     usageType: 'VALIDATOR',
   })
 
-  // 构建角色档案字符串
-  const characterProfilesStr = characterProfiles
-    .map(c => `【${c.name}】${c.role}: ${c.appearance || ''} ${c.personality || ''}`)
-    .join('\n')
+  // 构建角色档案字符串（完整数据）
+  const characterProfilesStr = characterProfiles.map(c => {
+    const parts = [`【${c.name}】(${c.role})`]
+    if (c.appearance) parts.push(`外貌：${c.appearance}`)
+    if (c.personality) parts.push(`性格：${c.personality}`)
+    if (c.background) parts.push(`背景：${c.background}`)
+    if (c.catchphrases?.length) parts.push(`口头禅：${c.catchphrases.join('、')}`)
+    if (c.relationships && Object.keys(c.relationships).length > 0) parts.push(`关系：${JSON.stringify(c.relationships)}`)
+    if (c.currentState && Object.keys(c.currentState).length > 0) parts.push(`当前状态：${JSON.stringify(c.currentState)}`)
+    return parts.join('；')
+  }).join('\n')
+
+  // 注入角色声音约束
+  const voiceConstraints = (input.characterVoices || [])
+    .filter(v => characterProfiles.some(c => c.name === v.name))
+    .map(v => formatCharacterVoiceConstraint(v))
+    .join('\n\n')
 
   // 构建伏笔追踪字符串
   const plotlinesStr = openPlotlines
@@ -50,10 +66,14 @@ export async function validatorAgent(
     .join('\n')
 
   // 构建提示词
+  const fullCharacterSection = voiceConstraints
+    ? `${characterProfilesStr}\n\n${voiceConstraints}`
+    : characterProfilesStr
+
   const prompt = buildValidatorPrompt({
     chapterNo,
     newChapterContent,
-    characterProfiles: characterProfilesStr,
+    characterProfiles: fullCharacterSection,
     memoryContext: input.memoryContext,
     recentSummaries: recentSummaries.map(s => `第${s.chapterNo}章：${s.summary}`).join('\n'),
     worldSetting,

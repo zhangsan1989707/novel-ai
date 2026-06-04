@@ -6,6 +6,7 @@ import { BlueprintConsole } from '@/components/project'
 import { WorkflowBlueprintCard } from '@/components/project/WorkflowBlueprintCard'
 import { blueprintProgressSteps } from '@/components/project/detail/constants'
 import { WorkflowArcPlanCard } from '@/components/project/WorkflowArcPlanCard'
+import { OutlineReviewPanel } from '@/components/project/detail/OutlineReviewPanel'
 import { CharacterPanel, AnalysisWorkbench } from '@/components/ai'
 import { BookOpen, Users, Search, Rocket, Wrench, Play, Download, Wand2, Square } from 'lucide-react'
 import { formatDisplayDate } from '@/lib/helpers'
@@ -592,6 +593,13 @@ ${ch.content || ''}
                       confirmed={Boolean(project.arcPlanConfirmedAt)}
                       roadmap={(project.storyRoadmap || []) as unknown as import('@/lib/engine/story-roadmap').StoryRoadmapItem[]}
                       onUpdated={fetchProject}
+                    />
+                  )}
+
+                  {workflowPhase === 'OUTLINE_REVIEW' && (
+                    <OutlineReviewPanel
+                      projectId={projectId}
+                      onConfirmed={fetchProject}
                     />
                   )}
 

@@ -13,7 +13,7 @@ interface RouteParams {
 }
 
 const exportSchema = z.object({
-  format: z.enum(['txt', 'md', 'json', 'epub']).default('txt'),
+  format: z.enum(['txt', 'md', 'json', 'epub', 'docx']).default('txt'),
   includeMetadata: z.boolean().default(true),
   includeChapterTitles: z.boolean().default(true),
   view: z.enum(['file', 'data']).default('file'),
@@ -155,6 +155,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         { success: false, error: { code: 'EXPORT_FAILED', message: result.error } },
         { status: 400 }
       )
+    }
+
+    if (result.isBase64 && result.content) {
+      const binaryData = Buffer.from(result.content, 'base64')
+      return new NextResponse(binaryData, {
+        headers: {
+          'Content-Type': result.contentType || 'application/octet-stream',
+          'Content-Disposition': `attachment; filename="${encodeURIComponent(result.fileName)}"`,
+        },
+      })
     }
 
     return NextResponse.json({

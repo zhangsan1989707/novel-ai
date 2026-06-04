@@ -131,6 +131,7 @@ model NovelProject {
   workflowStage      String                   @default("BLUEPRINT_CONFIRM")
   blueprintConfirmedAt DateTime?
   arcPlanConfirmedAt DateTime?
+  outlineConfirmedAt DateTime?
   platform           Platform?
   powerGrowth        Float                    @default(0.5)
   romance            Float                    @default(0.2)

@@ -3,7 +3,7 @@
 import Image from 'next/image'
 import { useRouter, usePathname } from 'next/navigation'
 import { Button } from '@/components/ui'
-import { BookOpen, Settings, DollarSign, Search, TrendingUp } from 'lucide-react'
+import { BookOpen, Settings, DollarSign, Search, TrendingUp, PenTool } from 'lucide-react'
 import { ThemeToggle } from './ThemeToggle'
 import { HelpModal } from './HelpModal'
 import { NotificationDropdown } from './NotificationDropdown'
@@ -17,6 +17,7 @@ const primaryNavItems = [
 ]
 
 const secondaryNavItems = [
+  { label: '虚拟作家', href: '/virtual-writers', icon: PenTool },
   { label: '扫榜选材', href: '/market', icon: TrendingUp },
   { label: 'AI 配置', href: '/settings', icon: Settings },
   { label: '成本管理', href: '/cost', icon: DollarSign },
@@ -29,6 +30,9 @@ export function TopNavigation({ children }: TopNavigationProps) {
   const isActive = (href: string) => {
     if (href === '/projects') {
       return pathname === '/projects' || pathname.startsWith('/projects/')
+    }
+    if (href === '/virtual-writers') {
+      return pathname === '/virtual-writers' || pathname.startsWith('/virtual-writers/')
     }
     return pathname === href
   }

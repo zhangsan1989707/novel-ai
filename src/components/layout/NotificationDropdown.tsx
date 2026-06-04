@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import { Bell, Check, CheckCheck, AlertCircle, Info, AlertTriangle, Clock } from 'lucide-react'
 import { formatDisplayDate } from '@/lib/helpers'
 
@@ -36,6 +37,7 @@ const priorityColors = {
 }
 
 export function NotificationDropdown() {
+  const router = useRouter()
   const [isOpen, setIsOpen] = useState(false)
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
@@ -182,6 +184,10 @@ export function NotificationDropdown() {
                       if (!notification.isRead) {
                         markAsRead(notification.id)
                       }
+                      if (notification.link) {
+                        setIsOpen(false)
+                        router.push(notification.link)
+                      }
                     }}
                   >
                     <div className="flex items-start gap-3">
@@ -216,7 +222,10 @@ export function NotificationDropdown() {
           {notifications.length > 0 && (
             <div className="px-4 py-2 border-t border-border">
               <button
-                onClick={() => setIsOpen(false)}
+                onClick={() => {
+                  setIsOpen(false)
+                  router.push('/notifications')
+                }}
                 className="w-full text-center text-sm text-muted-foreground hover:text-foreground transition-colors"
               >
                 查看全部通知

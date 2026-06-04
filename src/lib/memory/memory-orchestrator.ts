@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { calculateVolume, getAllVolumeSummaries } from './volume-summary'
 import { getBookSummary } from './book-summary'
-import { getCharacterProfilesForChapter } from './character-memory'
+import { getCharacterProfilesForChapter, selectRelevantCharacters } from './character-memory'
 import { getOpenPlotlines } from './plotline-tracker'
 import { getRecentChapterSummaries } from './chapter-summary'
 import { getStoryState } from '@/lib/engine/story-state'
@@ -521,12 +521,17 @@ export async function buildChapterMemoryPack(
       }
     : null
 
-  const trimmedCharacters = characterProfiles
-    .slice(0, characterLimit)
-    .map(character => ({
-      ...character,
-      currentState: character.currentState || {},
-    }))
+  const trimmedCharacters = selectRelevantCharacters(
+    characterProfiles,
+    characterLimit,
+    {
+      recentSummaries: recentChapterSummaries.map(s => s.summary),
+      currentChapterNo: chapterNo,
+    }
+  ).map(character => ({
+    ...character,
+    currentState: character.currentState || {},
+  }))
 
   const trimmedPlotlines = openPlotlines.slice(0, plotlineLimit)
 

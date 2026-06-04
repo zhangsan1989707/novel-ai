@@ -19,6 +19,8 @@ import { hookRegistry } from '../hooks/registry'
 import { directChapter } from '../agents/narrative-director'
 import { chapterDeslopper } from '../agents/deslopper'
 import { recordAndApplyChapterCommit } from './chapter-commit'
+import { getCharacterVoicesForProject } from '../memory/character-memory'
+import { notifyChapterGenerated, notifyPipelineFailed } from '@/lib/notifications/pipeline-events'
 import { estimateMaxTokensForTargetWordCount, resolveEffectiveChapterWordCount } from '@/lib/ai/speed-mode'
 import type { GenerationRole, GenerationSpeedMode } from '@/lib/ai/speed-mode'
 import type {
@@ -167,6 +169,7 @@ export async function runChapterGenerationPipeline(
   const arcEvents = await getPendingOrStartedArcEvents(projectId)
   const cheatPromptContext = buildCheatAbilityPromptContext(cheatState)
   const arcEventPromptContext = buildArcEventPromptContext(arcEvents)
+  const characterVoices = await getCharacterVoicesForProject(projectId)
 
   const worldState = await getWorldState(projectId)
   const villains = await getVillains(projectId)
@@ -365,6 +368,7 @@ export async function runChapterGenerationPipeline(
           styleProfilePromptCard,
           styleStrength: project.styleStrength,
           styleSafetyMode: (project.styleSafetyMode as 'SAFE_ABSTRACT' | 'STRICT_PUBLIC_DOMAIN' | 'USER_LICENSED') || 'SAFE_ABSTRACT',
+          characterVoices,
         },
         (token) => {
           draftContent += token
@@ -511,6 +515,7 @@ export async function runChapterGenerationPipeline(
             chapterGoal: outline.chapterGoal,
             provider: await getRoleProvider('validator'),
             popularFictionProfile,
+            characterVoices,
           })
         }),
         runPhase('deslopper', async () => {
@@ -939,6 +944,9 @@ export async function runChapterGenerationPipeline(
         emittedAt: new Date().toISOString(),
       }, 'pipeline')
 
+      // 章节生成完成通知（fire-and-forget）
+      notifyChapterGenerated(projectId, project.title, chapterNo, outline.chapterTitle).catch(() => {})
+
       await prisma.chapterCompletionReport.upsert({
         where: {
           projectId_chapterNo: {
@@ -1038,6 +1046,9 @@ export async function runChapterGenerationPipeline(
 
     const errorMessage = error instanceof Error ? error.message : '未知错误'
     emit({ type: 'error', data: { message: errorMessage } })
+
+    // 流水线失败通知（fire-and-forget）
+    notifyPipelineFailed(projectId, project.title, errorMessage).catch(() => {})
     emitProgress(emit, 'failed', chapterNo, totalChapters, completedChaptersCount, 0, chapterTargetWordCount, `生成失败：${errorMessage}`)
 
     return {

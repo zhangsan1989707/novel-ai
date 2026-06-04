@@ -84,6 +84,7 @@ export type ProjectWorkflowPhase =
   | 'BLUEPRINT_GENERATING'
   | 'BLUEPRINT_READY'
   | 'ROADMAP_READY'
+  | 'OUTLINE_REVIEW'
   | 'WRITING'
   | 'MAINTENANCE_FAILED'
 
@@ -114,6 +115,13 @@ export const workflowPhaseLabels: Record<ProjectWorkflowPhase, {
     statusBadge: '待确认故事路线',
     nextStep: '确认路线后开始生成章节',
     estimated: '取决于你的确认时间',
+  },
+  OUTLINE_REVIEW: {
+    title: '审核章节目录',
+    sidebarTitle: '大纲审核',
+    statusBadge: '待审核章节目录',
+    nextStep: '审核并确认章节目录后开始生成',
+    estimated: '取决于你的审核时间',
   },
   WRITING: {
     title: '正文生成',

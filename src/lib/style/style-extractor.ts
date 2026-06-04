@@ -182,7 +182,7 @@ export async function extractStyleProfile(
   }
 }
 
-function extractStrategicSamples(fullText: string, maxLength: number, chapterCount: number): string {
+export function extractStrategicSamples(fullText: string, maxLength: number, chapterCount: number): string {
   if (fullText.length <= maxLength) return fullText
 
   const parts: string[] = []
@@ -288,7 +288,7 @@ function estimateDialogueRatio(text: string): number {
   return Math.min(1, quoteMatches * 20 / totalChars)
 }
 
-function buildPromptCardFromProfile(
+export function buildPromptCardFromProfile(
   profile: StyleProfileData,
   sourceType: string
 ): string | null {
@@ -320,7 +320,7 @@ function buildPromptCardFromProfile(
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function formatStyleField(field: Record<string, any>): string {
+export function formatStyleField(field: Record<string, any>): string {
   return Object.entries(field)
     .filter(([, v]) => v !== undefined && v !== null && v !== '')
     .map(([k, v]) => {

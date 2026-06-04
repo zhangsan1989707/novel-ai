@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { Prisma } from '@prisma/client'
 import { createJob, failStaleRunningJobs, resumeJob, updateJobStep } from '@/lib/engine/generation-job'
 import { runProductionPipeline } from '@/lib/engine/production-pipeline'
 import { getProjectMaintenanceSummary } from '@/lib/engine/auto-maintenance'
@@ -50,6 +51,7 @@ export async function POST(
         workflowStage: true,
         blueprintConfirmedAt: true,
         arcPlanConfirmedAt: true,
+        outlineConfirmedAt: true,
         bookBlueprint: { select: { id: true } },
         arcPlans: { select: { id: true } },
         storyState: { select: { id: true } },
@@ -64,12 +66,18 @@ export async function POST(
       )
     }
 
+    const outlineCount = await prisma.novelChapter.count({
+      where: { projectId, chapterOutline: { not: Prisma.DbNull } },
+    })
+
     const flowBlockReason = getWorkflowBlockReason({
       workflowStage: project.workflowStage,
       blueprintConfirmedAt: project.blueprintConfirmedAt,
       arcPlanConfirmedAt: project.arcPlanConfirmedAt,
+      outlineConfirmedAt: project.outlineConfirmedAt,
       hasBlueprint: Boolean(project.bookBlueprint),
       hasArcPlans: project.arcPlans.length > 0,
+      hasOutlines: outlineCount > 0,
     })
     if (flowBlockReason) {
       return NextResponse.json(
