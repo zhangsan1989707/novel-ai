@@ -6,6 +6,7 @@ import type { AIProvider } from '@/lib/ai/types'
 import { buildValidatorPrompt as buildValidatorPromptV2, type ValidationReport as ValidationReportV2 } from '../prompts/chapter/validating-v2'
 import type { CharacterProfile, PlotlineData } from '../engine/types'
 import type { PopularFictionProfile } from '../engine/popular-fiction'
+import { parseAiJsonObject } from '@/lib/engine/ai-json'
 
 interface ValidatorInput {
   projectId: number
@@ -69,36 +70,32 @@ export async function validatorAgent(
   })
 
   // 解析 JSON
-  const jsonMatch = result.content.match(/\{[\s\S]*\}/)
-  if (jsonMatch) {
-    try {
-      const report = JSON.parse(jsonMatch[0]) as ValidatorValidationReport
-      return report
-    } catch {
-      return {
-        result: 'retry',
-        score: 40,
-        issues: [{
-          type: 'worldview',
-          severity: 'major',
-          description: '校验结果解析失败，需要重试',
-          location: '全文',
-          reference: '校验输出',
-        }],
-        characterUpdates: {},
-        newPlotlines: [],
-        resolvedPlotlines: [],
-        qualityMetrics: {
-          logicScore: 40,
-          characterScore: 40,
-          emotionScore: 40,
-          styleScore: 40,
-        },
-      }
+  try {
+    const report = parseAiJsonObject<ValidatorValidationReport>(result.content)
+    return report
+  } catch {
+    return {
+      result: 'retry',
+      score: 40,
+      issues: [{
+        type: 'worldview',
+        severity: 'major',
+        description: '校验结果解析失败，需要重试',
+        location: '全文',
+        reference: '校验输出',
+      }],
+      characterUpdates: {},
+      newPlotlines: [],
+      resolvedPlotlines: [],
+      qualityMetrics: {
+        logicScore: 40,
+        characterScore: 40,
+        emotionScore: 40,
+        styleScore: 40,
+      },
     }
   }
 
-  // 无法解析时返回可疑报告，需要人工审核
   return {
     result: 'retry',
     score: 50,

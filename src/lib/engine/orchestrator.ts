@@ -12,7 +12,7 @@ import { writerAgent } from '../agents/writer'
 import { polisherAgent } from '../agents/polisher'
 import { validatorAgent, type ValidatorValidationReport } from '../agents/validator'
 import { summarizerAgent } from '../agents/summarizer'
-import { reviewerAgent } from '../agents/reviewer'
+import { reviewerAgent, type MultiReviewResult } from '../agents/reviewer'
 import { buildChapterMemoryPack } from '../memory'
 import * as storyState from './story-state'
 import { hookRegistry } from '../hooks/registry'
@@ -409,6 +409,8 @@ export async function runChapterGenerationPipeline(
     })
 
     const draftWordCount = countChineseWords(draftContent)
+    // 启发式推断 finishReason：字数不足预期 80% 则认为被截断
+    const inferredFinishReason: 'stop' | 'length' = draftWordCount < chapterTargetWordCount * 0.8 ? 'length' : 'stop'
     emitProgress(emit, 'writing', chapterNo, totalChapters, completedChaptersCount, draftWordCount, chapterTargetWordCount, `正文生成完成：${draftWordCount} 字`)
 
     // ========== Phase 3 + 7: 润色 + 摘要 并行 ==========
@@ -474,6 +476,7 @@ export async function runChapterGenerationPipeline(
 
     // ========== Phase 4: 对抗审稿 Agent ==========
     let reviewedContent = polishedContent
+    let reviewResult: MultiReviewResult | null = null
 
     if (speedMode === 'FINAL_POLISH') {
       await runPhase('reviewer', async () => {
@@ -481,7 +484,7 @@ export async function runChapterGenerationPipeline(
         emit({ type: 'agent_switch', data: { agent: 'reviewer' } })
 
         try {
-          await reviewerAgent(
+          reviewResult = await reviewerAgent(
             {
               projectId,
               content: polishedContent,
@@ -492,6 +495,15 @@ export async function runChapterGenerationPipeline(
               provider: await getRoleProvider('reviewer'),
             }
           )
+
+          if (reviewResult.criticalIssues.length > 0) {
+            emit({
+              type: 'hook_warning',
+              data: {
+                warnings: reviewResult.criticalIssues.map(issue => `[审稿] ${issue}`),
+              },
+            })
+          }
         } catch (reviewError) {
           emit({
             type: 'hook_warning',
@@ -637,7 +649,7 @@ export async function runChapterGenerationPipeline(
       qualityGateResult = runQualityGate({
         content: contentToCheck,
         contract,
-        finishReason: undefined, // TODO: 从 writer 获取 finishReason
+        finishReason: inferredFinishReason,
         continuityAudit: continuityAuditResult,
       })
 
@@ -726,9 +738,24 @@ export async function runChapterGenerationPipeline(
           previousChapterEnding: memoryPack.previousChapterEnding || undefined,
         })
       } else if (qualityGateResult.needsRepair === 'rewrite' && continuityAuditResult?.rewriteInstruction) {
+        // 合并连续性问题和审稿意见
+        const rewriteParts = [continuityAuditResult.rewriteInstruction]
+        const currentReview = reviewResult as MultiReviewResult | null
+
+        if (currentReview && currentReview.criticalIssues.length > 0) {
+          rewriteParts.push('\n## 审稿发现的严重问题')
+          rewriteParts.push(currentReview.criticalIssues.map(issue => `- ${issue}`).join('\n'))
+        }
+
+        if (currentReview && currentReview.improvementPriority.length > 0) {
+          const topSuggestions = currentReview.improvementPriority.slice(0, 5)
+          rewriteParts.push('\n## 审稿改进建议（按优先级）')
+          rewriteParts.push(topSuggestions.map(s => `- ${s}`).join('\n'))
+        }
+
         repairResult = await rewriteChapter({
           content: contentToCheck,
-          rewriteInstruction: continuityAuditResult.rewriteInstruction,
+          rewriteInstruction: rewriteParts.join('\n'),
           chapterTitle: outline.chapterTitle,
           chapterNo,
           provider: writerProvider,

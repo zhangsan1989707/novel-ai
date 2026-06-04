@@ -5,6 +5,7 @@ import { AIService } from '@/lib/ai/service'
 import type { AIProvider } from '@/lib/ai/types'
 import { buildSummarizerPrompt } from './prompts'
 import type { ChapterSummaryData } from '../engine/types'
+import { parseAiJsonObject } from '@/lib/engine/ai-json'
 
 interface SummarizerInput {
   projectId: number
@@ -45,28 +46,17 @@ export async function summarizerAgent(
   })
 
   // 解析 JSON
-  const jsonMatch = result.content.match(/\{[\s\S]*\}/)
-  if (jsonMatch) {
-    try {
-      const summary = JSON.parse(jsonMatch[0]) as ChapterSummaryData
-      return summary
-    } catch {
-      // 解析失败，返回空摘要
-      return {
-        summary: '（摘要生成失败）',
-        keyEvents: [],
-        emotionalTone: null,
-        plantedPlotlines: [],
-        resolvedPlotlines: [],
-      }
+  try {
+    const summary = parseAiJsonObject<ChapterSummaryData>(result.content)
+    return summary
+  } catch {
+    // 解析失败，返回空摘要
+    return {
+      summary: '（摘要生成失败）',
+      keyEvents: [],
+      emotionalTone: null,
+      plantedPlotlines: [],
+      resolvedPlotlines: [],
     }
-  }
-
-  return {
-    summary: result.content.slice(0, 300),
-    keyEvents: [],
-    emotionalTone: null,
-    plantedPlotlines: [],
-    resolvedPlotlines: [],
   }
 }

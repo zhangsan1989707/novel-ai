@@ -7,6 +7,7 @@ import {
   buildStructureReviewPrompt,
   type ReviewResult,
 } from '../prompts/review'
+import { parseAiJsonObject } from '@/lib/engine/ai-json'
 
 interface ReviewInput {
   projectId: number
@@ -42,30 +43,33 @@ async function runSingleReview(
     maxTokens: 3000,
   })
 
-  const jsonMatch = result.content.match(/\{[\s\S]*\}/)
-  if (jsonMatch) {
-    try {
-      const parsed = JSON.parse(jsonMatch[0])
-      return {
-        reviewer: parsed.reviewer || defaultReviewer,
-        scores: Array.isArray(parsed.scores)
-          ? parsed.scores.map((s: { dimension?: string; score?: number; comment?: string }) => ({
-              dimension: s.dimension || '',
-              score: typeof s.score === 'number' ? Math.min(100, Math.max(0, s.score)) : 50,
-              comment: s.comment || '',
-            }))
-          : [],
-        overallScore: typeof parsed.overallScore === 'number' ? Math.min(100, Math.max(0, parsed.overallScore)) : 50,
-        strengths: Array.isArray(parsed.strengths) ? parsed.strengths : [],
-        weaknesses: Array.isArray(parsed.weaknesses) ? parsed.weaknesses : [],
-        suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions : [],
-      }
-    } catch {
-      return buildFallbackResult(defaultReviewer)
-    }
-  }
+  try {
+    const parsed = parseAiJsonObject<{
+      reviewer?: string
+      scores?: Array<{ dimension?: string; score?: number; comment?: string }>
+      overallScore?: number
+      strengths?: string[]
+      weaknesses?: string[]
+      suggestions?: string[]
+    }>(result.content)
 
-  return buildFallbackResult(defaultReviewer)
+    return {
+      reviewer: parsed.reviewer || defaultReviewer,
+      scores: Array.isArray(parsed.scores)
+        ? parsed.scores.map(s => ({
+            dimension: s.dimension || '',
+            score: typeof s.score === 'number' ? Math.min(100, Math.max(0, s.score)) : 50,
+            comment: s.comment || '',
+          }))
+        : [],
+      overallScore: typeof parsed.overallScore === 'number' ? Math.min(100, Math.max(0, parsed.overallScore)) : 50,
+      strengths: Array.isArray(parsed.strengths) ? parsed.strengths : [],
+      weaknesses: Array.isArray(parsed.weaknesses) ? parsed.weaknesses : [],
+      suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions : [],
+    }
+  } catch {
+    return buildFallbackResult(defaultReviewer)
+  }
 }
 
 function buildFallbackResult(reviewer: string): ReviewResult {
