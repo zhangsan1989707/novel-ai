@@ -44,6 +44,8 @@ export interface MemoryPackOptions {
   speedMode?: 'FAST_ACCEPTANCE' | 'FINAL_POLISH'
   /** 启用记忆衰减压缩（默认 true） */
   enableDecay?: boolean
+  /** 模型上下文窗口大小（token），用于动态调整预算 */
+  contextWindowTokens?: number
 }
 
 export interface MemoryPackSection {
@@ -109,6 +111,10 @@ export interface MemoryPack {
   summarizerContext: string
   /** 是否启用了记忆衰减 */
   enableDecay: boolean
+  /** 模型上下文窗口大小（token） */
+  contextWindowTokens?: number
+  /** RAG 系统状态 */
+  ragStatus?: 'available' | 'unavailable' | 'fallback'
 }
 
 function clampText(value: string, maxChars: number): string {
@@ -261,8 +267,19 @@ function buildRagSection(ragContext: NonNullable<MemoryPack['ragContext']>): str
   ].filter(Boolean).join('\n\n')
 }
 
+/**
+ * 根据模型上下文窗口计算预算缩放因子
+ * 基准：128K token 上下文窗口
+ */
+function getBudgetScaleFactor(contextWindowTokens?: number): number {
+  if (!contextWindowTokens) return 1
+  const BASELINE_TOKENS = 128000
+  return Math.max(0.3, Math.min(2, contextWindowTokens / BASELINE_TOKENS))
+}
+
 function pickMemorySections(pack: MemoryPack, role: MemoryPackRole): MemoryPackSection[] {
   const sections: MemoryPackSection[] = []
+  const scale = getBudgetScaleFactor(pack.contextWindowTokens)
 
   // 连续性锚点（仅 planner / writer 需要，用于跨章衔接）
   if ((role === 'planner' || role === 'writer') && pack.continuityAnchor) {
@@ -271,7 +288,7 @@ function pickMemorySections(pack: MemoryPack, role: MemoryPackRole): MemoryPackS
       '章节连续性锚点',
       formatContinuityAnchorSection(pack.continuityAnchor),
       0,  // 最高优先级
-      role === 'writer' ? 1200 : 900
+      Math.round((role === 'writer' ? 1200 : 900) * scale)
     ))
   }
 
@@ -280,7 +297,7 @@ function pickMemorySections(pack: MemoryPack, role: MemoryPackRole): MemoryPackS
     '创作合同',
     buildBookBlueprintSection(pack.bookBlueprint),
     1,
-    role === 'writer' ? 1600 : 1200
+    Math.round((role === 'writer' ? 1600 : 1200) * scale)
   ))
 
   if (pack.bookSummary) {
@@ -294,7 +311,7 @@ function pickMemorySections(pack: MemoryPack, role: MemoryPackRole): MemoryPackS
         `伏笔状态：总计${pack.bookSummary.totalPlotlines} / 已回收${pack.bookSummary.resolvedPlotlines} / 未回收${pack.bookSummary.openPlotlines}`,
       ].filter(Boolean).join('\n'),
       2,
-      role === 'writer' ? 1800 : 1200
+      Math.round((role === 'writer' ? 1800 : 1200) * scale)
     ))
   }
 
@@ -310,7 +327,7 @@ function pickMemorySections(pack: MemoryPack, role: MemoryPackRole): MemoryPackS
         volume.resolvedPlotlines.length > 0 ? `本卷回收：${formatList(volume.resolvedPlotlines)}` : '',
       ].filter(Boolean).join('\n'),
       3 + volume.volumeNumber / 100,
-      role === 'writer' ? 2000 : 1200
+      Math.round((role === 'writer' ? 2000 : 1200) * scale)
     ))
   }
 
@@ -319,9 +336,9 @@ function pickMemorySections(pack: MemoryPack, role: MemoryPackRole): MemoryPackS
     ? pack.recentChapterSummaries.length
     : role === 'summarizer' ? 3 : role === 'validator' ? 5 : 5  // writer/planner 从 3 提升到 5
   const summaryLabel = pack.enableDecay ? '章节记忆（含衰减）' : `最近${recentSummaryLimit}章摘要`
-  const summaryBudget = pack.enableDecay
-    ? (role === 'writer' ? 4800 : 3200)  // 提升 writer 预算
-    : (role === 'writer' ? 3200 : 2400)  // 提升 writer 预算
+  const summaryBudget = Math.round((pack.enableDecay
+    ? (role === 'writer' ? 4800 : 3200)
+    : (role === 'writer' ? 3200 : 2400)) * scale)
   sections.push(buildSection(
     'recent-chapters',
     summaryLabel,
@@ -335,7 +352,7 @@ function pickMemorySections(pack: MemoryPack, role: MemoryPackRole): MemoryPackS
     '进行中的伏笔与剧情线',
     buildPlotlineSection(pack.openPlotlines),
     5,
-    role === 'validator' ? 1400 : 1200
+    Math.round((role === 'validator' ? 1400 : 1200) * scale)
   ))
 
   sections.push(buildSection(
@@ -345,7 +362,7 @@ function pickMemorySections(pack: MemoryPack, role: MemoryPackRole): MemoryPackS
       ? pack.characterProfiles.slice(0, role === 'writer' ? 10 : 8).map(formatCharacterProfile).join('\n\n')
       : '暂无角色状态',
     6,
-    role === 'writer' ? 2600 : 1800
+    Math.round((role === 'writer' ? 2600 : 1800) * scale)
   ))
 
   if (pack.ragContext?.context?.trim()) {
@@ -354,7 +371,7 @@ function pickMemorySections(pack: MemoryPack, role: MemoryPackRole): MemoryPackS
       '语义检索背景',
       buildRagSection(pack.ragContext),
       6.5,
-      role === 'writer' ? 2400 : 1600
+      Math.round((role === 'writer' ? 2400 : 1600) * scale)
     ))
   }
 
@@ -364,7 +381,7 @@ function pickMemorySections(pack: MemoryPack, role: MemoryPackRole): MemoryPackS
       '故事状态机',
       formatStoryStateSection(pack.storyState),
       7,
-      role === 'writer' ? 1400 : 1000
+      Math.round((role === 'writer' ? 1400 : 1000) * scale)
     ))
   }
 
@@ -374,7 +391,7 @@ function pickMemorySections(pack: MemoryPack, role: MemoryPackRole): MemoryPackS
       '研究资料',
       buildResearchSection(pack.researchRefs),
       8,
-      role === 'writer' ? 1800 : 1200
+      Math.round((role === 'writer' ? 1800 : 1200) * scale)
     ))
   }
 
