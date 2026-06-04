@@ -76,4 +76,51 @@ describe('chapter continuity', () => {
     expect(snapshot.nextChapterMustContinueFrom).toContain('警报')
     expect(snapshot.continuityLocks.protagonistName).toBe('林曜')
   })
+
+  it('builds an opening obligation for decision hooks', () => {
+    const decisionAnchor = buildContinuityAnchor({
+      chapterNo: 2,
+      previousChapterEnding: '【2. 暂时隐匿。机遇：规避即时风险，利用本地资源缓慢恢复。】\n\n【请宿主决策。】\n\n石室里，只剩下林默粗重的呼吸声，以及手机屏幕上那红蓝交织的微光。',
+      characterProfiles: [{ name: '林默', role: 'PROTAGONIST' }],
+    })
+
+    expect(decisionAnchor?.openingObligation?.type).toBe('decision')
+
+    const section = formatContinuityAnchorSection(decisionAnchor!)
+    expect(section).toContain('开篇承诺')
+    expect(section).toContain('先处理上一章留下的选择')
+  })
+
+  it('fails decision hooks skipped by a fresh location opening', () => {
+    const decisionAnchor = buildContinuityAnchor({
+      chapterNo: 2,
+      previousChapterEnding: '【2. 暂时隐匿。机遇：规避即时风险，利用本地资源缓慢恢复。】\n\n【请宿主决策。】\n\n石室里，只剩下林默粗重的呼吸声，以及手机屏幕上那红蓝交织的微光。',
+      characterProfiles: [{ name: '林默', role: 'PROTAGONIST' }],
+    })
+
+    const result = auditChapterContinuity({
+      chapterNo: 2,
+      anchor: decisionAnchor,
+      content: '第2章\n\n柴房里的味道，说是修仙界十大酷刑之一都不冤。霉味、腐木味，还有股前任住户可能留下的体味，直冲林默天灵盖。',
+    })
+
+    expect(result.passed).toBe(false)
+    expect(result.issues.some(issue => issue.type === 'serial_flow_break' && issue.severity === 'critical')).toBe(true)
+  })
+
+  it('passes when a decision hook is handled before transitioning', () => {
+    const decisionAnchor = buildContinuityAnchor({
+      chapterNo: 2,
+      previousChapterEnding: '【2. 暂时隐匿。机遇：规避即时风险，利用本地资源缓慢恢复。】\n\n【请宿主决策。】\n\n石室里，只剩下林默粗重的呼吸声，以及手机屏幕上那红蓝交织的微光。',
+      characterProfiles: [{ name: '林默', role: 'PROTAGONIST' }],
+    })
+
+    const result = auditChapterContinuity({
+      chapterNo: 2,
+      anchor: decisionAnchor,
+      content: '第2章\n\n林默盯着手机屏幕上那行【请宿主决策。】，喉结滚了滚，终于用发抖的手指点向【2. 暂时隐匿】。系统文字微微一闪，提示他将在低灵气区域缓慢恢复，代价是错过灵石矿脉的最佳时机。石室外传来脚步声，他只能把裂屏手机塞进怀里，拖着伤腿从暗道挪出去。半个时辰后，他被杂役领进后院柴房，霉味和腐木味一起撞上来。',
+    })
+
+    expect(result.issues.some(issue => issue.type === 'serial_flow_break')).toBe(false)
+  })
 })

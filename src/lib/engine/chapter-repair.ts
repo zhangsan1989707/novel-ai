@@ -1,5 +1,5 @@
 /**
- * 章节修复模块 - 处理字数不足/过多的情况
+ * 章节修复模块 - 处理字数不足/过多/连续性问题的情况
  */
 import type { AIProvider } from '@/lib/ai/types'
 import { countChineseWords } from '@/lib/utils'
@@ -8,7 +8,7 @@ export interface RepairResult {
   success: boolean
   content: string
   wordCount: number
-  action: 'expand' | 'compress' | 'none'
+  action: 'expand' | 'compress' | 'rewrite' | 'none'
   error?: string
 }
 
@@ -236,6 +236,94 @@ export async function continueChapter(params: {
       wordCount: currentWordCount,
       action: 'expand',
       error: error instanceof Error ? error.message : '续写失败',
+    }
+  }
+}
+
+/**
+ * 修复连续性问题 - 重写开头部分，保持后文不变
+ */
+export async function rewriteChapter(params: {
+  content: string
+  rewriteInstruction: string
+  chapterTitle: string
+  chapterNo: number
+  provider: AIProvider
+  /** 上一章结尾原文（用于保持衔接） */
+  previousChapterEnding?: string
+  /** 章节大纲（用于保持情节一致） */
+  chapterOutline?: string
+  /** 角色档案（用于保持人物一致） */
+  characterProfiles?: string
+}): Promise<RepairResult> {
+  const { content, rewriteInstruction, chapterTitle, chapterNo, provider } = params
+  const currentWordCount = countChineseWords(content)
+
+  const parts: string[] = []
+
+  parts.push('你是小说连贯性修复专家。以下章节存在连续性问题，请根据修复指令重写开头部分，保持后文不变。')
+  parts.push('')
+
+  if (params.previousChapterEnding) {
+    parts.push('## 上一章结尾（本章开篇应承接此内容）')
+    parts.push(params.previousChapterEnding)
+    parts.push('')
+  }
+
+  parts.push('## 修复指令')
+  parts.push(rewriteInstruction)
+  parts.push('')
+
+  if (params.chapterOutline) {
+    parts.push('## 本章大纲')
+    parts.push(params.chapterOutline)
+    parts.push('')
+  }
+
+  if (params.characterProfiles) {
+    parts.push('## 本章出场角色')
+    parts.push(params.characterProfiles)
+    parts.push('')
+  }
+
+  parts.push(`## 章节标题：${chapterTitle}（第${chapterNo}章）`)
+  parts.push('')
+  parts.push('## 修复要求')
+  parts.push('1. 只重写开头部分（前 300-800 字），确保与上一章结尾自然衔接')
+  parts.push('2. 处理所有修复指令中提到的连续性问题')
+  parts.push('3. 保持后续内容不变，不要删除或修改已有情节')
+  parts.push('4. 保持人物姓名、地点、资源的一致性')
+  parts.push('5. 确保重写部分与后文自然过渡')
+  parts.push('')
+  parts.push('## 原文')
+  parts.push(content)
+  parts.push('')
+  parts.push('请输出修复后的完整章节内容，不要添加任何说明。')
+
+  const prompt = parts.join('\n')
+
+  try {
+    const result = await provider.generate(prompt, {
+      temperature: 0.5,
+      maxTokens: Math.ceil(currentWordCount * 2),
+    })
+
+    const newContent = result.content.trim()
+    const newWordCount = countChineseWords(newContent)
+
+    return {
+      success: true,
+      content: newContent,
+      wordCount: newWordCount,
+      action: 'rewrite',
+    }
+  } catch (error) {
+    return {
+      success: false,
+      content,
+      wordCount: currentWordCount,
+      action: 'rewrite',
+      error: error instanceof Error ? error.message : '连续性修复失败',
     }
   }
 }

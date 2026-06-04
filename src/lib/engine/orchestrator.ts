@@ -33,7 +33,7 @@ import type { StyleProfilePromptCard } from '@/types/style'
 import { buildSeedOutlineFromChapterState } from './chapter-metadata'
 import { createChapterContract } from './chapter-contract'
 import { runQualityGate, type QualityGateResult } from './quality-gate'
-import { expandChapter, compressChapter, continueChapter } from './chapter-repair'
+import { expandChapter, compressChapter, continueChapter, rewriteChapter } from './chapter-repair'
 import { buildChapterCompletionReport } from './chapter-completion'
 import { getPendingOrStartedArcEvents, buildArcEventPromptContext, advanceArcEvent } from './arc-event-ledger'
 import { getCheatAbilityState, appendCheatUsage, buildCheatAbilityPromptContext } from './cheat-ability-state'
@@ -41,7 +41,7 @@ import { runRuleFantasyValidator } from './rule-fantasy-validator'
 import { validateChapterContent } from './content-validator'
 import { getWorldState, getVillains, getWorldExpansionContext, getVillainContext } from './long-novel-integration'
 import { updateWorldStateAfterChapter } from './world-state-updater'
-import { auditChapterContinuity, buildChapterContinuitySnapshot, type ContinuityAuditResult } from './chapter-continuity'
+import { auditChapterContinuityWithLLM, buildChapterContinuitySnapshot, type ContinuityAuditResult } from './chapter-continuity'
 
 const MAX_RETRY_COUNT = 3
 const MAX_REPAIR_ATTEMPTS = 2
@@ -627,10 +627,12 @@ export async function runChapterGenerationPipeline(
     const writerProvider = await getRoleProvider('writer')
 
     while (repairAttempts <= MAX_REPAIR_ATTEMPTS) {
-      continuityAuditResult = auditChapterContinuity({
+      continuityAuditResult = await auditChapterContinuityWithLLM({
         chapterNo,
         content: contentToCheck,
         anchor: memoryPack.continuityAnchor,
+        provider: writerProvider,
+        ragContext: memoryPack.ragContext?.context,
       })
       qualityGateResult = runQualityGate({
         content: contentToCheck,
@@ -678,8 +680,12 @@ export async function runChapterGenerationPipeline(
       }
 
       // 需要修复
-      emitProgress(emit, 'repairing', chapterNo, totalChapters, completedChaptersCount, countChineseWords(contentToCheck), chapterTargetWordCount, `正在修复：${qualityGateResult.needsRepair === 'expand' ? '扩写' : qualityGateResult.needsRepair === 'compress' ? '压缩' : '续写'}`)
-      
+      const repairTypeLabel = qualityGateResult.needsRepair === 'expand' ? '扩写'
+        : qualityGateResult.needsRepair === 'compress' ? '压缩'
+        : qualityGateResult.needsRepair === 'continue' ? '续写'
+        : '连续性修复'
+      emitProgress(emit, 'repairing', chapterNo, totalChapters, completedChaptersCount, countChineseWords(contentToCheck), chapterTargetWordCount, `正在修复：${repairTypeLabel}`)
+
       let repairResult
       if (qualityGateResult.needsRepair === 'expand') {
         repairResult = await expandChapter({
@@ -718,6 +724,21 @@ export async function runChapterGenerationPipeline(
             .map(s => `第${s.chapterNo}章：${s.summary}`)
             .join('\n'),
           previousChapterEnding: memoryPack.previousChapterEnding || undefined,
+        })
+      } else if (qualityGateResult.needsRepair === 'rewrite' && continuityAuditResult?.rewriteInstruction) {
+        repairResult = await rewriteChapter({
+          content: contentToCheck,
+          rewriteInstruction: continuityAuditResult.rewriteInstruction,
+          chapterTitle: outline.chapterTitle,
+          chapterNo,
+          provider: writerProvider,
+          previousChapterEnding: memoryPack.previousChapterEnding || undefined,
+          chapterOutline: outline
+            ? `章节目标：${outline.chapterGoal}\n主要冲突：${outline.mainConflict}\n结尾设计：${outline.ending || '无特定设计'}`
+            : undefined,
+          characterProfiles: memoryPack.characterProfiles
+            .map(c => `【${c.name}】${c.role}: ${c.appearance || ''} ${c.personality || ''}`)
+            .join('\n'),
         })
       }
 

@@ -20,7 +20,7 @@ export interface QualityGateResult {
     continuity: { passed: boolean; result?: ContinuityAuditResult; message?: string }
   }
   canSave: boolean
-  needsRepair: 'expand' | 'compress' | 'continue' | null
+  needsRepair: 'expand' | 'compress' | 'continue' | 'rewrite' | null
   errors: string[]
 }
 
@@ -90,7 +90,7 @@ export function runQualityGate(params: {
   const canSave = wordCountPassed && !truncationResult.isTruncated && chapterNoPassed && titlePassed && chapterLeakPassed && continuityPassed
   
   // 判断需要什么修复
-  let needsRepair: 'expand' | 'compress' | 'continue' | null = null
+  let needsRepair: 'expand' | 'compress' | 'continue' | 'rewrite' | null = null
   if (!canSave) {
     if (truncationResult.isTruncated) {
       needsRepair = 'continue'
@@ -98,6 +98,8 @@ export function runQualityGate(params: {
       needsRepair = 'expand'
     } else if (wordCount > contract.maxWordCount) {
       needsRepair = 'compress'
+    } else if (!continuityPassed) {
+      needsRepair = 'rewrite'
     }
   }
 

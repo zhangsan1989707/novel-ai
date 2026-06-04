@@ -9,6 +9,7 @@ import { buildRAGContext } from '@/lib/engine/rag-vector'
 import { decaySummary } from '@/lib/engine/context-compression'
 import {
   buildContinuityAnchor,
+  buildDynamicVocabulary,
   formatContinuityAnchorSection,
   type ContinuityAnchor,
 } from '@/lib/engine/chapter-continuity'
@@ -511,11 +512,35 @@ export async function buildChapterMemoryPack(
     }))
 
   const trimmedPlotlines = openPlotlines.slice(0, plotlineLimit)
+
+  // 构建动态词表和情绪数据
+  const dynamicVocabulary = buildDynamicVocabulary({
+    worldSetting: project.worldSetting,
+    previousChapterEnding,
+    recentChapterSummaries: decayedSummaries,
+  })
+
+  const emotionalArc = storyState?.emotionalArc || []
+  const lastEmotionalPoint = emotionalArc.length > 0 ? emotionalArc[emotionalArc.length - 1] : null
+  const previousEmotionalTone = lastEmotionalPoint
+    ? (lastEmotionalPoint.value >= 70 ? '紧张' : lastEmotionalPoint.value >= 40 ? '平稳' : '舒缓')
+    : undefined
+  const emotionalArcTrend = emotionalArc.length >= 2
+    ? (emotionalArc[emotionalArc.length - 1].value > emotionalArc[emotionalArc.length - 2].value + 10
+      ? 'rising'
+      : emotionalArc[emotionalArc.length - 1].value < emotionalArc[emotionalArc.length - 2].value - 10
+        ? 'falling'
+        : 'stable')
+    : undefined
+
   const continuityAnchor = buildContinuityAnchor({
     chapterNo,
     previousChapterEnding,
     characterProfiles: trimmedCharacters,
     protagonistProfile: project.protagonistProfile,
+    dynamicVocabulary,
+    previousEmotionalTone,
+    emotionalArcTrend,
   })
   const ragQuery = buildRagQuery({
     projectTitle: project.title,
