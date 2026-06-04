@@ -82,6 +82,95 @@ export function buildMaleReaderReviewPrompt(input: ReviewPromptInput): string {
   return parts.join('\n')
 }
 
+/**
+ * 合并的多视角审稿 prompt
+ * 将4个独立审稿视角合并为单次调用，降低 LLM 调用成本
+ */
+export function buildCombinedReviewPrompt(input: ReviewPromptInput): string {
+  const parts: string[] = []
+
+  parts.push('你是资深网文审稿团队，同时具备以下四个审稿视角的专业能力：')
+  parts.push('1. 【男频审稿人】：起点/番茄资深编辑，关注爽点密度、升级节奏、金手指、代入感、追读率')
+  parts.push('2. 【女频审稿人】：晋江/长佩资深编辑，关注情感张力、人物魅力、剧情节奏、虐点把控、CP感')
+  parts.push('3. 【毒点检测器】：读者流失风险分析专家，检测逻辑硬伤、三观问题、圣母/降智/绿帽/送女等弃书毒点')
+  parts.push('4. 【结构分析师】：网文结构专家，分析章节结构、节奏曲线、钩子设置、信息密度、收尾质量')
+
+  const context = buildCommonContext(input)
+  if (context) {
+    parts.push(`\n${context}`)
+  }
+
+  parts.push('\n【待审稿内容】')
+  parts.push(input.content)
+
+  parts.push('\n【任务】')
+  parts.push('请从以上四个视角分别审稿，每个视角独立评分和分析。')
+  parts.push('评分要严格客观，不要一味给高分，真实反映作品水平。')
+
+  parts.push(`
+请以严格 JSON 格式输出：
+{
+  "reviews": [
+    {
+      "reviewer": "男频审稿人",
+      "scores": [
+        { "dimension": "爽点密度", "score": 1-100, "comment": "评语" },
+        { "dimension": "升级节奏", "score": 1-100, "comment": "评语" },
+        { "dimension": "金手指合理性", "score": 1-100, "comment": "评语" },
+        { "dimension": "代入感", "score": 1-100, "comment": "评语" },
+        { "dimension": "追读率预估", "score": 1-100, "comment": "评语" }
+      ],
+      "overallScore": 1-100,
+      "strengths": ["优点1", "优点2"],
+      "weaknesses": ["缺点1", "缺点2"],
+      "suggestions": ["建议1", "建议2"]
+    },
+    {
+      "reviewer": "女频审稿人",
+      "scores": [
+        { "dimension": "情感张力", "score": 1-100, "comment": "评语" },
+        { "dimension": "人物魅力", "score": 1-100, "comment": "评语" },
+        { "dimension": "剧情节奏", "score": 1-100, "comment": "评语" },
+        { "dimension": "虐点把控", "score": 1-100, "comment": "评语" },
+        { "dimension": "CP感", "score": 1-100, "comment": "评语" }
+      ],
+      "overallScore": 1-100,
+      "strengths": ["优点1"],
+      "weaknesses": ["缺点1"],
+      "suggestions": ["建议1"]
+    },
+    {
+      "reviewer": "毒点检测器",
+      "scores": [
+        { "dimension": "逻辑硬伤", "score": 1-100, "comment": "评语" },
+        { "dimension": "三观风险", "score": 1-100, "comment": "评语" },
+        { "dimension": "弃书毒点", "score": 1-100, "comment": "评语" }
+      ],
+      "overallScore": 1-100,
+      "strengths": ["优点1"],
+      "weaknesses": ["缺点1"],
+      "suggestions": ["建议1"]
+    },
+    {
+      "reviewer": "结构分析师",
+      "scores": [
+        { "dimension": "章节结构", "score": 1-100, "comment": "评语" },
+        { "dimension": "节奏曲线", "score": 1-100, "comment": "评语" },
+        { "dimension": "钩子设置", "score": 1-100, "comment": "评语" },
+        { "dimension": "信息密度", "score": 1-100, "comment": "评语" },
+        { "dimension": "收尾质量", "score": 1-100, "comment": "评语" }
+      ],
+      "overallScore": 1-100,
+      "strengths": ["优点1"],
+      "weaknesses": ["缺点1"],
+      "suggestions": ["建议1"]
+    }
+  ]
+}`)
+
+  return parts.join('\n')
+}
+
 export function buildFemaleReaderReviewPrompt(input: ReviewPromptInput): string {
   const parts: string[] = []
 

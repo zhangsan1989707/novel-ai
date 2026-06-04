@@ -5,6 +5,7 @@ import {
   buildFemaleReaderReviewPrompt,
   buildToxicityReviewPrompt,
   buildStructureReviewPrompt,
+  buildCombinedReviewPrompt,
   type ReviewResult,
 } from '../prompts/review'
 import { parseAiJsonObject } from '@/lib/engine/ai-json'
@@ -184,31 +185,48 @@ export async function reviewerAgent(input: ReviewInput): Promise<MultiReviewResu
     worldSetting,
   }
 
+  // 优先使用合并 prompt（1次调用 vs 4次调用）
+  const aiProvider = provider || await AIService.createProvider({
+    projectId,
+    usageType: 'REVIEWER',
+  })
+
+  try {
+    const combinedPrompt = buildCombinedReviewPrompt(promptInput)
+    const result = await aiProvider.generate(combinedPrompt, {
+      temperature: 0.3,
+      maxTokens: 4000,
+    })
+
+    const parsed = parseAiJsonObject<{ reviews?: ReviewResult[] }>(result.content)
+    if (parsed && Array.isArray(parsed.reviews) && parsed.reviews.length >= 4) {
+      const reviews = parsed.reviews.map(r => ({
+        reviewer: r.reviewer || '未知',
+        scores: Array.isArray(r.scores) ? r.scores : [],
+        overallScore: typeof r.overallScore === 'number' ? r.overallScore : 50,
+        strengths: Array.isArray(r.strengths) ? r.strengths : [],
+        weaknesses: Array.isArray(r.weaknesses) ? r.weaknesses : [],
+        suggestions: Array.isArray(r.suggestions) ? r.suggestions : [],
+      }))
+
+      return {
+        reviews,
+        overallScore: computeOverallScore(reviews),
+        consensus: generateConsensus(reviews),
+        criticalIssues: extractCriticalIssues(reviews),
+        improvementPriority: computeImprovementPriority(reviews),
+      }
+    }
+  } catch {
+    // 合并 prompt 失败，降级到独立调用
+  }
+
+  // 降级：4个独立调用
   const [maleReview, femaleReview, toxicityReview, structureReview] = await Promise.all([
-    runSingleReview(
-      projectId,
-      buildMaleReaderReviewPrompt(promptInput),
-      '男频审稿人',
-      provider
-    ),
-    runSingleReview(
-      projectId,
-      buildFemaleReaderReviewPrompt(promptInput),
-      '女频审稿人',
-      provider
-    ),
-    runSingleReview(
-      projectId,
-      buildToxicityReviewPrompt(promptInput),
-      '毒点检测器',
-      provider
-    ),
-    runSingleReview(
-      projectId,
-      buildStructureReviewPrompt(promptInput),
-      '结构分析师',
-      provider
-    ),
+    runSingleReview(projectId, buildMaleReaderReviewPrompt(promptInput), '男频审稿人', provider),
+    runSingleReview(projectId, buildFemaleReaderReviewPrompt(promptInput), '女频审稿人', provider),
+    runSingleReview(projectId, buildToxicityReviewPrompt(promptInput), '毒点检测器', provider),
+    runSingleReview(projectId, buildStructureReviewPrompt(promptInput), '结构分析师', provider),
   ])
 
   const reviews = [maleReview, femaleReview, toxicityReview, structureReview]

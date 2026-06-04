@@ -42,6 +42,7 @@ import { validateChapterContent } from './content-validator'
 import { getWorldState, getVillains, getWorldExpansionContext, getVillainContext } from './long-novel-integration'
 import { updateWorldStateAfterChapter } from './world-state-updater'
 import { auditChapterContinuityWithLLM, buildChapterContinuitySnapshot, type ContinuityAuditResult } from './chapter-continuity'
+import { emitProgress, type SSEEmitter } from './orchestrator-helpers'
 
 const MAX_RETRY_COUNT = 3
 const MAX_REPAIR_ATTEMPTS = 2
@@ -52,35 +53,6 @@ interface GenerationResult {
   content?: string
   outline?: ChapterOutline
   error?: string
-}
-
-type SSEEmitter = (event: SSEEvent) => void
-
-// 进度上报辅助函数
-function emitProgress(
-  emit: SSEEmitter,
-  phase: GenerationPhase,
-  chapterNo: number,
-  totalChapters: number,
-  completedChapters: number,
-  currentWordCount: number,
-  targetWordCount: number,
-  message: string
-) {
-  emit({
-    type: 'progress',
-    data: {
-      phase,
-      chapterNo,
-      totalChapters,
-      completedChapters,
-      currentWordCount,
-      targetWordCount,
-      message,
-      lastHeartbeatAt: new Date().toISOString(),
-      timestamp: new Date().toISOString(),
-    },
-  })
 }
 
 /**
