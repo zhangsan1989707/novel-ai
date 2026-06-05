@@ -104,7 +104,8 @@ export function PipelineControlPanel({
 
   const isRunning = pipeline?.status === 'RUNNING' || pipeline?.status === 'PENDING'
   const isPaused = pipeline?.status === 'PAUSED'
-  const isFailed = pipeline?.status === 'FAILED'
+  const isCancelled = pipeline?.status === 'FAILED' && pipeline?.error?.includes('用户手动停止')
+  const isFailed = pipeline?.status === 'FAILED' && !isCancelled
   const isIdle = !pipeline?.status || pipeline.status === 'IDLE'
   const isCompleted = pipeline?.status === 'COMPLETED'
 
@@ -130,17 +131,19 @@ export function PipelineControlPanel({
   const nextStepLabel = getNextStepLabel(currentPhase || pipeline?.currentStep || '')
   const staleStatus = pipeline ? getStaleStatus(pipeline.lastHeartbeatAt) : 'normal'
 
-  const canStart = runtimeSummary?.canStart ?? (!isRunning && !isPaused && hasBoundModel && !maintenanceActive && !flowBlockedReason)
+  const canStart = runtimeSummary?.canStart ?? (!isRunning && !isPaused && !isCancelled && hasBoundModel && !maintenanceActive && !flowBlockedReason)
   const canPause = runtimeSummary?.canPause ?? isRunning
-  const canResume = runtimeSummary?.canResume ?? (isPaused || isFailed)
-  const canRepair = runtimeSummary?.canRepair ?? isFailed
+  const canResume = runtimeSummary?.canResume ?? (isPaused || isFailed || isCancelled)
+  const canRepair = runtimeSummary?.canRepair ?? (isFailed || isCancelled)
   const borderColor = isRunning ? 'border-blue-200 dark:border-blue-800'
     : isPaused ? 'border-yellow-200 dark:border-yellow-800'
+    : isCancelled ? 'border-gray-200 dark:border-gray-600'
     : isFailed ? 'border-red-200 dark:border-red-800'
     : 'border-gray-200 dark:border-gray-700'
 
   const bgColor = isRunning ? 'bg-blue-50/50 dark:bg-blue-950/20'
     : isPaused ? 'bg-yellow-50/50 dark:bg-yellow-950/20'
+    : isCancelled ? 'bg-gray-50 dark:bg-gray-800/50'
     : isFailed ? 'bg-red-50/50 dark:bg-red-950/20'
     : 'bg-white dark:bg-gray-900'
 
@@ -204,6 +207,7 @@ export function PipelineControlPanel({
                   </span>
                 )}
                 {isPaused && <Pause className="h-4 w-4 text-yellow-500" />}
+                {isCancelled && <span className="text-gray-500 font-bold text-xs">⏹ 已停止</span>}
                 {isFailed && <span className="text-red-500 font-bold text-xs">✕ 失败</span>}
                 {isCompleted && <span className="text-green-500 font-bold text-xs">✓ 完成</span>}
                 <span className="font-medium text-gray-800 dark:text-gray-200">
@@ -313,6 +317,18 @@ export function PipelineControlPanel({
                 <Button variant="danger" size="sm" onClick={handleCancelPipeline} className="h-8 gap-1">
                   <Square className="h-3.5 w-3.5" />
                   停止
+                </Button>
+              </>
+            )}
+            {isCancelled && (
+              <>
+                <Button variant="primary" size="sm" onClick={handleStartPipeline} className="h-8 gap-1">
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  重新开始
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => handleRecoverPipeline('continue')} disabled={!canRepair} className="h-8 gap-1">
+                  <Loader2 className="h-3.5 w-3.5" />
+                  从断点继续
                 </Button>
               </>
             )}

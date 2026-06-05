@@ -791,6 +791,21 @@ export async function runProductionPipeline(
         .catch(() => undefined)
     }
 
+    const queuePersistHeartbeat = (message: string, phase?: string) => {
+      const now = new Date().toISOString()
+      runtime = {
+        ...runtime,
+        lastEventAt: now,
+        lastPhase: phase || runtime.lastPhase,
+        lastMessage: message,
+        streamRevision: runtime.streamRevision + 1,
+      }
+      lastPersistAt = Date.now()
+      persistChain = persistChain
+        .then(() => updateJobRuntime(jobId, runtime))
+        .catch(() => undefined)
+    }
+
     const setCurrentChapter = (chapterNumber: number, title?: string) => {
       const now = new Date().toISOString()
       runtime = {
@@ -936,28 +951,38 @@ export async function runProductionPipeline(
 
     if (resumePlan.startFrom === 'blueprint') {
       await updateJobStep(jobId, 'blueprint' as PipelineStep, 1)
+      queuePersistHeartbeat('正在生成 Book Blueprint...', 'blueprint')
       const blueprint = await ensureBlueprint(projectId, provider)
       await saveCheckpoint(jobId, 'blueprint' as PipelineStep, { projectId }, { blueprintId: blueprint.id })
+      queuePersistHeartbeat('Book Blueprint 已完成', 'blueprint')
     }
 
     if (resumePlan.startFrom === 'blueprint' || resumePlan.startFrom === 'arc_plan') {
       await updateJobStep(jobId, 'arc_plan' as PipelineStep, 2)
+      queuePersistHeartbeat('正在规划 Arc Plan...', 'arc_plan')
       const arcPlanProvider = await createProjectProvider(projectId, { speedMode, generationRole: 'arc_plan' })
       const arcPlans = await ensureArcPlans(projectId, arcPlanProvider)
       await saveCheckpoint(jobId, 'arc_plan' as PipelineStep, { projectId }, { arcCount: arcPlans.length })
+      queuePersistHeartbeat(`Arc Plan 已完成 (${arcPlans.length} 个阶段)`, 'arc_plan')
     }
 
     await updateJobStep(jobId, 'chapter_list' as PipelineStep, 3)
 
     // 检查是否已有大纲（大纲审核后恢复）
     const existingOutlines = await loadExistingOutlines(projectId)
-    const outlines = ((existingOutlines.length > 0 && resumePlan.startFrom !== 'blueprint' && resumePlan.startFrom !== 'arc_plan')
+    const isResumingOutlines = existingOutlines.length > 0 && resumePlan.startFrom !== 'blueprint' && resumePlan.startFrom !== 'arc_plan'
+    if (!isResumingOutlines) {
+      queuePersistHeartbeat('正在生成章节目录...', 'chapter_list')
+    }
+    const outlines = (isResumingOutlines
       ? existingOutlines
       : await (async () => {
           const chapterListProvider = await createProjectProvider(projectId, { speedMode, generationRole: 'planner' })
-          return planChapterBatch(projectId, chapterListProvider, {
+          const result = await planChapterBatch(projectId, chapterListProvider, {
             resumeFromChapterNumber: resumePlan.resumeFromChapterNumber,
           })
+          queuePersistHeartbeat(`章节目录生成完成 (${result.length} 章)`, 'chapter_list')
+          return result
         })()) as ChapterOutline[]
     await prisma.generationJob.update({
       where: { id: jobId },

@@ -54,6 +54,7 @@ vi.mock('@/lib/engine/long-novel-integration', () => ({
   getVillainContext: vi.fn(() => ''),
 }))
 vi.mock('@/lib/engine/world-state-updater', () => ({ updateWorldStateAfterChapter: vi.fn(async () => undefined) }))
+vi.mock('@/lib/memory/character-memory', () => ({ getCharacterVoicesForProject: vi.fn(async () => []) }))
 vi.mock('@/lib/engine/quality-gate', () => ({ runQualityGate: vi.fn(() => ({ canSave: true, errors: [] })) }))
 vi.mock('@/lib/engine/content-validator', () => ({
   validateChapterContent: vi.fn(() => ({ passed: true, shouldReroll: false, warnings: [], violations: [] })),

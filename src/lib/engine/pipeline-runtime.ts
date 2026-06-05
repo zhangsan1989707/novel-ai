@@ -40,6 +40,7 @@ export interface PipelineRuntimeState {
   speedMode?: GenerationSpeedMode
   lastEventAt?: string
   lastPhase?: string
+  lastMessage?: string
   lastPhaseDurationMs?: number
   streamRevision: number
 }
@@ -66,6 +67,7 @@ export function sanitizePipelineRuntime(value: unknown): PipelineRuntimeState {
     speedMode: isSpeedMode(candidate.speedMode) ? candidate.speedMode : undefined,
     lastEventAt: typeof candidate.lastEventAt === 'string' ? candidate.lastEventAt : undefined,
     lastPhase: typeof candidate.lastPhase === 'string' ? candidate.lastPhase : undefined,
+    lastMessage: typeof candidate.lastMessage === 'string' ? candidate.lastMessage : undefined,
     lastPhaseDurationMs: typeof candidate.lastPhaseDurationMs === 'number' ? candidate.lastPhaseDurationMs : undefined,
     streamRevision: typeof candidate.streamRevision === 'number' ? candidate.streamRevision : 0,
   }
