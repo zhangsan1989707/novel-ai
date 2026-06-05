@@ -999,12 +999,14 @@ export async function runProductionPipeline(
     )
 
     // 大纲审核暂停点：生成完章节目录后暂停，等待用户确认
-    // 向后兼容：已在 GENERATE 阶段的项目跳过大纲审核
+    // 向后兼容：仅当复用已有大纲且项目已在 GENERATE 阶段时跳过审核
+    // 新生成的大纲必须经过用户审核，防止未经审核的内容直接进入生成
     const currentProject = await prisma.novelProject.findUnique({
       where: { id: projectId },
       select: { workflowStage: true },
     })
-    if (currentProject?.workflowStage !== 'GENERATE') {
+    const shouldSkipReview = isResumingOutlines && currentProject?.workflowStage === 'GENERATE'
+    if (!shouldSkipReview) {
       await prisma.novelProject.update({
         where: { id: projectId },
         data: { workflowStage: 'OUTLINE_REVIEW', outlineConfirmedAt: null },
