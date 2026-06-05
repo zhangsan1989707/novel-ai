@@ -1003,7 +1003,6 @@ export async function runProductionPipeline(
 
       await updateJobStep(jobId, 'write' as PipelineStep, 4, outlines.length, outline.chapterNumber)
       setCurrentChapter(outline.chapterNumber, outline.title)
-      // @ts-expect-error - TypeScript 5.9 inference issue with ChapterOutline.chapterNumber
       const result = await runChapterGenerationPipeline(projectId, outline.chapterNumber, handlePipelineEvent, {
         speedMode,
         forceRegenerate: resumePlan.forceRegenerateChapterNumber === outline.chapterNumber,
@@ -1013,9 +1012,7 @@ export async function runProductionPipeline(
         throw new Error(result.error || `第 ${outline.chapterNumber} 章生成失败`)
       }
       if (runtime.currentChapter) {
-        // @ts-expect-error TypeScript 5.9 null narrowing issue
         runtime.currentChapter.title = runtime.currentChapter.title || outline.title
-        // @ts-expect-error TypeScript 5.9 null narrowing issue
         runtime = archiveChapterRuntime(runtime, runtime.currentChapter)
         queuePersist(true)
       }
