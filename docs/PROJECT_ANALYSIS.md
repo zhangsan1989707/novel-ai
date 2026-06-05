@@ -1,7 +1,8 @@
 # Novel AI 项目全面分析报告
 
-> 生成时间：2026-05-25  
-> 项目版本：v0.2.0
+> 生成时间：2026-06-05  
+> 项目版本：v0.1.0  
+> 代码规模：219 个 TS 库文件 + 100 个 TSX 组件 + 135 个 API 路由
 
 ---
 
@@ -17,6 +18,7 @@
 8. [前端组件架构](#8-前端组件架构)
 9. [业务逻辑流程](#9-业务逻辑流程)
 10. [技术亮点与创新](#10-技术亮点与创新)
+11. [当前状态](#11-当前状态)
 
 ---
 
@@ -24,28 +26,26 @@
 
 ### 1.1 项目定位
 
-Novel AI 是一个基于多智能体协作的 AI 网络小说创作平台，支持从创意到完稿的全流程创作辅助。
+Novel AI 是一个基于多智能体协作的 **AI 网络小说工业化生产系统**。核心壁垒不是"AI 会写小说"，而是**长篇稳定工业化控制**：无限续写、防崩坏、防提前结局、世界扩张、平台节奏适配。
 
 ### 1.2 项目模式
-
-系统支持两种创作模式：
 
 | 模式 | 说明 | 适用场景 |
 |------|------|----------|
 | **创作模式 (CREATE)** | 从零开始创作小说，AI 辅助生成 | 新书创作 |
 | **拆解模式 (ANALYZE)** | 导入已有小说进行结构分析 | 学习分析 |
 
-### 1.3 核心特性
+### 1.3 核心数据
 
-- 🤖 **多智能体协作**：9+ Agent 流水线架构
-- 📚 **智能创作**：自动生成书名、章节目录、伏笔追踪、角色关系图、故事导向
-- 🔬 **拆解分析**：自动提取世界观和力量体系、书籍分析仪表板、章节图谱、分析任务管理
-- 💡 **去AI味与反检测**：专业网文写作规范、AI 内容检测与重写
-- 🧠 **RAG 向量检索**：基于 pgvector 的智能检索增强、记忆编排
-- 💰 **成本控制**：分层摘要系统、AI调用成本追踪、智能路由、模型降级
-- 📦 **导出系统**：支持 EPUB 格式导出
-- 🎬 **流水线管理**：章节提交与重播、项目引导流程
-- 🛠️ **项目健康度**：自动维护任务、健康度检查
+| 指标 | 数值 |
+|------|------|
+| TypeScript 库文件 | 219 |
+| React 组件 | 100 |
+| API 路由 | 135 |
+| Prisma 模型 | 30+ |
+| Agent 类型 | 11 |
+| AI 提供商 | 8 |
+| 单元测试 | 280 (35 files) |
 
 ---
 
@@ -57,118 +57,160 @@ Novel AI 是一个基于多智能体协作的 AI 网络小说创作平台，支�
 |------|----------|------|
 | **前端框架** | Next.js | 16.2.4 |
 | **React** | React | 19.2.4 |
-| **数据库** | PostgreSQL + Prisma + pgvector | 6.19.3 |
-| **AI 提供商** | 多厂商支持 (8家) | - |
+| **数据库** | PostgreSQL + Prisma | 6.19.3 |
+| **AI 提供商** | 8 家厂商 | - |
 | **样式方案** | Tailwind CSS | 4 |
 | **状态管理** | React Hook Form + Zod | 4.4.1 |
 | **可视化** | D3.js + React Flow | - |
 | **拖拽排序** | @dnd-kit | 6.3.1 |
 | **测试框架** | Vitest + Playwright | - |
 | **认证** | NextAuth.js | 5.0 beta |
+| **日志** | Pino | 10.3.1 |
 
-### 2.2 AI 服务提供商
+### 2.2 AI 服务提供商 (8家)
 
-| 厂商 | 模型ID示例 | 用途 |
-|------|-----------|------|
-| OpenAI | gpt-4o, gpt-4o-mini | 通用对话 |
-| Anthropic | claude-3.5-sonnet | 高质量写作 |
-| 阿里云 | qwen-plus, qwen-max | 中文优化 |
-| DeepSeek | deepseek-chat, deepseek-coder | 性价比高 |
-| MiniMax | abab6.5s | 中文创作 |
-| 火山引擎 | doubao-pro | 字节系 |
-| 智谱 AI | glm-4, glm-4-flash | 中文理解 |
-| 秘塔 AI | - | AI 检测与反检测 |
+| 厂商 | 枚举值 | 默认模型 |
+|------|--------|----------|
+| OpenAI | `OPENAI` | gpt-4o |
+| Anthropic | `ANTHROPIC` | claude-3.5-sonnet |
+| 阿里云 | `ALIBABA` | qwen-max |
+| DeepSeek | `DEEPSEEK` | deepseek-chat |
+| MiniMax | `MINIMAX` | abab6.5s |
+| 火山引擎 | `VOLCENGINE` | doubao-pro-32k |
+| 智谱 AI | `ZHIPU` | glm-4 |
+| 秘塔 AI | `MIMO` | - |
 
-### 2.3 项目目录结构
+### 2.3 目录结构
 
 ```
 novel-ai/
-├── prisma/                              # 数据库模型定义
-│   └── schema.prisma                     # 完整数据模型 (880行)
+├── prisma/                              # 数据库模型 (schema + migrations)
 ├── src/
 │   ├── app/                            # Next.js App Router
 │   │   ├── (main)/                    # 主应用路由组
-│   │   │   ├── projects/              # 项目管理页面
+│   │   │   ├── projects/              # 项目管理
 │   │   │   │   ├── new/               # 新建项目
-│   │   │   │   └── [projectId]/       # 项目详情
-│   │   │   │       └── chapters/      # 章节管理
-│   │   │   │           ├── page.tsx    # 章节列表
-│   │   │   │           ├── new/        # 新建章节
-│   │   │   │           └── [chapterId]/
-│   │   │   │               ├── page.tsx      # 章节编辑
-│   │   │   │               └── generate/     # AI生成
+│   │   │   │   └── [projectId]/       # 项目详情 + 章节
 │   │   │   ├── settings/               # 系统设置
 │   │   │   ├── cost/                   # 成本统计
 │   │   │   └── market/                 # 市场分析
-│   │   ├── api/                        # API 路由 (86个)
-│   │   │   ├── novel/                  # 小说相关
-│   │   │   ├── projects/               # 项目管理
-│   │   │   ├── engine/                 # 引擎API
-│   │   │   ├── market/                 # 市场分析
-│   │   │   ├── agents/                 # Agent API
-│   │   │   └── notifications/          # 通知
-│   │   └── page.tsx                    # 首页重定向
-│   ├── components/                      # React 组件 (~50个)
-│   │   ├── ai/                         # AI功能组件 (30个)
-│   │   │   ├── StreamViewer.tsx        # 流式生成视图
+│   │   └── api/                        # API 路由 (135个)
+│   │       ├── novel/                  # 小说相关
+│   │       │   ├── ai/                 # AI 能力 (20个)
+│   │       │   ├── engine/             # 引擎 (8个)
+│   │       │   ├── projects/           # 项目管理 (15个)
+│   │       │   ├── deslop/             # 去AI味 (2个)
+│   │       │   └── chapter-quality/    # 质量分析 (3个)
+│   │       ├── short-story/            # 短篇 (8个)
+│   │       ├── market/                 # 市场 (3个)
+│   │       ├── agents/                 # Agent
+│   │       ├── hooks/                  # 钩子
+│   │       ├── notifications/          # 通知
+│   │       └── styles/                 # 风格
+│   ├── components/                      # React 组件 (100个)
+│   │   ├── ai/                         # AI 功能 (30个)
+│   │   │   ├── StreamViewer.tsx        # 流式生成
 │   │   │   ├── DeslopPanel.tsx         # 去AI味面板
-│   │   │   ├── ChapterQualityPanel.tsx # 质量分析面板
-│   │   │   ├── ReviewPanel.tsx         # 审核面板
+│   │   │   ├── ChapterQualityPanel.tsx # 质量分析
+│   │   │   ├── ReviewPanel.tsx         # 审核
 │   │   │   ├── PlotlineTracker.tsx     # 伏笔追踪
 │   │   │   ├── CharacterRelationshipGraph.tsx  # 角色关系图
 │   │   │   ├── ChapterRhythmHeatmap.tsx # 节奏热力图
+│   │   │   ├── GeneratePanel.tsx       # 生成面板
+│   │   │   ├── ContinuationPanel.tsx   # 续写面板
+│   │   │   ├── BatchProgress.tsx       # 批量进度
+│   │   │   ├── BookAnalysisPanel.tsx   # 书籍分析
 │   │   │   └── ...
 │   │   ├── chapter/                     # 章节组件
 │   │   ├── project/                    # 项目组件
-│   │   ├── ui/                         # 通用UI组件
-│   │   └── writer/                      # 虚拟作家
-│   ├── lib/                            # 核心业务逻辑
-│   │   ├── agents/                     # Agent智能体 (14个文件)
-│   │   │   ├── adapters.ts             # Agent适配器
-│   │   │   ├── base.ts                 # Agent基类
-│   │   │   ├── planner.ts              # 策划Agent
-│   │   │   ├── writer.ts               # 写作Agent
-│   │   │   ├── polisher.ts             # 润色Agent
-│   │   │   ├── validator.ts            # 校验Agent
-│   │   │   ├── summarizer.ts           # 摘要Agent
-│   │   │   ├── researcher.ts           # 研究Agent
-│   │   │   ├── reviewer.ts             # 审核Agent
-│   │   │   └── deslopper.ts           # 去AI味Agent
-│   │   ├── ai/                         # AI服务封装 (18个文件)
-│   │   │   ├── service.ts              # AI服务主类
-│   │   │   ├── factory.ts              # 工厂模式
-│   │   │   ├── providers/              # 提供商实现
-│   │   │   ├── context-manager.ts       # 上下文管理
-│   │   │   ├── smart-router.ts         # 智能路由
-│   │   │   └── model-compare.ts       # 模型对比
-│   │   ├── engine/                     # 小说引擎核心 (12个文件)
-│   │   │   ├── orchestrator.ts         # 编排器
-│   │   │   ├── pipeline.ts             # 流水线
-│   │   │   ├── task-queue.ts          # 任务队列
-│   │   │   ├── context-assembler.ts   # 上下文组装
+│   │   ├── ui/                         # 通用 UI
+│   │   ├── writer/                     # 虚拟作家
+│   │   └── layout/                     # 布局
+│   ├── lib/                            # 核心业务逻辑 (219个)
+│   │   ├── engine/                     # 小说引擎 (60个文件)
+│   │   │   ├── orchestrator.ts         # 主编排器
+│   │   │   ├── production-pipeline.ts  # 生产流水线
+│   │   │   ├── project-runtime.ts      # 统一运行态
+│   │   │   ├── project-pipeline-snapshot.ts # 快照构建
+│   │   │   ├── chapter-continuity.ts   # 章节连续性
+│   │   │   ├── chapter-repair.ts       # 章节修复
+│   │   │   ├── chapter-commit.ts       # 章节提交
+│   │   │   ├── quality-gate.ts         # 质量门禁
+│   │   │   ├── context-budget.ts       # 上下文预算
 │   │   │   ├── context-compression.ts  # 上下文压缩
-│   │   │   └── story-state.ts         # 故事状态
-│   │   ├── memory/                      # 记忆系统 (5个文件)
-│   │   │   ├── index.ts               # 记忆主入口
-│   │   │   ├── character-memory.ts    # 角色记忆
-│   │   │   └── volume-summary.ts      # 卷摘要
-│   │   ├── prompts/                    # 提示词库 (30+个)
-│   │   │   ├── chapter/              # 章节相关提示词
-│   │   │   ├── novel/                 # 小说相关提示词
+│   │   │   ├── long-novel-controller.ts # 长篇控制器
+│   │   │   ├── story-state.ts          # 故事状态
+│   │   │   ├── story-steering.ts       # 故事导向
+│   │   │   ├── world-expansion.ts      # 世界扩张
+│   │   │   ├── villain-lifecycle.ts    # 反派生命周期
+│   │   │   ├── truncation-detector.ts  # 截断检测
+│   │   │   ├── blueprint-console.ts    # 蓝图书写
+│   │   │   ├── rag-vector.ts           # RAG 检索
+│   │   │   ├── validation/             # 验证模块
+│   │   │   └── ...
+│   │   ├── agents/                     # Agent 智能体 (18个)
+│   │   │   ├── planner.ts              # 策划 Agent
+│   │   │   ├── writer.ts               # 写作 Agent
+│   │   │   ├── polisher.ts             # 润色 Agent
+│   │   │   ├── validator.ts            # 校验 Agent
+│   │   │   ├── summarizer.ts           # 摘要 Agent
+│   │   │   ├── researcher.ts           # 研究 Agent
+│   │   │   ├── reviewer.ts             # 评审 Agent
+│   │   │   ├── reader.ts               # 读者 Agent
+│   │   │   ├── deslopper.ts            # 去AI味 Agent
+│   │   │   ├── narrative-director.ts   # 叙事导演
+│   │   │   ├── quality-analyzer.ts     # 质量分析
+│   │   │   ├── feedback-loop.ts        # 反馈循环
+│   │   │   ├── model-strategy.ts       # 模型策略
+│   │   │   ├── correction-builder.ts   # 修正构建
+│   │   │   ├── adapters.ts             # 适配器
+│   │   │   ├── base.ts                 # 基础接口
+│   │   │   ├── prompts.ts              # 提示词模板
+│   │   │   └── registry.ts             # 注册表
+│   │   ├── ai/                         # AI 服务封装 (27个)
+│   │   │   ├── service.ts              # AI 服务主类
+│   │   │   ├── factory.ts              # 工厂模式
+│   │   │   ├── smart-router.ts         # 智能路由
+│   │   │   ├── model-fallback.ts       # 模型降级
+│   │   │   ├── context-manager.ts      # 上下文管理
+│   │   │   ├── speed-mode.ts           # 速度模式
+│   │   │   ├── traceable-provider.ts   # 可追踪 Provider
+│   │   │   ├── providers/              # 8 家提供商实现
+│   │   │   └── ...
+│   │   ├── memory/                     # 记忆系统 (7个)
+│   │   │   ├── memory-orchestrator.ts  # 记忆编排
+│   │   │   ├── character-memory.ts     # 角色记忆
+│   │   │   ├── chapter-summary.ts      # 章节摘要
+│   │   │   ├── volume-summary.ts       # 卷摘要
+│   │   │   └── ...
+│   │   ├── prompts/                    # 提示词库
+│   │   │   ├── chapter/              # 章节提示词
+│   │   │   │   ├── writing-v2.ts      # 增强写作
+│   │   │   │   ├── planning-v2.ts     # 增强策划
+│   │   │   │   └── ...
+│   │   │   ├── novel/                 # 小说提示词
 │   │   │   ├── deslop/                # 去AI味提示词
-│   │   │   └── analysis/              # 分析提示词
-│   │   ├── knowledge/                  # 写作知识库
-│   │   │   ├── anti-ai.ts            # 禁用词库
+│   │   │   ├── analysis/              # 分析提示词
+│   │   │   └── shared/               # 共享模板
+│   │   ├── knowledge/                  # 写作知识库 (7个)
+│   │   │   ├── anti-ai.ts            # 禁用词库 (60+词)
 │   │   │   ├── chapter-quality.ts    # 质量分析
-│   │   │   └── hooks.ts              # 知识钩子
+│   │   │   ├── hooks.ts              # 知识钩子
+│   │   │   └── ...
 │   │   ├── export/                    # 导出服务
+│   │   │   └── adapters/epub.ts      # EPUB 适配器
 │   │   ├── cost-tracker/              # 成本追踪
-│   │   └── ...
-│   └── types/                          # TypeScript类型定义
+│   │   └── hooks/                     # 工作流钩子
+│   └── types/                          # TypeScript 类型
+├── docs/                                # 项目文档 (20+个)
 ├── scripts/                             # 部署脚本
-├── docs/                                # 文档
-├── CODE_WIKI.md                        # 代码架构文档
-└── package.json
+├── package.json
+├── CLAUDE.md                            # 项目配置
+├── AGENTS.md                            # Agent 开发指南
+├── CHANGELOG.md                         # 变更日志
+├── CODE_WIKI.md                         # 代码架构
+├── README.md                            # 项目介绍
+└── TODO_ISSUES.md                       # TODO 跟踪
 ```
 
 ---
@@ -178,279 +220,132 @@ novel-ai/
 ### 3.1 ER 图概览
 
 ```
-┌─────────────┐       ┌─────────────────┐       ┌──────────────┐
-│    User     │──────<│  NovelProject   │──────<│ NovelChapter │
-└─────────────┘       └─────────────────┘       └──────────────┘
-      │                      │
-      │                      │
-      ├──────────────────────┼──────────────────────┐
-      │                      │                      │
-      ▼                      ▼                      ▼
-┌─────────────┐       ┌──────────────┐       ┌──────────────┐
-│VirtualWriter│       │  Character   │       │   Plotline   │
-└─────────────┘       └──────────────┘       └──────────────┘
-                             │
-                             ▼
-                      ┌──────────────┐
-                      │  StoryState  │
-                      └──────────────┘
+User (用户)
+├── NovelProject (小说项目)
+│   ├── NovelChapter (章节)
+│   │   ├── ChapterVersion (版本历史)
+│   │   └── ChapterCommit (章节提交)
+│   ├── VirtualWriter (虚拟作家)
+│   │   └── WriterDocument (训练文档)
+│   ├── BookAnalysis (书籍分析)
+│   ├── SourceNovel (源小说)
+│   ├── Character (角色档案)
+│   ├── Plotline (伏笔追踪)
+│   ├── StoryState (故事状态)
+│   ├── StoryEvent (故事事件)
+│   ├── ChapterSummary (章节摘要 L1)
+│   ├── VolumeSummary (卷摘要 L2)
+│   ├── BookSummary (全书摘要 L3)
+│   ├── ShortStory (短篇小说)
+│   ├── CoverDesign (封面设计)
+│   ├── ResearchRef (研究资料)
+│   ├── ReviewReport (评审报告)
+│   ├── ArcPlan (弧线规划)
+│   ├── BookBlueprint (全书蓝图)
+│   ├── Villain (反派)
+│   ├── WorldState (世界状态)
+│   ├── GenerationJob (生成任务)
+│   ├── PipelineCheckpoint (流水线检查点)
+│   ├── ProjectMaintenanceTask (维护任务)
+│   ├── StyleProfile (风格配置)
+│   └── AIModelConfig (AI 模型配置)
+├── Notification (通知)
+├── AIUsage (AI 使用记录)
+└── UserQuota (用户配额)
 ```
 
-### 3.2 核心模型
+### 3.2 核心枚举
 
-#### 3.2.1 NovelProject - 小说项目
-
-```prisma
-model NovelProject {
-  id                  Int             @id @default(autoincrement())
-  title               String
-  description         String?
-  genre               String?         // 玄幻/奇幻/仙侠/都市/科幻/历史/游戏/悬疑/言情
-  writingStyle        String?         // 轻松幽默/热血激昂/暗黑沉重/唯美文艺/悬疑烧脑
-  targetWordCount     Int?            // 目标总字数
-  currentWordCount    Int             @default(0)
-  chapterWordCount    Int             @default(3000)  // 每章目标字数
-  
-  // 大纲设定
-  outline             String?
-  outlineStages       Json?          // {stage1: [], stage2: [], stage3: [], stage4: []}
-  
-  // 详细设定
-  worldSetting        String?         // 世界观设定
-  powerSystem         String?         // 力量体系
-  protagonistProfile  String?         // 主角人设
-  protagonistGoal     String?         // 主角目标
-  antagonistSetting   String?         // 反派设定
-  endingPlan          String?         // 结局规划
-  
-  // 项目模式
-  projectMode         String          @default("CREATE")  // CREATE | ANALYZE
-  storyType           String          @default("LONG")     // LONG | SHORT
-  
-  status              ProjectStatus   @default(DRAFT)
-  coverImage          String?
-  totalVolumes        Int             @default(4)
-  
-  // 关联关系
-  chapters            NovelChapter[]
-  characters          Character[]
-  plotlines           Plotline[]
-  chapterSummaries    ChapterSummary[]
-  volumeSummaries     VolumeSummary[]
-  bookSummary         BookSummary?
-  aiUsages            AIUsage[]
-  // ...更多关联
-}
-```
-
-#### 3.2.2 NovelChapter - 章节
-
-```prisma
-model NovelChapter {
-  id                  Int             @id @default(autoincrement())
-  projectId           Int
-  chapterNumber       Int             // 章节编号
-  title               String
-  content             String?         @db.Text
-  summary             String?         @db.Text
-  wordCount           Int             @default(0)
-  
-  generationPrompt    String?         @db.Text
-  generationParams    Json?
-  generationCount     Int             @default(0)
-  lastGeneratedTime   DateTime?
-  
-  sortOrder           Int             @default(0)
-  status              ChapterStatus   @default(DRAFT)
-  
-  // 引擎字段
-  chapterOutline      Json?          // 策划Agent输出的章节大纲
-  validationReport    Json?          // 校验Agent的验证报告
-  retryCount          Int             @default(0)
-  
-  versions            ChapterVersion[]
-}
-```
-
-#### 3.2.3 Character - 角色档案
-
-```prisma
-model Character {
-  id              String            @id @default(cuid())
-  projectId       Int
-  name            String
-  role            CharacterRole    @default(SUPPORTING)  // PROTAGONIST/ANTAGONIST/SUPPORTING/MINOR
-  
-  appearance      String?          @db.Text
-  personality     String?          @db.Text
-  catchphrases    String[]         @default([])
-  background      String?          @db.Text
-  
-  // 关系管理
-  relationships   Json?            @default("{}")  // {角色名: 关系描述}
-  currentState    Json?           @default("{}")  // 位置、情绪、阵营
-  
-  firstChapter    Int?
-  lastUpdated     Int?
-  
-  // 复用库
-  isPublic        Boolean          @default(false)
-  tags            String[]         @default([])
-}
-```
-
-#### 3.2.4 Plotline - 伏笔追踪
-
-```prisma
-model Plotline {
-  id              String           @id @default(cuid())
-  projectId       Int
-  type            PlotlineType     @default(FORESHADOW)  // FORESHADOW/SUBPLOT/CONFLICT
-  description     String           @db.Text
-  plantedAt       Int              // 埋入章节号
-  resolvedAt      Int?             // 回收章节号
-  plannedAt       Int?             // 计划回收章节号
-  status          PlotlineStatus  @default(OPEN)  // OPEN/RESOLVED/ABANDONED
-  metadata        Json?            @default("{}")
-}
+```typescript
+ProjectStatus: DRAFT | WRITING | COMPLETED | PAUSED
+ChapterStatus: DRAFT | GENERATING | COMPLETED | REVIEWING
+CharacterRole: PROTAGONIST | ANTAGONIST | SUPPORTING | MINOR
+PlotlineType: FORESHADOW | SUBPLOT | CONFLICT
+PlotlineStatus: OPEN | RESOLVED | ABANDONED
+AgentType: PLANNER | WRITER | POLISHER | VALIDATOR | SUMMARIZER | RESEARCHER | REVIEWER | READER | DESLOPPER | NARRATIVE_DIRECTOR | QUALITY_ANALYZER
+AIVendor: OPENAI | ANTHROPIC | ALIBABA | DEEPSEEK | MINIMAX | VOLCENGINE | ZHIPU | MIMO
 ```
 
 ### 3.3 分层摘要系统
 
-解决长篇（760+章）大文本 token 超限问题：
-
-```
-┌────────────────────────────────────────────┐
-│         BookSummary (L3 - 全书摘要)         │
-│  - 1000-1500字整体摘要                      │
-│  - 主线概述、支线列表                        │
-│  - 角色成长弧线、主题元素                    │
-└────────────────────────────────────────────┘
-                      ▲
-                      │ 聚合
-                      │
-┌────────────────────────────────────────────┐
-│       VolumeSummary (L2 - 卷摘要)           │
-│  - 500-800字卷摘要                          │
-│  - 关键事件、情绪曲线                        │
-│  - 章节概览                                 │
-└────────────────────────────────────────────┘
-                      ▲
-                      │ 聚合
-                      │
-┌────────────────────────────────────────────┐
-│     ChapterSummary (L1 - 章节摘要)           │
-│  - 200-300字章节摘要                         │
-│  - 关键事件、情绪基调                         │
-│  - 伏笔埋设/回收                            │
-└────────────────────────────────────────────┘
-```
+| 层级 | 模型 | 字数范围 | 存储内容 |
+|------|------|----------|----------|
+| L1 | ChapterSummary | 200-300字 | 摘要 + 关键事件 + 情绪基调 + 伏笔 |
+| L2 | VolumeSummary | 500-800字 | 摘要 + 关键事件 + 情绪曲线 + 章节概览 |
+| L3 | BookSummary | 1000-1500字 | 主线概述 + 支线 + 角色弧线 + 主题元素 |
 
 ---
 
 ## 4. 核心功能模块
 
-### 4.1 小说引擎 (Novel Engine)
+### 4.1 小说引擎 (60 个文件)
 
-小说引擎是系统的核心编排器，协调多个 Agent 完成章节创作。
+```
+src/lib/engine/
+├── orchestrator.ts              # 主编排器：Planner → Writer → Polisher → Reviewer → Validator → Deslopper → QualityGate
+├── production-pipeline.ts       # 生产级流水线：Blueprint → ArcPlan → ChapterList → Write
+├── project-runtime.ts           # 统一运行态：ProjectRuntimeStage / ChapterRuntimeStatus / ProjectRuntimeSummary
+├── project-pipeline-snapshot.ts # 快照构建：status 和 stream 共用
+├── chapter-continuity.ts        # 章节连续性：锚点 + 审计 + 串行流程
+├── chapter-repair.ts            # 章节修复：截断修复 + 上下文增强
+├── chapter-commit.ts            # 章节提交：projection writer + 重放
+├── quality-gate.ts              # 质量门禁：多维度评分 + 阻断规则
+├── context-budget.ts            # 上下文预算：Blueprint(10%) + ArcPlan(15%) + Summaries(25%) + Plotlines(15%) + Characters(15%) + StyleGuide(10%) + Outline(10%)
+├── context-compression.ts       # 上下文压缩：固定窗口/滑动窗口/摘要替换
+├── long-novel-controller.ts     # 长篇控制器：节奏 + 扩张 + 防提前结局
+├── story-state.ts               # 故事状态：情绪曲线 + 冲突 + 进度
+├── story-steering.ts            # 故事导向：pace/darkness/humor/romance/conflict
+├── world-expansion.ts           # 世界扩张：地图 + 势力 + 层级 + 文明
+├── villain-lifecycle.ts         # 反派生命周期：阶段Boss vs 终极Boss
+├── truncation-detector.ts       # 截断检测：isLikelyTruncated
+├── blueprint-console.ts         # 蓝图书写：核心卖点 + 世界方向 + 主线方向
+├── batch-planner.ts             # 批量规划：自动决定 batchSize
+├── rag-vector.ts                # RAG 检索：pgvector
+├── pipeline-checkpoint.ts       # 检查点：断点续传
+├── generation-job.ts            # 生成任务：type/status/currentStep/payload
+├── project-health.ts            # 健康度：伏笔回收率/章节完成率
+├── auto-maintenance.ts          # 自动维护
+└── validation/                  # 验证模块
+```
+
+### 4.2 章节生成流水线
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    章节生成流水线                             │
 ├─────────────────────────────────────────────────────────────┤
 │                                                              │
-│  [1. 策划]  ──>  [2. 写作]  ──>  [3. 润色]  ──>  [4. 校验]  │
-│     │               │               │               │       │
-│     ▼               ▼               ▼               ▼       │
-│  章节大纲        章节正文        文笔优化        质量验证     │
+│  [策划] ──> [写作] ──> [润色] ──> [评审] ──> [校验]         │
 │                                                              │
 │                              │                               │
 │                              ▼                               │
-│                    [5. 摘要] ──> 存入记忆系统                 │
+│                    [去AI味] ──> [质量门禁]                     │
 │                                                              │
+│                         │                                    │
+│                    ┌────┴────┐                               │
+│                    │ 通过？    │                               │
+│                    └────┬────┘                               │
+│                     是  │  否                                 │
+│                      ▼  │  ▼                                 │
+│               [摘要]    │ [修复] ──> 重试                      │
+│                 │       │                                     │
+│                 ▼       │                                     │
+│             [提交]      │                                     │
+│             存入DB      │                                     │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-#### 核心文件
-
-| 文件 | 功能 |
-|------|------|
-| `orchestrator.ts` | 总编排器，协调各Agent |
-| `pipeline.ts` | 流水线定义 |
-| `task-queue.ts` | 任务队列管理 |
-| `context-assembler.ts` | 上下文组装 |
-| `context-compression.ts` | 上下文压缩 |
-| `story-state.ts` | 故事状态管理 |
-
-### 4.2 记忆系统 (Memory System)
-
-记忆系统管理创作过程中的上下文信息：
-
-```
-┌──────────────────────────────────────────────┐
-│              记忆系统架构                      │
-├──────────────────────────────────────────────┤
-│                                               │
-│  ┌─────────────────┐  ┌─────────────────┐   │
-│  │  CharacterMemory │  │ PlotlineMemory  │   │
-│  │   角色记忆        │  │   伏笔记忆       │   │
-│  └─────────────────┘  └─────────────────┘   │
-│                                               │
-│  ┌─────────────────┐  ┌─────────────────┐   │
-│  │  ChapterSummary  │  │ VolumeSummary   │   │
-│  │   章节摘要(L1)   │  │   卷摘要(L2)     │   │
-│  └─────────────────┘  └─────────────────┘   │
-│                                               │
-│  ┌─────────────────┐                         │
-│  │  BookSummary    │  (L3 - 全书摘要)          │
-│  └─────────────────┘                         │
-│                                               │
-└──────────────────────────────────────────────┘
-```
-
-### 4.3 AI 服务层 (AI Service)
-
-AI 服务层封装多个厂商，提供统一的 AI 调用接口：
-
-```
-┌──────────────────────────────────────────────┐
-│              AI Service Layer                │
-├──────────────────────────────────────────────┤
-│                                               │
-│  ┌─────────────────────────────────────────┐ │
-│  │            AIService (主类)              │ │
-│  │  - createProvider()  工厂方法            │ │
-│  │  - generate()       生成接口             │ │
-│  │  - batchGenerate()   批量生成             │ │
-│  └─────────────────────────────────────────┘ │
-│                      │                        │
-│                      ▼                        │
-│  ┌─────────────────────────────────────────┐ │
-│  │           AI Provider (适配器)            │ │
-│  └─────────────────────────────────────────┘ │
-│                      │                        │
-│     ┌───────┬───────┬───────┬───────┐        │
-│     ▼       ▼       ▼       ▼       ▼        │
-│  ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐        │
-│  │OpenAI│ │Anthropic│ │阿里 │ │Deep│ │MiniMax│
-│  └────┘ └────┘ └────┘ └────┘ └────┘        │
-│                                               │
-└──────────────────────────────────────────────┘
-```
-
-### 4.4 去 AI 味系统 (Deslop System)
-
-专业网文写作规范，消除 AI 生成文本的"机器感"：
+### 4.3 去 AI 味系统
 
 #### 禁用词库分层
 
 | 层级 | 数量 | 示例 | 处理方式 |
 |------|------|------|----------|
-| L1 必换 | 14个 | 不禁、顿时、瞬间、赫然 | 立即替换 |
-| L2 建议 | 20个 | 缓缓、微微、淡淡、竟然 | 优先替换 |
-| L3 可选 | 20个 | 首先、其次、总之 | 提升质量 |
+| L1 必换 | 14个 | 不禁、顿时、瞬间、赫然、蓦然、骤然、陡然、悄然、旋即 | 立即替换 |
+| L2 建议 | 20个 | 缓缓、微微、淡淡、轻轻、默默、深深、渐渐、竟然、居然 | 优先替换 |
+| L3 可选 | 20个 | 首先、其次、最后、总之、综上所述、此时此刻、换言之 | 提升质量 |
 
-#### 禁止模式
+#### 禁止模式 (10种)
 
 - 排比句堆砌
 - 段落结构过于工整
@@ -458,97 +353,52 @@ AI 服务层封装多个厂商，提供统一的 AI 调用接口：
 - 总结性陈述句结尾
 - 过度比喻
 - 心理描写直白
+- 过度使用副词
 - 句式过于对称
 - AI风格结尾
+- 连续短句
 
-### 4.5 扫榜选材系统 (Market System)
+#### 多维评分
 
-分析市场趋势，辅助创作决策：
-
-```
-┌──────────────────────────────────────────────┐
-│              扫榜选材系统                      │
-├──────────────────────────────────────────────┤
-│                                               │
-│  ┌─────────────┐  ┌─────────────┐            │
-│  │ MarketTrend │  │ MarketBook  │            │
-│  │  市场趋势    │  │  书籍数据    │            │
-│  └─────────────┘  └─────────────┘            │
-│                                               │
-│  功能：                                        │
-│  - 平台/题材排行榜分析                         │
-│  - 热门标签提取                               │
-│  - 字数/更新频率统计                          │
-│  - 趋势方向判断                               │
-│                                               │
-└──────────────────────────────────────────────┘
-```
-
-### 4.6 成本追踪系统 (Cost Tracker)
-
-追踪 AI 调用成本，控制创作费用：
-
-```
-┌──────────────────────────────────────────────┐
-│              成本追踪系统                      │
-├──────────────────────────────────────────────┤
-│                                               │
-│  ┌─────────────────┐  ┌─────────────────┐   │
-│  │   ModelPricing   │  │    UserQuota    │   │
-│  │   模型定价配置    │  │    用户配额      │   │
-│  └─────────────────┘  └─────────────────┘   │
-│                                               │
-│  ┌─────────────────┐                         │
-│  │     AIUsage      │  调用记录               │
-│  │   token/费用     │                         │
-│  └─────────────────┘                         │
-│                                               │
-│  功能：                                        │
-│  - 分厂商/模型统计                             │
-│  - 月度配额管理                               │
-│  - 预警机制                                   │
-│  - 成本预估                                   │
-│                                               │
-└──────────────────────────────────────────────┘
-```
+| 维度 | 权重 | 检测内容 |
+|------|------|----------|
+| 词汇自然度 | 25% | L1/L2/L3 禁用词统计 |
+| 模式多样性 | 20% | 排比句、对称句检测 |
+| 结构变化 | 20% | 段落长度方差分析 |
+| 节奏韵律 | 15% | 句子长度分布、副词密度 |
+| 沉浸体验 | 20% | 感官描写密度、对话占比 |
 
 ---
 
-## 5. API 接口体系
+## 5. API接口体系
 
-### 5.1 API 路由概览
-
-总计 **86 个** API 路由，分为以下模块：
+### 5.1 API 路由总览 (135个)
 
 | 模块 | 路径 | 数量 | 主要功能 |
 |------|------|------|----------|
-| 项目管理 | `/api/novel/projects/*` | 15 | CRUD、导出、生成 |
-| 章节管理 | `/api/novel/projects/[id]/chapters/*` | 8 | 章节CRUD、排序 |
-| AI 能力 | `/api/novel/ai/*` | 20 | 生成、分析、校验 |
-| 引擎 | `/api/novel/engine/*` | 8 | 引擎状态、上下文 |
-| 封面 | `/api/novel/cover/*` | 4 | 封面生成 |
-| 拆解 | `/api/novel/deslop/*` | 2 | 去AI味 |
-| 质量分析 | `/api/novel/ai/chapter-quality/*` | 3 | 章节质量分析 |
-| 短篇 | `/api/short-story/*` | 8 | 短篇创作 |
-| 市场 | `/api/market/*` | 3 | 市场分析 |
+| 项目管理 | `/api/novel/projects/*` | 15 | CRUD、导出、生成、引导 |
+| 章节管理 | `/api/novel/projects/[id]/chapters/*` | 8 | CRUD、排序、摘要增强 |
+| AI 能力 | `/api/novel/ai/*` | 20 | 生成、分析、校验、风格 |
+| 引擎 | `/api/novel/engine/*` | 8 | 引擎状态、上下文、角色 |
+| 流水线 | `/api/novel/projects/[id]/pipeline/*` | 5 | 启动/暂停/恢复/状态/流 |
+| 封面 | `/api/novel/cover/*` | 4 | 生成、列表 |
+| 去AI味 | `/api/novel/deslop/*` | 2 | 检测、重写 |
+| 质量分析 | `/api/novel/ai/chapter-quality/*` | 3 | 分析、优化、批量优化 |
+| 短篇 | `/api/short-story/*` | 8 | 写作、大纲、情感、反转 |
+| 市场 | `/api/market/*` | 3 | 分析、推荐、趋势 |
+| 风格 | `/api/styles/*` | 5 | CRUD、应用 |
+| 蓝图 | `/api/novel/projects/[id]/blueprint*` | 2 | 蓝图读写、控制台 |
+| 弧线 | `/api/novel/projects/[id]/arc-plans` | 1 | 弧线规划 |
+| 章节图谱 | `/api/novel/projects/[id]/chapter-graph` | 1 | 图谱分析 |
+| 章节提交 | `/api/novel/projects/[id]/chapter-commits/*` | 2 | 提交、重播 |
+| 分析任务 | `/api/novel/projects/[id]/analysis-task*` | 2 | 任务管理 |
+| RAG | `/api/novel/projects/[id]/rag/rebuild` | 1 | 向量索引重建 |
+| 导向 | `/api/novel/projects/[id]/steering` | 1 | 故事导向 |
 | 其他 | `/api/agents/*`, `/api/hooks/*` 等 | 15 | 通用功能 |
 
 ### 5.2 核心 API 列表
 
-#### 5.2.1 项目管理
-
-| 方法 | 路径 | 功能 |
-|------|------|------|
-| GET | `/api/novel/projects` | 获取项目列表 |
-| POST | `/api/novel/projects` | 创建项目 |
-| GET | `/api/novel/projects/[projectId]` | 获取项目详情 |
-| PUT | `/api/novel/projects/[projectId]` | 更新项目 |
-| DELETE | `/api/novel/projects/[projectId]` | 删除项目 |
-| POST | `/api/novel/projects/[projectId]/export` | 导出小说 |
-| POST | `/api/novel/projects/[projectId]/generate` | 生成章节 |
-| POST | `/api/novel/projects/[projectId]/generate/stream` | 流式生成 |
-
-#### 5.2.2 AI 能力
+#### AI 能力
 
 | 方法 | 路径 | 功能 |
 |------|------|------|
@@ -559,87 +409,42 @@ AI 服务层封装多个厂商，提供统一的 AI 调用接口：
 | POST | `/api/novel/ai/validate-chapter` | 章节校验 |
 | POST | `/api/novel/ai/analyze-plot` | 剧情分析 |
 | POST | `/api/novel/ai/analyze-style` | 风格分析 |
-| POST | `/api/novel/ai/check-style-consistency` | 风格一致性检查 |
-| POST | `/api/novel/ai/chapter-rhythm` | 章节节奏分析 |
-| POST | `/api/novel/ai/hierarchical-summary` | 分层摘要生成 |
-
-#### 5.2.3 质量分析
-
-| 方法 | 路径 | 功能 |
-|------|------|------|
-| POST | `/api/novel/ai/chapter-quality/analyze` | 分析章节AI质量 |
-| POST | `/api/novel/ai/chapter-quality/optimize` | 优化章节去AI味 |
+| POST | `/api/novel/ai/chapter-rhythm` | 章节节奏 |
+| POST | `/api/novel/ai/chapter-quality/analyze` | 质量分析 |
+| POST | `/api/novel/ai/chapter-quality/optimize` | 质量优化 |
 | POST | `/api/novel/ai/chapter-quality/batch-optimize` | 批量优化 |
 
-#### 5.2.4 去 AI 味
+#### 流水线
 
 | 方法 | 路径 | 功能 |
 |------|------|------|
-| POST | `/api/novel/deslop/detect` | 检测AI味道 |
-| POST | `/api/novel/deslop/rewrite` | 重写去味 |
+| POST | `/api/novel/projects/[id]/pipeline/start` | 启动流水线 |
+| POST | `/api/novel/projects/[id]/pipeline/pause` | 暂停 |
+| POST | `/api/novel/projects/[id]/pipeline/resume` | 恢复 |
+| GET | `/api/novel/projects/[id]/pipeline/status` | 状态 |
+| GET | `/api/novel/projects/[id]/pipeline/stream` | SSE 流 |
 
 ---
 
 ## 6. 多智能体协作系统
 
-### 6.1 Agent 类型定义
+### 6.1 Agent 类型 (11种)
 
-```typescript
-enum AgentType {
-  PLANNER    // 策划 Agent - 生成章节大纲
-  WRITER     // 写作 Agent - 生成章节正文
-  POLISHER   // 润色 Agent - 文笔润色优化
-  VALIDATOR  // 校验 Agent - 质量校验验证
-  SUMMARIZER // 摘要 Agent - 章节摘要生成
-  RESEARCHER // 研究 Agent - 写作资料研究
-  REVIEWER   // 审核 Agent - 多角度审核
-  DESLOPPER  // 去味 Agent - 去除AI味
-}
-```
+| Agent | 枚举值 | 职责 | 输入 | 输出 |
+|-------|--------|------|------|------|
+| **Planner** | `PLANNER` | 策划章节大纲 | 章节目标、角色信息、伏笔 | ChapterOutline |
+| **Writer** | `WRITER` | 生成章节正文 | 大纲、上下文、设定 | string |
+| **Polisher** | `POLISHER` | 文笔润色优化 | 原文、风格要求 | string |
+| **Validator** | `VALIDATOR` | 质量校验验证 | 章节内容、设定 | ValidationReport |
+| **Summarizer** | `SUMMARIZER` | 章节摘要生成 | 章节正文 | ChapterSummaryData |
+| **Researcher** | `RESEARCHER` | 资料收集研究 | 研究主题 | ResearchRef[] |
+| **Reviewer** | `REVIEWER` | 多人评审 | 章节内容 | ReviewReport |
+| **Reader** | `READER` | 读者视角审核 | 章节内容 | ReaderFeedback |
+| **Deslopper** | `DESLOPPER` | 去 AI 味处理 | 原文 | string |
+| **NarrativeDirector** | `NARRATIVE_DIRECTOR` | 叙事导演 | 全书状态 | 方向指导 |
+| **QualityAnalyzer** | `QUALITY_ANALYZER` | 质量分析 | 章节内容 | QualityReport |
 
-### 6.2 Agent 流水线
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        Pipeline Execution                        │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                   │
-│  ┌──────────┐     ┌──────────┐     ┌──────────┐     ┌──────────┐│
-│  │ PLANNER  │────>│  WRITER  │────>│ POLISHER │────>│VALIDATOR ││
-│  │ 策划大纲  │     │  生成正文  │     │  文笔润色  │     │  质量校验  ││
-│  └──────────┘     └──────────┘     └──────────┘     └──────────┘│
-│                                                                   │
-│                           │                                       │
-│                           ▼                                       │
-│                    ┌──────────────┐                              │
-│                    │  SUMMARIZER  │                              │
-│                    │   生成摘要     │                              │
-│                    └──────────────┘                              │
-│                                                                   │
-│                           │                                       │
-│                           ▼                                       │
-│                    ┌──────────────┐                              │
-│                    │  存入记忆系统   │                              │
-│                    └──────────────┘                              │
-│                                                                   │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### 6.3 各 Agent 职责
-
-| Agent | 输入 | 输出 | 核心功能 |
-|-------|------|------|----------|
-| **Planner** | 章节目标、角色信息、伏笔 | 章节大纲 | 生成详细章节规划 |
-| **Writer** | 大纲、上下文、设定 | 章节正文 | 基于大纲生成内容 |
-| **Polisher** | 原文、风格要求 | 润色后正文 | 提升文笔质量 |
-| **Validator** | 章节内容、设定 | 验证报告 | 检查一致性/逻辑 |
-| **Summarizer** | 章节正文 | 摘要 | 提取关键信息 |
-| **Reviewer** | 章节内容 | 多维度评审 | 综合质量评估 |
-| **Deslopper** | 原文 | 改写后正文 | 去除AI味道 |
-
-### 6.4 Agent 适配器模式
-
-使用适配器模式统一 Agent 调用接口：
+### 6.2 Agent 适配器模式
 
 ```typescript
 interface AgentDefinition<Input, Output> {
@@ -648,14 +453,19 @@ interface AgentDefinition<Input, Output> {
   description: string
   execute(input: Input): Promise<Output>
 }
-
-// 使用示例
-const plannerAdapter: AgentDefinition<PlannerInput, PlannerOutput> = {
-  type: 'PLANNER',
-  name: '策划 Agent',
-  execute: async (input) => { /* ... */ }
-}
 ```
+
+### 6.3 模型职责分配
+
+| Agent | 推荐模型 | 原因 |
+|-------|----------|------|
+| Planner | 高质量模型 (claude-3.5-sonnet) | 需要创意和结构规划 |
+| Writer | 中文长文本模型 (qwen-max) | 需要高质量中文输出 |
+| Polisher | 中等模型 (gpt-4o) | 需要语言理解 |
+| Validator | 便宜逻辑模型 (deepseek-chat) | 需要逻辑判断 |
+| Summarizer | 快速便宜模型 (qwen-plus) | 需要摘要能力 |
+| Reviewer | 高质量模型 (claude-3.5-sonnet) | 需要深度分析 |
+| Deslopper | 中等模型 (deepseek-chat) | 需要文本改写 |
 
 ---
 
@@ -665,68 +475,37 @@ const plannerAdapter: AgentDefinition<PlannerInput, PlannerOutput> = {
 
 ```typescript
 class AIService {
-  // 工厂方法创建 Provider
   static async createProvider(options: {
     projectId?: number
     usageType: string
     vendor?: AIVendor
   }): Promise<AIProvider>
-  
-  // 生成接口
-  async generate(prompt: string, options?: GenerateOptions): Promise<AIResult>
-  
-  // 批量生成
-  async batchGenerate(prompts: string[], options?: GenerateOptions): Promise<AIResult[]>
 }
 ```
 
 ### 7.2 智能路由
 
-根据任务类型自动选择最优模型：
+按任务类型自动选择最优模型：
 
-```typescript
-// 任务类型 -> 模型映射
-const MODEL_ROUTING = {
-  // 策划任务 - 需要创意
-  PLANNING: ['claude-3.5-sonnet', 'gpt-4o'],
-  
-  // 写作任务 - 需要质量
-  WRITING: ['claude-3.5-sonnet', 'qwen-max'],
-  
-  // 润色任务 - 需要理解
-  POLISHING: ['gpt-4o', 'glm-4'],
-  
-  // 校验任务 - 需要逻辑
-  VALIDATION: ['deepseek-chat', 'qwen-plus'],
-  
-  // 成本敏感任务
-  COST_SENSITIVE: ['deepseek-chat', 'abab6.5s'],
-}
-```
+| 任务类型 | 模型池 |
+|----------|--------|
+| PLANNING | claude-3.5-sonnet, gpt-4o |
+| WRITING | claude-3.5-sonnet, qwen-max |
+| POLISHING | gpt-4o, glm-4 |
+| VALIDATION | deepseek-chat, qwen-plus |
+| COST_SENSITIVE | deepseek-chat, abab6.5s |
 
-### 7.3 上下文管理
-
-管理对话历史，防止 token 溢出：
+### 7.3 模型降级策略
 
 ```
-┌──────────────────────────────────────────────┐
-│            Context Management                  │
-├──────────────────────────────────────────────┤
-│                                               │
-│  1. 计算当前 token 数量                       │
-│  2. 如果超过阈值：                            │
-│     - 压缩历史消息                            │
-│     - 或截断早期内容                           │
-│     - 或使用摘要替换                           │
-│  3. 确保最新上下文完整                        │
-│                                               │
-│  策略：                                        │
-│  - 固定窗口: 保留最近N条                       │
-│  - 滑动窗口: 保留时间范围内                    │
-│  - 摘要替换: 用摘要替换早期对话                 │
-│                                               │
-└──────────────────────────────────────────────┘
+超时 → 重试 → 降级模型 → 仍失败则暂停任务
 ```
+
+### 7.4 上下文管理
+
+- 上下文预算分配：Blueprint(10%) + ArcPlan(15%) + Summaries(25%) + Plotlines(15%) + Characters(15%) + StyleGuide(10%) + Outline(10%)
+- 超限裁剪：优先丢弃老正文 > 过期角色 > 已关闭伏笔 > 旧阶段目标
+- 保留：当前目标 + 活跃伏笔 + 主角状态 + 世界规则
 
 ---
 
@@ -735,163 +514,80 @@ const MODEL_ROUTING = {
 ### 8.1 组件层次
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    Component Architecture                      │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│  ┌─────────────────────────────────────────────────────────┐│
-│  │                    Layout Components                     ││
-│  │   Header, Sidebar, Footer                               ││
-│  └─────────────────────────────────────────────────────────┘│
-│                              │                                │
-│                              ▼                                │
-│  ┌─────────────────────────────────────────────────────────┐│
-│  │                    Page Components                       ││
-│  │   ProjectsPage, ProjectDetailPage, ChapterEditorPage   ││
-│  └─────────────────────────────────────────────────────────┘│
-│                              │                                │
-│                              ▼                                │
-│  ┌─────────────────────────────────────────────────────────┐│
-│  │                   Feature Components                     ││
-│  │   AI Components: StreamViewer, DeslopPanel, ReviewPanel││
-│  │   Chapter Components: ChapterList, ChapterEditor      ││
-│  │   Project Components: ProjectCard, BatchGenerator      ││
-│  └─────────────────────────────────────────────────────────┘│
-│                              │                                │
-│                              ▼                                │
-│  ┌─────────────────────────────────────────────────────────┐│
-│  │                      UI Components                       ││
-│  │   Button, Input, Modal, Card, Badge, Toast, etc.        ││
-│  └─────────────────────────────────────────────────────────┘│
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
+Layout (Header, Sidebar)
+  └── Page Components (ProjectsPage, ProjectDetailPage, ChapterEditorPage)
+        └── Feature Components
+              ├── AI Components (30个): StreamViewer, DeslopPanel, ChapterQualityPanel, ...
+              ├── Chapter Components: ChapterList, ChapterEditor
+              ├── Project Components: ProjectCard, BatchGenerator
+              └── UI Components: Button, Input, Modal, Card, Badge, Toast, ...
 ```
 
-### 8.2 核心组件列表
-
-#### AI 功能组件 (30个)
+### 8.2 核心 AI 组件
 
 | 组件 | 功能 |
 |------|------|
-| `StreamViewer.tsx` | 流式生成内容显示 |
-| `DeslopPanel.tsx` | 去AI味面板 |
-| `ChapterQualityPanel.tsx` | 章节质量分析 |
-| `ReviewPanel.tsx` | 审核面板 |
-| `RevisionPanel.tsx` | 修订面板 |
-| `PlotlineTracker.tsx` | 伏笔追踪器 |
-| `CharacterRelationshipGraph.tsx` | 角色关系图 |
-| `ChapterRhythmHeatmap.tsx` | 章节节奏热力图 |
-| `PlotAnalyzer.tsx` | 剧情分析器 |
-| `BatchProgress.tsx` | 批量进度 |
-| `GeneratePanel.tsx` | 生成面板 |
-| `ContinuationPanel.tsx` | 续写面板 |
-| `BookAnalysisPanel.tsx` | 书籍分析面板 |
-| `WorkflowHooksPanel.tsx` | 工作流钩子 |
-| `AgentManager.tsx` | Agent管理 |
-| `MarketScanPanel.tsx` | 市场扫描 |
-| `SuggestionButtons.tsx` | 建议按钮 |
-| `ContinuationResults.tsx` | 续写结果 |
-
-#### 章节组件
-
-| 组件 | 功能 |
-|------|------|
-| `ChapterList.tsx` | 章节列表（拖拽排序） |
-| `ChapterEditor.tsx` | 章节编辑器 |
-
-### 8.3 状态管理
-
-使用 React Hook Form + Zod 进行表单验证：
-
-```typescript
-// 表单验证示例
-const schema = z.object({
-  title: z.string().min(1, '标题不能为空'),
-  genre: z.string().optional(),
-  writingStyle: z.string().optional(),
-  targetWordCount: z.number().min(10000),
-})
-
-// 使用
-const form = useForm<FormData>({
-  resolver: zodResolver(schema),
-  defaultValues: { /* ... */ }
-})
-```
+| `StreamViewer` | SSE 流式生成内容显示 |
+| `DeslopPanel` | 去 AI 味检测和重写面板 |
+| `ChapterQualityPanel` | 章节质量分析和一键优化 |
+| `ReviewPanel` | 多人审核面板 |
+| `RevisionPanel` | 章节修订面板 |
+| `PlotlineTracker` | 伏笔追踪器 |
+| `CharacterRelationshipGraph` | 角色关系图 (React Flow) |
+| `ChapterRhythmHeatmap` | 章节节奏热力图 (D3.js) |
+| `PlotAnalyzer` | 剧情分析器 |
+| `BatchProgress` | 批量生成进度 |
+| `GeneratePanel` | 生成配置面板 |
+| `ContinuationPanel` | 续写面板 |
+| `BookAnalysisPanel` | 书籍分析面板 |
+| `AgentManager` | Agent 管理 |
+| `MarketScanPanel` | 市场扫描 |
+| `StreamViewer` | 流式生成 (支持自动去AI味) |
 
 ---
 
 ## 9. 业务逻辑流程
 
-### 9.1 小说创作流程
+### 9.1 小说创作主流程
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    Novel Creation Flow                           │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  [1. 项目创建]                                                    │
-│      │                                                           │
-│      ├──> 填写基本信息（类型、风格、字数目标）                         │
-│      ├──> 设定世界观、力量体系、主角人设                            │
-│      └──> 生成大纲（可选）                                         │
-│                                                                  │
-│  [2. 章节规划]                                                    │
-│      │                                                           │
-│      ├──> 自动生成章节目录（支持3种标题风格）                         │
-│      ├──> 手动调整章节顺序                                         │
-│      └──> 设定每卷结构                                             │
-│                                                                  │
-│  [3. 章节生成]                                                    │
-│      │                                                           │
-│      ├──> 选择章节                                                │
-│      ├──> 配置生成参数（字数、温度、上下文）                          │
-│      ├──> 启动流式生成                                            │
-│      └──> 实时预览                                                │
-│                                                                  │
-│  [4. 质量优化]                                                    │
-│      │                                                           │
-│      ├──> AI质量分析（多维评分）                                    │
-│      ├──> 去AI味优化                                              │
-│      ├──> 审核修订                                                │
-│      └──> 保存定稿                                                │
-│                                                                  │
-│  [5. 导出发布]                                                    │
-│      │                                                           │
-│      ├──> 导出格式（txt/md/json/epub）                            │
-│      └──> 打包下载                                                │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
+用户输入极简设定
+  ↓
+AI 生成 Book Blueprint (核心卖点 + 世界方向 + 主线方向)
+  ↓
+AI 生成 Arc Plan (当前阶段)
+  ↓
+AI 决定批次大小
+  ↓
+AI 生成当前目录
+  ↓
+OutlineValidator (防提前结局)
+  ↓
+逐章生成正文 (策划→写作→润色→评审→校验→去AI味→质量门禁)
+  ↓
+生成摘要 → 更新 StoryState → 更新 Plotline
+  ↓
+进入下一阶段 (世界扩张 → 反派升级 → 新 Arc)
 ```
 
-### 9.2 拆解分析流程
+### 9.2 章节连续性流程 (新增)
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                  Novel Analysis Flow                              │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  [1. 导入小说]                                                    │
-│      │                                                           │
-│      └──> 上传小说文本文件                                        │
-│                                                                  │
-│  [2. 自动分析]                                                    │
-│      │                                                           │
-│      ├──> 提取世界观/力量体系                                      │
-│      ├──> 识别主要角色                                            │
-│      ├──> 分析人物关系                                          │
-│      ├──> 梳理剧情线                                            │
-│      ├──> 追踪伏笔埋设/回收                                      │
-│      └──> 分析章节节奏                                          │
-│                                                                  │
-│  [3. 可视化展示]                                                  │
-│      │                                                           │
-│      ├──> 角色关系图                                            │
-│      ├──> 伏笔追踪表                                            │
-│      ├──> 情绪曲线图                                            │
-│      └──> 章节节奏热力图                                         │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
+生成章节 N-1
+  ↓
+提取 ContinuityAnchor (结尾原文 + 必须继续点 + 禁止跳跃)
+  ↓
+构建 OpeningObligation (决策钩子/系统提示/倒计时/门/到达等)
+  ↓
+注入 Planner prompt (第一场景必须处理 obligation)
+  ↓
+注入 Writer prompt (前300-500字必须兑现上一章结尾承诺)
+  ↓
+生成章节 N
+  ↓
+Continuity Audit (serial_flow_break 检测)
+  ↓
+通过 → 提交 / 失败 → 修复
 ```
 
 ---
@@ -900,149 +596,116 @@ const form = useForm<FormData>({
 
 ### 10.1 分层摘要系统
 
-创新性地解决长篇小说 token 超限问题：
-
-- **L1**: 章节摘要（200-300字）
-- **L2**: 卷摘要（500-800字）
-- **L3**: 全书摘要（1000-1500字）
-
-通过摘要聚合而非简单截断，保留关键信息的同时大幅压缩 token。
+解决长篇小说 (760+ 章节) token 超限问题，通过摘要聚合而非简单截断保留关键信息。
 
 ### 10.2 多维质量评估
 
-除传统评分外，新增多维度 AI 味道检测：
-
-| 维度 | 检测方法 |
-|------|----------|
-| 词汇自然度 | L1/L2/L3禁用词统计 |
-| 模式多样性 | 排比句、对称句检测 |
-| 结构变化 | 段落长度方差分析 |
-| 节奏韵律 | 句子长度分布 |
-| 沉浸体验 | 感官描写密度 |
+5 维度评分 (词汇/模式/结构/节奏/沉浸度)，结合 60+ 禁用词库和 10 种禁止模式。
 
 ### 10.3 智能路由
 
-根据任务类型自动选择最优 AI 模型：
+按任务类型自动选择最优 AI 模型，兼顾质量和成本。
 
-- 策划任务 → 创意型模型
-- 写作任务 → 质量型模型
-- 校验任务 → 逻辑型模型
-- 成本敏感 → 性价比模型
+### 10.4 章节连续性锚点
 
-### 10.4 去 AI 味策略
+上一章结尾承诺必须在下一章兑现，通过 `OpeningObligation` 和 `serial_flow_break` 审计确保阅读流畅性。
 
-专业网文写作规范，消除"机器感"：
+### 10.5 长篇工业化控制
 
-- 分层禁用词库（60+词）
-- 禁止模式识别（8种）
-- 三档优化强度（轻/中/重）
-- 人类写作特征模拟
+- Book Blueprint: 只定义核心方向，不写死全书
+- Arc Plan: 阶段规划，当前只生成当前批次
+- 世界扩张: 地图/势力/层级/文明持续扩展
+- 反派生命周期: 阶段 Boss 不是终极 Boss
+- 防提前结局: 进度 < 85% 禁止终局语义
 
-### 10.5 伏笔追踪系统
+### 10.6 上下文预算管理
 
-自动管理伏笔生命周期：
+精确的 token 预算分配，确保各维度信息都能进入生成上下文。
 
-- 埋设时记录位置和预期
-- 进行中追踪状态
-- 回收时验证合理性
-- 支持跨卷级伏笔
+---
 
-### 10.6 RAG 向量检索系统
+## 11. 当前状态
 
-基于 pgvector 的智能检索增强：
+### 11.1 完成度
 
-- 向量化存储章节内容
-- 智能上下文检索
-- RAG 向量重建 API
-- 记忆编排优化生成
+| 模块 | 状态 | 说明 |
+|------|------|------|
+| 项目 CRUD | ✅ | 创作/拆解双模式 |
+| 章节管理 | ✅ | CRUD + 拖拽 + 版本 |
+| 章节生成 | ✅ | SSE + 批量 + 修复 |
+| Agent 流水线 | ✅ | 11 Agent + 质量门禁 |
+| 分层摘要 | ✅ | L1/L2/L3 三层 |
+| 去 AI 味 | ✅ | 60+词库 + 多维评分 |
+| 角色管理 | ✅ | 档案 + 关系图 + 声音指纹 |
+| 伏笔追踪 | ✅ | 埋设/回收/状态 |
+| 长篇控制 | ✅ | 蓝图 + 弧线 + 世界扩张 |
+| 章节连续性 | ✅ | 锚点 + 审计 + 串行流程 |
+| 统一运行态 | ✅ | runtimeSummary |
+| 上下文管理 | ✅ | 预算 + 压缩 + 策略 |
+| 导出 | ✅ | TXT/MD/JSON/EPUB |
+| 成本追踪 | ✅ | Token + 配额 + 预警 |
+| 风格系统 | ✅ | 提取 + 验证 + 应用 |
+| 市场分析 | ✅ | 趋势 + 竞品 + 灵感 |
+| 虚拟作家 | ✅ | 训练 + 风格学习 |
+| RAG 检索 | ✅ | pgvector + 索引重建 |
+| 封面生成 | ✅ | AI 生成 + 管理 |
+| 通知系统 | ✅ | 系统/任务/配额/错误 |
+| 文档体系 | ✅ | 20+ 文档 |
 
-### 10.7 章节提交与重播系统
+### 11.2 待处理 (P1)
 
-完整的章节状态管理：
+- 旧 engine API 标记 legacy
+- 蓝图/ArcPlan 阶段 heartbeat event
+- 导出入口 runtimeSummary 提示
+- Job cancel 用户态文案
+- 主链路 smoke test
 
-- 保存完整生成状态
-- 从历史提交点重播生成
-- 状态回滚机制
-- 完整生成历史追溯
+### 11.3 测试覆盖
 
-### 10.8 项目健康度检查与自动维护
-
-智能项目管理功能：
-
-- 伏笔回收率监控
-- 章节完成度统计
-- 自动维护任务队列
-- 健康度评分与建议
-
-### 10.9 反检测与去 AI 味增强
-
-双系统结合优化：
-
-- 检测 AI 生成内容
-- 自动化重写降低 AI 痕迹
-- 专业禁用词库
-- 多样化写作特征模拟
-
-### 10.10 分析任务管理系统
-
-异步分析任务处理：
-
-- 任务状态追踪
-- 取消与重试机制
-- 进度实时更新
-- 分析结果持久化
+- 280 个单元测试，35 个测试文件，全部通过
+- 覆盖：Agent 行为、工具函数、prompt、章节提交、流水线 worker、工作流阶段
+- E2E: Playwright 覆盖创建和门禁展示
 
 ---
 
 ## 附录
 
-### A. 环境变量配置
-
-```env
-# 数据库
-DATABASE_URL="postgresql://..."
-
-# AI API Keys
-DEEPSEEK_API_KEY="..."
-OPENAI_API_KEY="..."
-ANTHROPIC_API_KEY="..."
-# ...
-
-# 默认配置
-DEFAULT_AI_VENDOR="DEEPSEEK"
-DEFAULT_AI_MODEL_ID="deepseek-chat"
-```
-
-### B. 常用命令
-
-```bash
-# 开发
-npm run dev          # 启动开发服务器 (端口3200)
-npm run build        # 构建生产版本
-npm start            # 启动生产服务器
-
-# 数据库
-npm run db:migrate:dev   # 运行迁移
-npm run db:generate       # 生成Prisma Client
-
-# 测试
-npm test             # 单元测试
-npm run test:e2e     # E2E测试
-
-# Docker
-npm run docker:start    # 启动Docker
-npm run docker:build    # 构建镜像
-```
-
-### C. 相关文档
+### A. 文档索引
 
 | 文档 | 路径 | 内容 |
 |------|------|------|
-| README | README.md | 项目介绍 |
+| Agent 开发指南 | AGENTS.md | 开发规则和架构约束 |
+| 项目配置 | CLAUDE.md | 环境变量、开发规范 |
 | 代码架构 | CODE_WIKI.md | 详细架构文档 |
-| 开发指南 | CLAUDE.md | 项目配置说明 |
-| 去AI味 | 去ai味提示词.md | 提示词策略 |
+| 功能清单 | docs/FEATURE_CHECKLIST.md | 完整功能清单 (42节) |
+| 开发进度 | docs/DEV_PROGRESS.md | 开发进度和状态 |
+| 开发决策 | docs/DEV_DECISIONS.md | 关键架构决策 |
+| TODO 跟踪 | docs/DEV_TODO.md | P0/P1/P2/P3 优先级 |
+| TODO Issues | TODO_ISSUES.md | 代码 TODO 记录 |
+| 质量审计 | docs/quality-audit-2026-06-01.md | 全流程质量审计 |
+| 连续性设计 | docs/superpowers/specs/2026-06-02-chapter-continuity-p0-design.md | 章节连续性 P0 |
+| 串行流程 | docs/superpowers/specs/2026-06-03-serial-chapter-flow-design.md | 串行章节流程 |
+| 质量优化 | docs/superpowers/plans/2026-05-31-quality-optimization.md | 质量优化计划 |
+| 改造清单 | docs/改造清单v1.md | 工业化改造清单 |
+| 优化建议 | docs/优化建议.md | 全面优化建议 |
+| 部署文档 | docs/DEPLOYMENT.md | 部署指南 |
+
+### B. 环境变量
+
+| 变量名 | 必填 | 说明 |
+|--------|------|------|
+| `DATABASE_URL` | 是 | PostgreSQL 连接 |
+| `DEFAULT_AI_VENDOR` | 否 | 默认 AI 提供商 |
+| `DEFAULT_AI_MODEL_ID` | 否 | 默认模型 ID |
+| `DEEPSEEK_API_KEY` | 否 | DeepSeek Key |
+| `OPENAI_API_KEY` | 否 | OpenAI Key |
+| `ANTHROPIC_API_KEY` | 否 | Anthropic Key |
+| `ALIBABA_API_KEY` | 否 | 阿里云 Key |
+| `MINIMAX_API_KEY` | 否 | MiniMax Key |
+| `VOLCENGINE_API_KEY` | 否 | 火山引擎 Key |
+| `ZHIPU_API_KEY` | 否 | 智谱 AI Key |
+| `MIMO_API_KEY` | 否 | 秘塔 AI Key |
 
 ---
 
-*文档生成完毕，如需补充或修正，请联系项目维护者。*
+*文档生成完毕。项目处于活跃开发状态，P0 全部完成，P1 进行中。*
