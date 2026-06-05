@@ -38,6 +38,11 @@ export function getWorkflowBlockReason(input: ProjectFlowState): string | null {
   if (!input.blueprintConfirmedAt) return 'Blueprint 未确认，不能启动正文生成'
   if (!input.hasArcPlans) return '请先生成并确认 ArcPlan'
   if (!input.arcPlanConfirmedAt) return 'ArcPlan 未确认，不能生成章节目录或正文'
+
+  // 向后兼容：已在 GENERATE 阶段的项目不受大纲审核影响
+  const explicit = input.workflowStage?.toUpperCase()
+  if (explicit === 'GENERATE') return null
+
   if (input.hasOutlines && !input.outlineConfirmedAt) return '章节目录未确认，请先审核并确认大纲'
   return null
 }

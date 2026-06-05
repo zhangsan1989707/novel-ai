@@ -83,6 +83,7 @@
 
   /* ---------- Z-Index ---------- */
   --z-dropdown: 40;
+  --z-drawer: 45;
   --z-modal: 50;
   --z-toast: 60;
 }

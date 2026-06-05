@@ -7,7 +7,8 @@ import { WorkflowBlueprintCard } from '@/components/project/WorkflowBlueprintCar
 import { blueprintProgressSteps } from '@/components/project/detail/constants'
 import { WorkflowArcPlanCard } from '@/components/project/WorkflowArcPlanCard'
 import { OutlineReviewPanel } from '@/components/project/detail/OutlineReviewPanel'
-import { CharacterPanel, AnalysisWorkbench } from '@/components/ai'
+import { CharacterPanel, AnalysisWorkbench, GenerationDashboard } from '@/components/ai'
+import { VolumeManagementPanel } from '@/components/project/VolumeManagementPanel'
 import { BookOpen, Users, Search, Rocket, Wrench, Play, Download, Wand2, Square } from 'lucide-react'
 import { formatDisplayDate } from '@/lib/helpers'
 import { getMinimumChapterWordCount } from '@/lib/ai/chapter-quality'
@@ -630,6 +631,16 @@ ${ch.content || ''}
                       onSpeedModeChange={setSelectedSpeedMode}
                     />
 
+                    <GenerationDashboard
+                      projectId={projectId}
+                      chapters={project.chapters.map(c => ({
+                        chapterNumber: c.chapterNumber,
+                        title: c.title,
+                        status: c.status,
+                        wordCount: c.wordCount,
+                      }))}
+                    />
+
                   <Card>
                     <CardHeader>
                       <div className="flex items-center justify-between">
@@ -689,6 +700,9 @@ ${ch.content || ''}
                       />
                     </CardContent>
                   </Card>
+
+                  <VolumeManagementPanel projectId={projectId} />
+
                   </>
                   )}
                 </>

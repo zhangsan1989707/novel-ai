@@ -268,7 +268,7 @@ export function ChapterDrawer({ projectId, chapterId, chapters, onClose, onNavig
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex justify-end bg-black/50" onClick={onClose}>
+      <div className="fixed inset-0 z-drawer flex justify-end bg-black/50" onClick={onClose}>
         <div
           className="w-full max-w-3xl bg-white dark:bg-gray-900 h-full overflow-hidden flex flex-col shadow-2xl"
           onClick={e => e.stopPropagation()}

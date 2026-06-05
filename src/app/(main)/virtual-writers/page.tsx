@@ -40,8 +40,8 @@ export default function VirtualWritersPage() {
       const res = await fetch(`/api/novel/virtual-writers?${params}`)
       if (res.ok) {
         const data = await res.json()
-        setWriters(data.data || [])
-        setTotalPages(data.pagination?.totalPages || 1)
+        setWriters(data.data?.writers || [])
+        setTotalPages(data.data?.pagination?.totalPages || 1)
       }
     } catch {
       // ignore

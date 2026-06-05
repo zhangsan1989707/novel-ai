@@ -974,13 +974,20 @@ export async function runProductionPipeline(
     )
 
     // 大纲审核暂停点：生成完章节目录后暂停，等待用户确认
-    await prisma.novelProject.update({
+    // 向后兼容：已在 GENERATE 阶段的项目跳过大纲审核
+    const currentProject = await prisma.novelProject.findUnique({
       where: { id: projectId },
-      data: { workflowStage: 'OUTLINE_REVIEW', outlineConfirmedAt: null },
+      select: { workflowStage: true },
     })
-    await pauseJob(jobId)
-    await updateJobRuntime(jobId, runtime)
-    return
+    if (currentProject?.workflowStage !== 'GENERATE') {
+      await prisma.novelProject.update({
+        where: { id: projectId },
+        data: { workflowStage: 'OUTLINE_REVIEW', outlineConfirmedAt: null },
+      })
+      await pauseJob(jobId)
+      await updateJobRuntime(jobId, runtime)
+      return
+    }
 
     if (await isJobPaused(jobId)) {
       await updateJobRuntime(jobId, runtime)

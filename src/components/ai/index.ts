@@ -44,3 +44,5 @@ export { ExportPanel } from './ExportPanel'
 export { AntiDetectPanel } from './AntiDetectPanel'
 // Chapter Quality
 export { ChapterQualityPanel } from './ChapterQualityPanel'
+// Generation Dashboard
+export { GenerationDashboard } from './GenerationDashboard'

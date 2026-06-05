@@ -16,8 +16,24 @@ const PUBLIC_API_PREFIXES = [
   '/api/health/',
 ]
 
+const PROTECTED_PAGE_PREFIXES = [
+  '/projects',
+  '/settings',
+  '/notifications',
+  '/market',
+  '/virtual-writers',
+  '/cost',
+]
+
 function isDevelopmentEnv() {
   return process.env.NODE_ENV !== 'production' && process.env.AUTH_ENFORCE !== 'true'
+}
+
+function getSessionCookie(request: NextRequest) {
+  return request.cookies.get('authjs.session-token')
+    || request.cookies.get('next-auth.session-token')
+    || request.cookies.get('__Secure-authjs.session-token')
+    || request.cookies.get('__Secure-next-auth.session-token')
 }
 
 export function middleware(request: NextRequest) {
@@ -27,16 +43,12 @@ export function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  const isProtected = PROTECTED_API_PREFIXES.some(prefix => pathname.startsWith(prefix))
-  const isPublic = PUBLIC_API_PREFIXES.some(prefix => pathname.startsWith(prefix))
+  // API route protection
+  const isProtectedApi = PROTECTED_API_PREFIXES.some(prefix => pathname.startsWith(prefix))
+  const isPublicApi = PUBLIC_API_PREFIXES.some(prefix => pathname.startsWith(prefix))
 
-  if (isProtected && !isPublic) {
-    const sessionCookie = request.cookies.get('authjs.session-token')
-      || request.cookies.get('next-auth.session-token')
-      || request.cookies.get('__Secure-authjs.session-token')
-      || request.cookies.get('__Secure-next-auth.session-token')
-
-    if (!sessionCookie) {
+  if (isProtectedApi && !isPublicApi) {
+    if (!getSessionCookie(request)) {
       return NextResponse.json(
         { success: false, error: { code: 'UNAUTHORIZED', message: '未登录' } },
         { status: 401 }
@@ -44,9 +56,15 @@ export function middleware(request: NextRequest) {
     }
   }
 
+  // Page route protection
+  const isProtectedPage = PROTECTED_PAGE_PREFIXES.some(prefix => pathname.startsWith(prefix))
+  if (isProtectedPage && !getSessionCookie(request)) {
+    return NextResponse.redirect(new URL('/login', request.url))
+  }
+
   return NextResponse.next()
 }
 
 export const config = {
-  matcher: ['/api/:path*'],
+  matcher: ['/api/:path*', '/projects/:path*', '/settings/:path*', '/notifications/:path*', '/market/:path*', '/virtual-writers/:path*', '/cost/:path*'],
 }
