@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { logError } from '@/lib/logger'
 import { AnalysisDimension } from '@/types'
 import { buildFallbackAnalysisData, isRefusalContent } from '@/lib/analysis/book-analysis-fallback'
+import { projectNotFoundResponse, requireProjectOwner } from '@/lib/server/project-access'
 
 // ============================================
 // Schema 验证
@@ -36,6 +37,10 @@ export async function GET(
         { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
         { status: 400 }
       )
+    }
+
+    if (!await requireProjectOwner(projectIdNum)) {
+      return projectNotFoundResponse()
     }
 
     const { searchParams } = new URL(request.url)

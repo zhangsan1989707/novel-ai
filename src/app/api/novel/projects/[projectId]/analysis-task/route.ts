@@ -14,6 +14,7 @@ import {
   DEFAULT_ANALYSIS_DIMENSIONS,
   DEFAULT_CONTEXT_CHAPTER_COUNT,
 } from '@/lib/analysis/config'
+import { projectNotFoundResponse, requireProjectOwner } from '@/lib/server/project-access'
 
 const createTaskSchema = z.object({
   volumeNumber: z.number().int().min(-1).max(100).default(-1),
@@ -39,6 +40,10 @@ export async function POST(
         { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
         { status: 400 }
       )
+    }
+
+    if (!await requireProjectOwner(projectIdNum)) {
+      return projectNotFoundResponse()
     }
 
     const body = await request.json()
@@ -108,6 +113,10 @@ export async function GET(
         { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
         { status: 400 }
       )
+    }
+
+    if (!await requireProjectOwner(projectIdNum)) {
+      return projectNotFoundResponse()
     }
 
     const { searchParams } = new URL(request.url)

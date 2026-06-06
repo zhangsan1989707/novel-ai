@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { logError } from '@/lib/logger'
+import { requireProjectOwner, projectNotFoundResponse } from '@/lib/server/project-access'
 
 const generateSchema = z.object({
   projectId: z.number().int().positive(),
@@ -20,6 +21,11 @@ export async function POST(request: NextRequest) {
     const parsed = generateSchema.parse(body)
     projectId = parsed.projectId
     chapterNo = parsed.chapterNo
+
+    const project = await requireProjectOwner(projectId)
+    if (!project) {
+      return projectNotFoundResponse()
+    }
 
     // 生成 jobId
     const jobId = `job_${projectId}_${chapterNo}_${Date.now()}`

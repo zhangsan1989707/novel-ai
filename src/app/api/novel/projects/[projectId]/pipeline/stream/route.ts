@@ -1,5 +1,6 @@
-import { NextRequest } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { readProjectPipelineSnapshot } from '@/lib/engine/project-pipeline-snapshot'
+import { projectNotFoundResponse, requireProjectOwner } from '@/lib/server/project-access'
 
 interface RouteParams {
   params: Promise<{ projectId: string }>
@@ -10,7 +11,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const projectId = Number.parseInt(projectIdStr, 10)
 
   if (Number.isNaN(projectId)) {
-    return new Response('invalid project id', { status: 400 })
+    return NextResponse.json(
+      { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
+      { status: 400 }
+    )
+  }
+
+  if (!await requireProjectOwner(projectId)) {
+    return projectNotFoundResponse()
   }
 
   const encoder = new TextEncoder()

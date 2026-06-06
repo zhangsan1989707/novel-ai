@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCharacterProfiles } from '@/lib/memory/character-memory'
 import { logError } from '@/lib/logger'
+import { requireProjectOwner, projectNotFoundResponse } from '@/lib/server/project-access'
 
 interface RouteParams {
   params: Promise<{ projectId: string }>
@@ -21,6 +22,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
         { status: 400 }
       )
+    }
+
+    const project = await requireProjectOwner(projectIdNum)
+    if (!project) {
+      return projectNotFoundResponse()
     }
 
     const characters = await getCharacterProfiles(projectIdNum)

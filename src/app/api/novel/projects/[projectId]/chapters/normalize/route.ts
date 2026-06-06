@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { logError } from '@/lib/logger'
 import { countChapterWords, syncProjectChapterWordCount } from '@/lib/novel/chapter-word-count'
 import { normalizeChapterContentForUser } from '@/lib/chapter-content-normalizer'
+import { projectNotFoundResponse, requireProjectOwner } from '@/lib/server/project-access'
 
 const normalizeSchema = z.object({
   chapters: z.array(z.object({
@@ -27,6 +28,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
         { status: 400 }
       )
+    }
+
+    if (!await requireProjectOwner(projectIdNum)) {
+      return projectNotFoundResponse()
     }
 
     const body = await request.json()

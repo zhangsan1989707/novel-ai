@@ -5,6 +5,7 @@ import { ProjectMode } from '@/types'
 import { logError } from '@/lib/logger'
 import { getCurrentUserId } from '@/lib/auth'
 import { countChapterWords } from '@/lib/novel/chapter-word-count'
+import { redactAIConfig } from '@/lib/ai/config-redaction'
 
 // ============================================
 // Schema 验证
@@ -104,7 +105,13 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    return NextResponse.json({ success: true, data: project }, { status: 201 })
+    return NextResponse.json({
+      success: true,
+      data: {
+        ...project,
+        aiModelConfig: project.aiModelConfig ? redactAIConfig(project.aiModelConfig) : null,
+      },
+    }, { status: 201 })
   } catch (error: unknown) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { createProviderFromConfigId, createProviderFromDefaultConfig } from '@/lib/ai/factory'
+import { projectNotFoundResponse, requireProjectOwner } from '@/lib/server/project-access'
 
 export async function POST(
   request: NextRequest,
@@ -12,6 +13,17 @@ export async function POST(
     const projectId = parseInt(projectIdStr)
     const chapterId = parseInt(chapterIdStr)
 
+    if (isNaN(projectId) || isNaN(chapterId)) {
+      return NextResponse.json(
+        { success: false, error: { code: 'INVALID_ID', message: '无效的ID' } },
+        { status: 400 }
+      )
+    }
+
+    if (!await requireProjectOwner(projectId)) {
+      return projectNotFoundResponse()
+    }
+
     const project = await prisma.novelProject.findUnique({
       where: { id: projectId },
       include: { aiModelConfig: true },
@@ -20,6 +32,18 @@ export async function POST(
     if (!project) {
       return NextResponse.json(
         { success: false, error: { code: 'PROJECT_NOT_FOUND', message: '项目不存在' } },
+        { status: 404 }
+      )
+    }
+
+    const chapter = await prisma.novelChapter.findFirst({
+      where: { id: chapterId, projectId },
+      select: { id: true },
+    })
+
+    if (!chapter) {
+      return NextResponse.json(
+        { success: false, error: { code: 'NOT_FOUND', message: '章节不存在' } },
         { status: 404 }
       )
     }

@@ -11,6 +11,7 @@ import { toProjectDTO, toChapterDTO } from '@/types/dto'
 import { recordAndApplyChapterCommit } from '@/lib/engine/chapter-commit'
 import { buildChapterMemoryPack } from '@/lib/memory'
 import { estimateMaxTokensForTargetWordCount } from '@/lib/ai/speed-mode'
+import { projectNotFoundResponse, requireProjectOwner } from '@/lib/server/project-access'
 
 // ============================================
 // Schema 验证
@@ -49,6 +50,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
         { status: 400 }
       )
+    }
+
+    const projectOwner = await requireProjectOwner(projectIdNum)
+    if (!projectOwner) {
+      return projectNotFoundResponse()
     }
 
     const rateLimitResponse = aiGenerationLimiter(request)
@@ -164,10 +170,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     // 创建 SSE 流式响应
     const encoder = new TextEncoder()
+    let clientClosed = false
+    request.signal.addEventListener('abort', () => {
+      clientClosed = true
+    })
 
     const stream = new ReadableStream({
       async start(controller) {
         const sendEvent = (event: string, data: Record<string, unknown>) => {
+          if (clientClosed) return
           const message = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
           controller.enqueue(encoder.encode(message))
         }
@@ -191,6 +202,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             temperature,
             maxTokens: estimateMaxTokensForTargetWordCount(targetWordCount),
           })) {
+            if (clientClosed) {
+              break
+            }
+
             fullContent += token
 
             // 实时计算字数
@@ -208,6 +223,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             if (wordCount >= targetWordCount * 1.1) {
               break
             }
+          }
+
+          if (clientClosed) {
+            await prisma.novelChapter.update({
+              where: { id: chapterId },
+              data: { status: 'DRAFT' },
+            })
+            return
           }
 
           // 最终字数
@@ -267,7 +290,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             message: error instanceof Error ? error.message : '生成失败',
           })
         } finally {
-          controller.close()
+          try {
+            controller.close()
+          } catch {}
         }
       },
     })

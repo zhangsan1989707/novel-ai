@@ -10,6 +10,7 @@ import {
   buildStyleModulationPrompt,
   DEFAULT_STYLE_VECTOR,
 } from '@/lib/engine/style-engine'
+import { requireProjectOwner, projectNotFoundResponse } from '@/lib/server/project-access'
 
 /**
  * GET /api/novel/ai/style
@@ -37,6 +38,12 @@ export async function POST(req: NextRequest) {
     if (action === 'analyze') {
       if (!projectId) throw new AppError(ErrorCodes.VALIDATION_ERROR, '缺少 projectId', 400)
 
+      // 项目所有权校验
+      const projectAccess = await requireProjectOwner(projectId)
+      if (!projectAccess) {
+        return projectNotFoundResponse()
+      }
+
       const chapters = await prisma.novelChapter.findMany({
         where: { projectId, status: 'COMPLETED', content: { not: null } },
         select: { content: true },
@@ -54,6 +61,13 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'match') {
+      if (projectId) {
+        const projectAccess = await requireProjectOwner(projectId)
+        if (!projectAccess) {
+          return projectNotFoundResponse()
+        }
+      }
+
       const project = projectId
         ? await prisma.novelProject.findUnique({
             where: { id: projectId },
@@ -71,6 +85,13 @@ export async function POST(req: NextRequest) {
 
     if (action === 'blend') {
       if (!overrides) throw new AppError(ErrorCodes.VALIDATION_ERROR, '缺少 overrides', 400)
+
+      if (projectId) {
+        const projectAccess = await requireProjectOwner(projectId)
+        if (!projectAccess) {
+          return projectNotFoundResponse()
+        }
+      }
 
       const project = projectId
         ? await prisma.novelProject.findUnique({

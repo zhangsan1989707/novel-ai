@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { tryCatch, error } from '@/lib/api-response'
 import { generateCover, getCoverCapability } from '@/lib/cover/service'
+import { requireProjectOwner } from '@/lib/server/project-access'
 
 const generateSchema = z.object({
   projectId: z.number().int().positive(),
@@ -13,6 +14,10 @@ export async function POST(request: NextRequest) {
   return tryCatch(async () => {
     const body = await request.json()
     const data = generateSchema.parse(body)
+
+    if (!await requireProjectOwner(data.projectId)) {
+      return error('NOT_FOUND', '项目不存在')
+    }
 
     const project = await prisma.novelProject.findUnique({
       where: { id: data.projectId },

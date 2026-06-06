@@ -4,6 +4,7 @@ import { NextRequest } from 'next/server'
 const mocks = vi.hoisted(() => ({
   generate: vi.fn(),
   findUnique: vi.fn(),
+  findFirst: vi.fn(),
 }))
 
 vi.mock('@/lib/ai/service', () => ({
@@ -14,10 +15,15 @@ vi.mock('@/lib/ai/service', () => ({
   },
 }))
 
+vi.mock('@/lib/auth', () => ({
+  getCurrentUserId: vi.fn().mockResolvedValue(1),
+}))
+
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     novelProject: {
       findUnique: mocks.findUnique,
+      findFirst: mocks.findFirst,
     },
   },
 }))
@@ -26,7 +32,9 @@ describe('deslop rewrite API — 用户看到的正文必须是纯文本', () =>
   beforeEach(() => {
     mocks.generate.mockReset()
     mocks.findUnique.mockReset()
+    mocks.findFirst.mockReset()
     mocks.findUnique.mockResolvedValue({ id: 1, genre: '玄幻', writingStyle: '爽文' })
+    mocks.findFirst.mockResolvedValue({ id: 1, creatorId: 1 })
   })
 
   async function callRewrite(content: string) {

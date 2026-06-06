@@ -9,6 +9,7 @@ import { AIVendor, ChapterStatus } from '@/types'
 import { logError } from '@/lib/logger'
 import { toProjectDTO, toChapterDTO } from '@/types/dto'
 import { countChapterWords, syncProjectChapterWordCount } from '@/lib/novel/chapter-word-count'
+import { projectNotFoundResponse, requireProjectOwner } from '@/lib/server/project-access'
 
 // ============================================
 // Schema 验证
@@ -46,6 +47,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   }
 
   try {
+    const projectOwner = await requireProjectOwner(projectIdNum)
+    if (!projectOwner) {
+      return projectNotFoundResponse()
+    }
+
     const body = await request.json()
     const {
       chapterIds,

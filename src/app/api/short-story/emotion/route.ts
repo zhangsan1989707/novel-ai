@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { designShortEmotion } from '@/lib/short-story/service'
 import { handleApiError } from '@/lib/api-response'
+import { requireProjectOwner, projectNotFoundResponse } from '@/lib/server/project-access'
 
 const emotionSchema = z.object({
   projectId: z.number().int().positive(),
@@ -11,6 +12,11 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const parsed = emotionSchema.parse(body)
+
+    const project = await requireProjectOwner(parsed.projectId)
+    if (!project) {
+      return projectNotFoundResponse()
+    }
 
     const result = await designShortEmotion({
       projectId: parsed.projectId,

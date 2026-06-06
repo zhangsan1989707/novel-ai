@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { tryCatch, error } from '@/lib/api-response'
 import { reviewerAgent } from '@/lib/agents/reviewer'
+import { requireProjectOwner } from '@/lib/server/project-access'
 
 const reviewSchema = z.object({
   projectId: z.number().int().positive(),
@@ -14,6 +15,10 @@ export async function POST(request: NextRequest) {
   return tryCatch(async () => {
     const body = await request.json()
     const data = reviewSchema.parse(body)
+
+    if (!await requireProjectOwner(data.projectId)) {
+      return error('NOT_FOUND', '项目不存在')
+    }
 
     const project = await prisma.novelProject.findUnique({
       where: { id: data.projectId },
@@ -61,6 +66,10 @@ export async function GET(request: NextRequest) {
     const parsedId = parseInt(projectId, 10)
     if (isNaN(parsedId)) {
       return error('VALIDATION_ERROR', 'projectId 格式无效')
+    }
+
+    if (!await requireProjectOwner(parsedId)) {
+      return error('NOT_FOUND', '项目不存在')
     }
 
     const reports = await prisma.reviewReport.findMany({

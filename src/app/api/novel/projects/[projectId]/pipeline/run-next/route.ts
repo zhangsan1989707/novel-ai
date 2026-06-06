@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { runNextPipelineJob } from '@/lib/engine/pipeline-worker'
+import { projectNotFoundResponse, requireProjectOwner } from '@/lib/server/project-access'
 
 export async function POST(
   _request: Request,
@@ -14,6 +15,11 @@ export async function POST(
         { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
         { status: 400 }
       )
+    }
+
+    const projectOwner = await requireProjectOwner(projectId)
+    if (!projectOwner) {
+      return projectNotFoundResponse()
     }
 
     const result = await runNextPipelineJob({ projectId })

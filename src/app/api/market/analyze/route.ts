@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { tryCatch } from '@/lib/api-response'
 import { ValidationError } from '@/lib/errors'
 import { analyzeMarketTrend } from '@/lib/market/service'
+import { requireProjectOwner, projectNotFoundResponse } from '@/lib/server/project-access'
 
 export async function POST(request: NextRequest) {
   return tryCatch(async () => {
@@ -10,6 +11,13 @@ export async function POST(request: NextRequest) {
 
     if (!genre || !platform) {
       throw new ValidationError('题材和平台不能为空')
+    }
+
+    if (projectId) {
+      const project = await requireProjectOwner(projectId)
+      if (!project) {
+        return projectNotFoundResponse()
+      }
     }
 
     const result = await analyzeMarketTrend({

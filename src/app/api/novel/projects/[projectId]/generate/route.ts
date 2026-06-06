@@ -9,6 +9,7 @@ import { logError } from '@/lib/logger'
 import { toProjectDTO, toChapterDTO } from '@/types/dto'
 import { recordAndApplyChapterCommit } from '@/lib/engine/chapter-commit'
 import { buildChapterMemoryPack } from '@/lib/memory'
+import { projectNotFoundResponse, requireProjectOwner } from '@/lib/server/project-access'
 
 // ============================================
 // Schema 验证
@@ -46,6 +47,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
         { status: 400 }
       )
+    }
+
+    const projectOwner = await requireProjectOwner(projectIdNum)
+    if (!projectOwner) {
+      return projectNotFoundResponse()
     }
 
     const body = await request.json()

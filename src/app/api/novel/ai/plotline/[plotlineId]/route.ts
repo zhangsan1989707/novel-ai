@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { logError } from '@/lib/logger'
+import { requireProjectOwner, projectNotFoundResponse } from '@/lib/server/project-access'
 
 const requestSchema = z.object({
   status: z.enum(['OPEN', 'RESOLVED', 'ABANDONED']).optional(),
@@ -21,6 +22,23 @@ export async function PATCH(
   try {
     const { plotlineId: paramPlotlineId } = await params
     plotlineId = paramPlotlineId
+
+    // 先查 plotline 拿到 projectId，校验项目所有权
+    const existingPlotline = await prisma.plotline.findUnique({
+      where: { id: paramPlotlineId },
+      select: { projectId: true },
+    })
+    if (!existingPlotline) {
+      return NextResponse.json(
+        { success: false, error: { code: 'NOT_FOUND', message: '伏笔不存在' } },
+        { status: 404 }
+      )
+    }
+
+    const project = await requireProjectOwner(existingPlotline.projectId)
+    if (!project) {
+      return projectNotFoundResponse()
+    }
 
     const body = await request.json()
     const updates = requestSchema.parse(body)

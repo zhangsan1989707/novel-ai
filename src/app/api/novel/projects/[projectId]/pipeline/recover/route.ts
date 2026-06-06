@@ -4,6 +4,7 @@ import { failStaleRunningJobs, prepareJobRecovery } from '@/lib/engine/generatio
 import { runProductionPipeline } from '@/lib/engine/production-pipeline'
 import { replayChapterCommit } from '@/lib/engine/chapter-commit'
 import { normalizeGenerationSpeedMode } from '@/lib/ai/speed-mode'
+import { projectNotFoundResponse, requireProjectOwner } from '@/lib/server/project-access'
 
 export async function POST(
   request: NextRequest,
@@ -18,6 +19,11 @@ export async function POST(
         { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
         { status: 400 }
       )
+    }
+
+    const projectOwner = await requireProjectOwner(projectId)
+    if (!projectOwner) {
+      return projectNotFoundResponse()
     }
 
     const body = await request.json().catch(() => ({}))

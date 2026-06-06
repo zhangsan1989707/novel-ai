@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { cancelJob } from '@/lib/engine/generation-job'
+import { projectNotFoundResponse, requireProjectOwner } from '@/lib/server/project-access'
 
 export async function POST(
   _request: NextRequest,
@@ -15,6 +16,11 @@ export async function POST(
         { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
         { status: 400 }
       )
+    }
+
+    const projectOwner = await requireProjectOwner(projectId)
+    if (!projectOwner) {
+      return projectNotFoundResponse()
     }
 
     const project = await prisma.novelProject.findUnique({ where: { id: projectId } })

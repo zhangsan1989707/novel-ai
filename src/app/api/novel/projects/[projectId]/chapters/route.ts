@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { logError } from '@/lib/logger'
 import { countChapterWords, syncProjectChapterWordCount } from '@/lib/novel/chapter-word-count'
 import { normalizeChapterContentForUser } from '@/lib/chapter-content-normalizer'
+import { projectNotFoundResponse, requireProjectOwner } from '@/lib/server/project-access'
 
 // ============================================
 // Schema 验证
@@ -39,6 +40,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
         { status: 400 }
       )
+    }
+
+    if (!await requireProjectOwner(projectIdNum)) {
+      return projectNotFoundResponse()
     }
 
     const includeContent = new URL(request.url).searchParams.get('includeContent') === 'true'
@@ -94,20 +99,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       )
     }
 
+    if (!await requireProjectOwner(projectIdNum)) {
+      return projectNotFoundResponse()
+    }
+
     const body = await request.json()
     const validatedData = createChapterSchema.parse(body)
-
-    // 检查项目是否存在
-    const project = await prisma.novelProject.findUnique({
-      where: { id: projectIdNum },
-    })
-
-    if (!project) {
-      return NextResponse.json(
-        { success: false, error: { code: 'NOT_FOUND', message: '项目不存在' } },
-        { status: 404 }
-      )
-    }
 
     // 检查章节号是否已存在
     const existing = await prisma.novelChapter.findUnique({

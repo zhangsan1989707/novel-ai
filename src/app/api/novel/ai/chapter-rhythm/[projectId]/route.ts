@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { logError } from '@/lib/logger'
 import { buildChapterMemoryPack, buildMemorySnapshotPack } from '@/lib/memory'
+import { requireProjectOwner, projectNotFoundResponse } from '@/lib/server/project-access'
 
 /**
  * GET /api/novel/ai/chapter-rhythm/[projectId]
@@ -21,6 +22,11 @@ export async function GET(
         { success: false, error: { code: 'VALIDATION_ERROR', message: '无效的项目ID' } },
         { status: 400 }
       )
+    }
+
+    const project = await requireProjectOwner(projectIdNum)
+    if (!project) {
+      return projectNotFoundResponse()
     }
 
     // 获取所有章节和摘要

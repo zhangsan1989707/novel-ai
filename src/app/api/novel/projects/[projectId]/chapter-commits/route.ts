@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { listChapterCommits } from '@/lib/engine/chapter-commit'
+import { projectNotFoundResponse, requireProjectOwner } from '@/lib/server/project-access'
 
 interface RouteParams {
   params: Promise<{ projectId: string }>
@@ -15,6 +16,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
       { status: 400 }
     )
+  }
+
+  if (!await requireProjectOwner(projectId)) {
+    return projectNotFoundResponse()
   }
 
   const project = await prisma.novelProject.findUnique({

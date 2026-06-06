@@ -5,6 +5,7 @@ import { logError } from '@/lib/logger'
 import { countChapterWords, syncProjectChapterWordCount } from '@/lib/novel/chapter-word-count'
 import { sanitizePipelineRuntime } from '@/lib/engine/pipeline-runtime'
 import { normalizeChapterContentForUser } from '@/lib/chapter-content-normalizer'
+import { projectNotFoundResponse, requireProjectOwner } from '@/lib/server/project-access'
 
 // ============================================
 // Schema 验证
@@ -72,10 +73,18 @@ async function getLiveContentFromRuntime(projectId: number, chapterNumber: numbe
  */
 export async function GET(request: NextRequest, { params }: RouteParams) {
   let chapterIdNum: number | null = null
+  let projectIdNum: number | null = null
   try {
     const { projectId, chapterId } = await params
     chapterIdNum = parseInt(chapterId)
-    const projectIdNum = parseInt(projectId)
+    projectIdNum = parseInt(projectId)
+
+    if (isNaN(projectIdNum)) {
+      return NextResponse.json(
+        { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
+        { status: 400 }
+      )
+    }
 
     if (isNaN(chapterIdNum)) {
       return NextResponse.json(
@@ -84,8 +93,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       )
     }
 
-    const chapter = await prisma.novelChapter.findUnique({
-      where: { id: chapterIdNum },
+    if (!await requireProjectOwner(projectIdNum)) {
+      return projectNotFoundResponse()
+    }
+
+    const chapter = await prisma.novelChapter.findFirst({
+      where: { id: chapterIdNum, projectId: projectIdNum },
       include: {
         virtualWriter: true,
         versions: {
@@ -132,9 +145,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
  */
 export async function PUT(request: NextRequest, { params }: RouteParams) {
   let chapterIdNum: number | null = null
+  let projectIdNum: number | null = null
   try {
-    const { chapterId } = await params
+    const { projectId, chapterId } = await params
+    projectIdNum = parseInt(projectId)
     chapterIdNum = parseInt(chapterId)
+
+    if (isNaN(projectIdNum)) {
+      return NextResponse.json(
+        { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
+        { status: 400 }
+      )
+    }
 
     if (isNaN(chapterIdNum)) {
       return NextResponse.json(
@@ -146,10 +168,13 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     const body = await request.json()
     const validatedData = updateChapterSchema.parse(body)
 
+    if (!await requireProjectOwner(projectIdNum)) {
+      return projectNotFoundResponse()
+    }
+
     // 获取原章节内容
-    const oldChapter = await prisma.novelChapter.findUnique({
-      where: { id: chapterIdNum },
-      include: { project: true },
+    const oldChapter = await prisma.novelChapter.findFirst({
+      where: { id: chapterIdNum, projectId: projectIdNum },
     })
 
     if (!oldChapter) {
@@ -183,13 +208,24 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       })
     }
 
-    const chapter = await prisma.novelChapter.update({
-      where: { id: chapterIdNum },
+    const updated = await prisma.novelChapter.updateMany({
+      where: { id: chapterIdNum, projectId: projectIdNum },
       data: {
         ...validatedData,
         ...(validatedData.content !== undefined ? { content: newContent } : {}),
         wordCount: newWordCount,
       },
+    })
+
+    if (updated.count === 0) {
+      return NextResponse.json(
+        { success: false, error: { code: 'NOT_FOUND', message: '章节不存在' } },
+        { status: 404 }
+      )
+    }
+
+    const chapter = await prisma.novelChapter.findFirst({
+      where: { id: chapterIdNum, projectId: projectIdNum },
     })
 
     // 更新项目总字数
@@ -217,9 +253,18 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
  */
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   let chapterIdNum: number | null = null
+  let projectIdNum: number | null = null
   try {
-    const { chapterId } = await params
+    const { projectId, chapterId } = await params
+    projectIdNum = parseInt(projectId)
     chapterIdNum = parseInt(chapterId)
+
+    if (isNaN(projectIdNum)) {
+      return NextResponse.json(
+        { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
+        { status: 400 }
+      )
+    }
 
     if (isNaN(chapterIdNum)) {
       return NextResponse.json(
@@ -228,8 +273,12 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       )
     }
 
-    const chapter = await prisma.novelChapter.findUnique({
-      where: { id: chapterIdNum },
+    if (!await requireProjectOwner(projectIdNum)) {
+      return projectNotFoundResponse()
+    }
+
+    const chapter = await prisma.novelChapter.findFirst({
+      where: { id: chapterIdNum, projectId: projectIdNum },
     })
 
     if (!chapter) {
@@ -240,9 +289,16 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     }
 
     // 删除章节
-    await prisma.novelChapter.delete({
-      where: { id: chapterIdNum },
+    const deleted = await prisma.novelChapter.deleteMany({
+      where: { id: chapterIdNum, projectId: projectIdNum },
     })
+
+    if (deleted.count === 0) {
+      return NextResponse.json(
+        { success: false, error: { code: 'NOT_FOUND', message: '章节不存在' } },
+        { status: 404 }
+      )
+    }
 
     // 更新项目总字数
     await syncProjectChapterWordCount(prisma, chapter.projectId)

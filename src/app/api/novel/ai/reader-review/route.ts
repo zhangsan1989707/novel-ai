@@ -4,6 +4,7 @@ import { success, handleApiError } from '@/lib/api-response'
 import { AppError, ErrorCodes } from '@/lib/errors'
 import { readerAgent } from '@/lib/agents/reader'
 import { getRecentChapterSummaries } from '@/lib/memory/chapter-summary'
+import { requireProjectOwner, projectNotFoundResponse } from '@/lib/server/project-access'
 
 /**
  * POST /api/novel/ai/reader-review
@@ -16,6 +17,12 @@ export async function POST(req: NextRequest) {
 
     if (!projectId || !chapterNo) {
       throw new AppError(ErrorCodes.VALIDATION_ERROR, '缺少 projectId 或 chapterNo', 400)
+    }
+
+    // 项目所有权校验
+    const projectAccess = await requireProjectOwner(projectId)
+    if (!projectAccess) {
+      return projectNotFoundResponse()
     }
 
     const project = await prisma.novelProject.findUnique({

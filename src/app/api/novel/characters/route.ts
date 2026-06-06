@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { logError } from '@/lib/logger'
+import { requireProjectOwner, projectNotFoundResponse } from '@/lib/server/project-access'
 
 const createCharacterSchema = z.object({
   projectId: z.number().int().positive(),
@@ -28,6 +29,14 @@ export async function GET(request: NextRequest) {
     const isPublic = searchParams.get('isPublic')
     const creatorId = searchParams.get('creatorId')
     const tags = searchParams.get('tags')
+
+    if (projectId) {
+      const parsedProjectId = parseInt(projectId, 10)
+      const project = await requireProjectOwner(parsedProjectId)
+      if (!project) {
+        return projectNotFoundResponse()
+      }
+    }
 
     const where: Record<string, unknown> = {}
 
@@ -82,17 +91,11 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     data = createCharacterSchema.parse(body)
 
-    // 获取项目的创建者
-    const project = await prisma.novelProject.findUnique({
-      where: { id: data.projectId },
-      select: { creatorId: true },
-    })
+    // 获取项目的创建者（同时校验项目所有权）
+    const project = await requireProjectOwner(data.projectId)
 
     if (!project) {
-      return NextResponse.json(
-        { success: false, error: { code: 'NOT_FOUND', message: '项目不存在' } },
-        { status: 404 }
-      )
+      return projectNotFoundResponse()
     }
 
     const character = await prisma.character.create({

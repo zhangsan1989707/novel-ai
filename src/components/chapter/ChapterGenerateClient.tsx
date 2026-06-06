@@ -352,7 +352,7 @@ export function ChapterGenerateClient({ projectId, chapterId, initialChapter }: 
             <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-slate-500">
               <span>
                 状态：
-                {generationState.status === 'idle' && '待生成'}
+                {generationState.status === 'idle' && generationState.message}
                 {generationState.status === 'connecting' && '连接中'}
                 {generationState.status === 'streaming' && '生成中'}
                 {generationState.status === 'complete' && '已完成并自动回写'}

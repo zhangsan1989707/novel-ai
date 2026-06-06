@@ -254,9 +254,6 @@ ${contentPreview}
 本项目为拆解分析项目，用于分析小说结构，为后续续写做准备。
 `,
         },
-        include: {
-          aiModelConfig: true,
-        },
       })
       projectId = project.id
       projectIdToReturn = projectId

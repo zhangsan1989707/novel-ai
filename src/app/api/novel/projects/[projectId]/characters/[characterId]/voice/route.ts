@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { success, handleApiError } from '@/lib/api-response'
+import { projectNotFoundResponse, requireProjectOwner } from '@/lib/server/project-access'
 
 /**
  * GET /api/novel/projects/:projectId/characters/:characterId/voice
@@ -11,10 +12,22 @@ export async function GET(
   { params }: { params: Promise<{ projectId: string; characterId: string }> }
 ) {
   try {
-    const { characterId } = await params
+    const { projectId: projectIdStr, characterId } = await params
+    const projectId = parseInt(projectIdStr, 10)
 
-    const character = await prisma.character.findUnique({
-      where: { id: characterId },
+    if (isNaN(projectId)) {
+      return NextResponse.json(
+        { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
+        { status: 400 }
+      )
+    }
+
+    if (!await requireProjectOwner(projectId)) {
+      return projectNotFoundResponse()
+    }
+
+    const character = await prisma.character.findFirst({
+      where: { id: characterId, projectId },
       select: {
         id: true,
         name: true,
@@ -55,10 +68,31 @@ export async function PUT(
   { params }: { params: Promise<{ projectId: string; characterId: string }> }
 ) {
   try {
-    const { characterId } = await params
+    const { projectId: projectIdStr, characterId } = await params
+    const projectId = parseInt(projectIdStr, 10)
     const body = await req.json()
 
+    if (isNaN(projectId)) {
+      return NextResponse.json(
+        { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
+        { status: 400 }
+      )
+    }
+
+    if (!await requireProjectOwner(projectId)) {
+      return projectNotFoundResponse()
+    }
+
     const { speechStyle, vocabularyLevel, sentencePattern, catchphraseStyle, dialogueExamples, voiceNotes } = body
+
+    const existingCharacter = await prisma.character.findFirst({
+      where: { id: characterId, projectId },
+      select: { id: true },
+    })
+
+    if (!existingCharacter) {
+      return NextResponse.json(success(null, '角色不存在'))
+    }
 
     const character = await prisma.character.update({
       where: { id: characterId },

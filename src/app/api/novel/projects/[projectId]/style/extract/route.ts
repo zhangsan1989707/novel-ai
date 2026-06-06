@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
 import { logError } from '@/lib/logger'
 import { extractStyleProfile } from '@/lib/style/style-extractor'
+import { projectNotFoundResponse, requireProjectOwner } from '@/lib/server/project-access'
 
 const extractSchema = z.object({
   volumeNumber: z.number().int().min(-1).max(100).default(-1),
@@ -27,6 +28,9 @@ export async function POST(
         { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
         { status: 400 }
       )
+    }
+    if (!await requireProjectOwner(projectIdNum)) {
+      return projectNotFoundResponse()
     }
 
     const body = await request.json()

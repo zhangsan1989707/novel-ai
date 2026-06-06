@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
+import { projectNotFoundResponse, requireProjectOwner } from '@/lib/server/project-access'
 
 export async function POST(
   _request: NextRequest,
@@ -15,6 +16,9 @@ export async function POST(
         { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
         { status: 400 }
       )
+    }
+    if (!await requireProjectOwner(projectId)) {
+      return projectNotFoundResponse()
     }
 
     const chapterCount = await prisma.novelChapter.count({

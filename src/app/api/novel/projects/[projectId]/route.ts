@@ -6,12 +6,13 @@ import { logError } from '@/lib/logger'
 import { getRAGDocumentCount, getRagRuntimeStatus } from '@/lib/engine/rag-vector'
 import { buildProjectHealthReport } from '@/lib/engine/project-health'
 import { buildBlueprintConsoleSnapshot } from '@/lib/engine/blueprint-console'
-import { getDefaultAIConfigRecord } from '@/lib/ai/factory'
 import { ensureProjectMaintenanceQueued, getProjectMaintenanceSummary } from '@/lib/engine/auto-maintenance'
 import { buildStoryRoadmap } from '@/lib/engine/story-roadmap'
 import { resolveProjectPlanningTargets } from '@/lib/engine/project-length'
 import { readProjectPipelineSnapshot } from '@/lib/engine/project-pipeline-snapshot'
 import { normalizeChapterContentForUser } from '@/lib/chapter-content-normalizer'
+import { projectNotFoundResponse, requireProjectOwner } from '@/lib/server/project-access'
+import { redactAIConfig } from '@/lib/ai/config-redaction'
 
 function buildProjectPreflight(project: {
   aiModelConfig: unknown
@@ -75,6 +76,7 @@ const updateProjectSchema = z.object({
   description: z.string().optional(),
   genre: z.string().optional(),
   writingStyle: z.string().optional(),
+  targetAudience: z.enum(['MALE', 'FEMALE']).nullable().optional(),
   targetWordCount: z.number().int().positive().optional(),
   chapterWordCount: z.number().int().positive().optional(),
   outline: z.string().optional(),
@@ -129,7 +131,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       )
     }
 
-    let project = await prisma.novelProject.findUnique({
+    if (!await requireProjectOwner(id)) {
+      return projectNotFoundResponse()
+    }
+
+    const project = await prisma.novelProject.findUnique({
       where: { id },
       include: {
         aiModelConfig: true,
@@ -172,59 +178,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         },
       },
     })
-
-    if (project && !project.aiModelId) {
-      const defaultConfig = await getDefaultAIConfigRecord()
-      if (defaultConfig) {
-        await prisma.novelProject.update({
-          where: { id },
-          data: { aiModelId: defaultConfig.id },
-        })
-        project = await prisma.novelProject.findUnique({
-          where: { id },
-          include: {
-            aiModelConfig: true,
-            bookBlueprint: true,
-            storyState: { select: storyStateDetailSelect },
-            worldState: true,
-            chapters: {
-              orderBy: { chapterNumber: 'asc' },
-              select: {
-                id: true,
-                chapterNumber: true,
-                title: true,
-                wordCount: true,
-                status: true,
-                sortOrder: true,
-                summary: true,
-                content: true,
-              },
-            },
-            plotlines: {
-              orderBy: { plantedAt: 'asc' },
-              select: {
-                status: true,
-                plantedAt: true,
-                plannedAt: true,
-                resolvedAt: true,
-              },
-            },
-            villains: {
-              select: {
-                isFinalBoss: true,
-                lifecycle: true,
-                tier: true,
-                defeatedAt: true,
-                introducedAt: true,
-              },
-            },
-            arcPlans: {
-              orderBy: { arcNumber: 'asc' },
-            },
-          },
-        })
-      }
-    }
 
     const recentCommits = await prisma.chapterCommit.findMany({
       where: { projectId: id },
@@ -354,6 +307,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       success: true,
       data: {
         ...project,
+        aiModelConfig: project.aiModelConfig ? redactAIConfig(project.aiModelConfig) : null,
         chapters: project.chapters.map(chapter => ({
           ...chapter,
           content: normalizeChapterContentForUser(chapter.content),
@@ -396,6 +350,10 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       )
     }
 
+    if (!await requireProjectOwner(id)) {
+      return projectNotFoundResponse()
+    }
+
     const body = await request.json()
     const validatedData = updateProjectSchema.parse(body)
 
@@ -407,7 +365,13 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       },
     })
 
-    return NextResponse.json({ success: true, data: project })
+    return NextResponse.json({
+      success: true,
+      data: {
+        ...project,
+        aiModelConfig: project.aiModelConfig ? redactAIConfig(project.aiModelConfig) : null,
+      },
+    })
   } catch (error: unknown) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -446,6 +410,10 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
         { status: 400 }
       )
+    }
+
+    if (!await requireProjectOwner(id)) {
+      return projectNotFoundResponse()
     }
 
     await prisma.novelProject.delete({

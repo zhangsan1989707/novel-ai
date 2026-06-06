@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { writeShortSection } from '@/lib/short-story/service'
 import { logError } from '@/lib/logger'
+import { requireProjectOwner, projectNotFoundResponse } from '@/lib/server/project-access'
 
 const writeSchema = z.object({
   projectId: z.number().int().positive(),
@@ -14,6 +15,11 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const parsed = writeSchema.parse(body)
     const { projectId, sectionNumber, stream } = parsed
+
+    const project = await requireProjectOwner(projectId)
+    if (!project) {
+      return projectNotFoundResponse()
+    }
 
     if (stream) {
       const encoder = new TextEncoder()

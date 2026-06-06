@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { projectNotFoundResponse, requireProjectOwner } from '@/lib/server/project-access'
 
 interface RouteParams {
   params: Promise<{ projectId: string }>
@@ -19,6 +20,10 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
         { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
         { status: 400 }
       )
+    }
+
+    if (!await requireProjectOwner(projectId)) {
+      return projectNotFoundResponse()
     }
 
     const chapters = await prisma.novelChapter.findMany({
@@ -57,6 +62,10 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
         { status: 400 }
       )
+    }
+
+    if (!await requireProjectOwner(projectId)) {
+      return projectNotFoundResponse()
     }
 
     const body = await request.json()

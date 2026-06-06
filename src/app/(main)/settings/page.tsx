@@ -21,10 +21,12 @@ interface AIConfig {
   name: string
   vendor: AIVendor
   modelId: string
-  apiKey: string | null
+  hasApiKey: boolean
+  apiKeyPreview: string | null
   apiEndpoint?: string | null
   embeddingVendor?: AIVendor | null
-  embeddingApiKey?: string | null
+  hasEmbeddingApiKey: boolean
+  embeddingApiKeyPreview: string | null
   embeddingApiEndpoint?: string | null
   embeddingModelId?: string | null
   embeddingDimensions?: number | null

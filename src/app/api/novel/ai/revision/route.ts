@@ -7,6 +7,7 @@ import { countChineseWords } from '@/lib/utils'
 import { AIVendor } from '@/types'
 import { logError } from '@/lib/logger'
 import { toProjectDTO, toChapterDTO } from '@/types/dto'
+import { requireProjectOwner, projectNotFoundResponse } from '@/lib/server/project-access'
 
 // ============================================
 // Schema 验证
@@ -53,6 +54,12 @@ export async function POST(request: NextRequest) {
       targetWordCount,
       aiModelId,
     } = parsed
+
+    // 项目所有权校验
+    const projectAccess = await requireProjectOwner(projectId)
+    if (!projectAccess) {
+      return projectNotFoundResponse()
+    }
 
     // 获取项目信息
     const rawProject = await prisma.novelProject.findUnique({

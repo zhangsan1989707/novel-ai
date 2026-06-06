@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getChapterGenerationStatus } from '@/lib/engine/orchestrator'
 import { z } from 'zod'
 import { logError } from '@/lib/logger'
+import { requireProjectOwner, projectNotFoundResponse } from '@/lib/server/project-access'
 
 const statusSchema = z.object({
   projectId: z.number().int().positive(),
@@ -25,6 +26,11 @@ export async function GET(request: NextRequest) {
         { success: false, error: { code: 'INVALID_PARAMS', message: '参数错误' } },
         { status: 400 }
       )
+    }
+
+    const project = await requireProjectOwner(projectId)
+    if (!project) {
+      return projectNotFoundResponse()
     }
 
     const status = await getChapterGenerationStatus(projectId, chapterNo)

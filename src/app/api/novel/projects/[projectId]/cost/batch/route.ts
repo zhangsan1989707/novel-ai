@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { logError } from '@/lib/logger'
+import { projectNotFoundResponse, requireProjectOwner } from '@/lib/server/project-access'
 
 interface RouteParams {
   params: Promise<{ projectId: string }>
@@ -16,6 +17,10 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
         { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
         { status: 400 }
       )
+    }
+
+    if (!await requireProjectOwner(projectIdNum)) {
+      return projectNotFoundResponse()
     }
 
     const usages = await prisma.aIUsage.findMany({

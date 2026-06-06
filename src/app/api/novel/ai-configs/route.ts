@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { AIVendor } from '@/types'
 import { logError } from '@/lib/logger'
-import type { Prisma } from '@prisma/client'
+import { getAuthorizedAIConfigUserId, redactAIConfig } from '@/lib/ai/config-redaction'
 
 // ============================================
 // Schema 验证
@@ -32,20 +32,21 @@ const updateAIConfigSchema = createAIConfigSchema.partial()
 
 export async function GET() {
   try {
+    const userId = await getAuthorizedAIConfigUserId()
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: { code: 'UNAUTHORIZED', message: '未登录' } },
+        { status: 401 }
+      )
+    }
+
     const configs = await prisma.aIModelConfig.findMany({
       orderBy: [{ isDefault: 'desc' }, { sortOrder: 'asc' }, { createdAt: 'desc' }],
     })
 
-    // 隐藏 API Key 的完整值
-    const safeConfigs = configs.map((config: Prisma.AIModelConfigGetPayload<object>) => ({
-      ...config,
-      apiKey: config.apiKey ? `${config.apiKey.slice(0, 4)}${'*'.repeat(Math.max(0, config.apiKey.length - 8))}${config.apiKey.slice(-4)}` : null,
-      embeddingApiKey: config.embeddingApiKey ? `${config.embeddingApiKey.slice(0, 4)}${'*'.repeat(Math.max(0, config.embeddingApiKey.length - 8))}${config.embeddingApiKey.slice(-4)}` : null,
-    }))
-
     return NextResponse.json({
       success: true,
-      data: safeConfigs,
+      data: configs.map(redactAIConfig),
     })
   } catch (error) {
     logError(error instanceof Error ? error : new Error(String(error)), { type: 'get_ai_configs' })
@@ -63,6 +64,14 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    const userId = await getAuthorizedAIConfigUserId()
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: { code: 'UNAUTHORIZED', message: '未登录' } },
+        { status: 401 }
+      )
+    }
+
     const body = await request.json()
     const data = createAIConfigSchema.parse(body)
 
@@ -78,7 +87,7 @@ export async function POST(request: NextRequest) {
       data,
     })
 
-    return NextResponse.json({ success: true, data: config }, { status: 201 })
+    return NextResponse.json({ success: true, data: redactAIConfig(config) }, { status: 201 })
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(

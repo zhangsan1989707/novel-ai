@@ -4,6 +4,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { runChapterGenerationPipeline } from '@/lib/engine/orchestrator'
+import { requireProjectOwner, projectNotFoundResponse } from '@/lib/server/project-access'
 
 interface RouteParams {
   params: Promise<{ projectId: string; chapterNo: string }>
@@ -19,6 +20,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       { success: false, error: { code: 'INVALID_PARAMS', message: '参数错误' } },
       { status: 400 }
     )
+  }
+
+  const project = await requireProjectOwner(projectIdNum)
+  if (!project) {
+    return projectNotFoundResponse()
   }
 
   const encoder = new TextEncoder()

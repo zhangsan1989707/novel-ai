@@ -208,27 +208,38 @@ export function useProjectPipeline(options: {
       clearTimeout(timeoutId)
       const data = await res.json()
       if (data.success) {
+        const startData = data.data as {
+          speedMode?: GenerationSpeedMode
+          snapshot?: PipelineStatus
+          jobId?: number
+          totalChapters?: number
+          runtimeSummary?: ProjectRuntimeSummary
+        }
         toast.success('AI 生成已启动')
-        setSelectedSpeedMode(data.data.speedMode || selectedSpeedMode)
-        setPipeline({
-          status: 'PENDING',
-          currentStep: 'BLUEPRINT',
-          progress: 0,
-          currentChapter: 0,
-          totalChapters: data.data.totalChapters || 300,
-          completedChapters: 0,
-          actualChapterCount: 0,
-          nextChapterNumber: 1,
-          pipelineJobId: data.data.jobId,
-          speedMode: data.data.speedMode || selectedSpeedMode,
-          runtime: {
-            currentChapter: null,
-            recentChapters: [],
-            speedMode: data.data.speedMode || selectedSpeedMode,
-            streamRevision: 0,
-          },
-          runtimeSummary: data.data.runtimeSummary,
-        })
+        setSelectedSpeedMode(startData.speedMode || selectedSpeedMode)
+        if (startData.snapshot) {
+          applySnapshotRef.current(startData.snapshot)
+        } else {
+          setPipeline({
+            status: 'PENDING',
+            currentStep: 'BLUEPRINT',
+            progress: 0,
+            currentChapter: 0,
+            totalChapters: startData.totalChapters || 300,
+            completedChapters: 0,
+            actualChapterCount: 0,
+            nextChapterNumber: 1,
+            pipelineJobId: startData.jobId,
+            speedMode: startData.speedMode || selectedSpeedMode,
+            runtime: {
+              currentChapter: null,
+              recentChapters: [],
+              speedMode: startData.speedMode || selectedSpeedMode,
+              streamRevision: 0,
+            },
+            runtimeSummary: startData.runtimeSummary,
+          })
+        }
       } else {
         toast.error(data.error?.message || '启动失败')
       }

@@ -7,6 +7,7 @@ import { createProviderFromConfigId, createProviderFromDefaultConfig, getDefault
 import { queueProjectBootstrap } from '@/lib/engine/auto-maintenance'
 import { resolveProjectPlanningTargets } from '@/lib/engine/project-length'
 import { buildFallbackNovelTitle, isLikelyNovelTitle, normalizeNovelTitle } from '@/lib/novel-title'
+import { redactAIConfig } from '@/lib/ai/config-redaction'
 
 // ============================================
 // Schema 验证
@@ -178,6 +179,7 @@ export async function GET(request: NextRequest) {
     // 为每个项目实时计算总字数
     const projectsWithWordCount = projects.map(project => ({
       ...project,
+      aiModelConfig: project.aiModelConfig ? redactAIConfig(project.aiModelConfig) : null,
       currentWordCount: project.chapters.reduce((sum, chapter) => {
         return sum + (chapter.wordCount || 0)
       }, 0)
@@ -279,7 +281,13 @@ export async function POST(request: NextRequest) {
       title: project.title,
     })
 
-    return NextResponse.json({ success: true, data: project }, { status: 201 })
+    return NextResponse.json({
+      success: true,
+      data: {
+        ...project,
+        aiModelConfig: project.aiModelConfig ? redactAIConfig(project.aiModelConfig) : null,
+      },
+    }, { status: 201 })
   } catch (error: unknown) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(

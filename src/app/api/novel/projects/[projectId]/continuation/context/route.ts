@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { AnalysisDimension, AnalysisType } from '@/types'
 import { logError } from '@/lib/logger'
 import { buildChapterMemoryPack, buildMemorySnapshotPack } from '@/lib/memory'
+import { projectNotFoundResponse, requireProjectOwner } from '@/lib/server/project-access'
 
 // ============================================
 // Schema 验证
@@ -35,6 +36,10 @@ export async function GET(
         { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
         { status: 400 }
       )
+    }
+
+    if (!await requireProjectOwner(projectIdNum)) {
+      return projectNotFoundResponse()
     }
 
     const { searchParams } = new URL(request.url)

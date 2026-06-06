@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { replayChapterCommit } from '@/lib/engine/chapter-commit'
 import { reconcileReplayedChapterRuntime } from '@/lib/engine/generation-job'
+import { projectNotFoundResponse, requireProjectOwner } from '@/lib/server/project-access'
 
 interface RouteParams {
   params: Promise<{ projectId: string; commitId: string }>
@@ -16,6 +17,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
       { status: 400 }
     )
+  }
+
+  if (!await requireProjectOwner(projectId)) {
+    return projectNotFoundResponse()
   }
 
   const commit = await prisma.chapterCommit.findUnique({

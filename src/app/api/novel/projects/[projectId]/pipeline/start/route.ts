@@ -6,12 +6,32 @@ import { runProductionPipeline } from '@/lib/engine/production-pipeline'
 import { getProjectMaintenanceSummary } from '@/lib/engine/auto-maintenance'
 import { getWorkflowBlockReason } from '@/lib/engine/project-flow'
 import { readProjectPipelineSnapshot } from '@/lib/engine/project-pipeline-snapshot'
-import { normalizeGenerationSpeedMode, generationSpeedModes } from '@/lib/ai/speed-mode'
+import { normalizeGenerationSpeedMode, generationSpeedModes, type GenerationSpeedMode } from '@/lib/ai/speed-mode'
+import { projectNotFoundResponse, requireProjectOwner } from '@/lib/server/project-access'
 import { z } from 'zod'
 
 const startPipelineSchema = z.object({
   speedMode: z.enum(generationSpeedModes).optional(),
 })
+
+async function buildStartPipelineData(
+  projectId: number,
+  jobId: number,
+  speedMode: GenerationSpeedMode,
+  runner?: 'external' | 'inline'
+) {
+  const snapshot = await readProjectPipelineSnapshot(projectId)
+  return {
+    jobId,
+    projectId,
+    status: snapshot?.status || 'PENDING',
+    speedMode: snapshot?.speedMode || speedMode,
+    runner,
+    snapshot,
+    totalChapters: snapshot?.totalChapters,
+    runtimeSummary: snapshot?.runtimeSummary,
+  }
+}
 
 export async function POST(
   request: NextRequest,
@@ -26,6 +46,11 @@ export async function POST(
         { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
         { status: 400 }
       )
+    }
+
+    const projectOwner = await requireProjectOwner(projectId)
+    if (!projectOwner) {
+      return projectNotFoundResponse()
     }
 
     let speedMode = normalizeGenerationSpeedMode(undefined)
@@ -144,17 +169,9 @@ export async function POST(
         const payload = activeJob.payload && typeof activeJob.payload === 'object'
           ? activeJob.payload as Record<string, unknown>
           : {}
-        const snapshot = await readProjectPipelineSnapshot(projectId)
         return NextResponse.json({
           success: true,
-          data: {
-            jobId: activeJob.id,
-            projectId,
-            status: activeJob.status,
-            speedMode: normalizeGenerationSpeedMode(payload.speedMode),
-            totalChapters: snapshot?.totalChapters,
-            runtimeSummary: snapshot?.runtimeSummary,
-          },
+          data: await buildStartPipelineData(projectId, activeJob.id, normalizeGenerationSpeedMode(payload.speedMode)),
         })
       } else if (activeJob.status === 'PAUSED') {
         // 如果任务是暂停状态，先恢复它
@@ -168,39 +185,23 @@ export async function POST(
       const payload = activeJob.payload && typeof activeJob.payload === 'object'
         ? activeJob.payload as Record<string, unknown>
         : {}
-      const snapshot = await readProjectPipelineSnapshot(projectId)
       return NextResponse.json({
         success: true,
-        data: {
-          jobId: activeJob.id,
-          projectId,
-          status: activeJob.status,
-          speedMode: normalizeGenerationSpeedMode(payload.speedMode),
-          totalChapters: snapshot?.totalChapters,
-          runtimeSummary: snapshot?.runtimeSummary,
-        },
+        data: await buildStartPipelineData(projectId, activeJob.id, normalizeGenerationSpeedMode(payload.speedMode)),
       })
     }
 
     const jobId = await createJob(projectId, 'FULL_PIPELINE', speedMode)
-    if (process.env.NOVEL_AI_PIPELINE_INLINE !== 'false') {
+    const runner = process.env.NOVEL_AI_PIPELINE_INLINE === 'false' ? 'external' : 'inline'
+    if (runner === 'inline') {
       runProductionPipeline(jobId, { speedMode }).catch(err =>
         console.error('Pipeline start error:', err)
       )
     }
 
-    const snapshot = await readProjectPipelineSnapshot(projectId)
     return NextResponse.json({
       success: true,
-      data: {
-        jobId,
-        projectId,
-        status: 'PENDING',
-        speedMode,
-        runner: process.env.NOVEL_AI_PIPELINE_INLINE === 'false' ? 'external' : 'inline',
-        totalChapters: snapshot?.totalChapters,
-        runtimeSummary: snapshot?.runtimeSummary,
-      },
+      data: await buildStartPipelineData(projectId, jobId, speedMode, runner),
     })
   } catch (error) {
     console.error('Pipeline start error:', error)

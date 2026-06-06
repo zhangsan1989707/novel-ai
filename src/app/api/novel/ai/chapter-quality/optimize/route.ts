@@ -5,6 +5,7 @@ import { tryCatch, error } from '@/lib/api-response'
 import { chapterDeslopper } from '@/lib/agents/deslopper'
 import { analyzeChapterQuality } from '@/lib/knowledge/chapter-quality'
 import { countChapterWords, syncProjectChapterWordCount } from '@/lib/novel/chapter-word-count'
+import { requireProjectOwner, projectNotFoundResponse } from '@/lib/server/project-access'
 
 const optimizeSchema = z.object({
   projectId: z.number().int().positive(),
@@ -21,6 +22,12 @@ export async function POST(request: NextRequest) {
   return tryCatch(async () => {
     const body = await request.json()
     const data = optimizeSchema.parse(body)
+
+    // 项目所有权校验
+    const projectAccess = await requireProjectOwner(data.projectId)
+    if (!projectAccess) {
+      return { success: false, error: { code: 'NOT_FOUND', message: '项目不存在' } }
+    }
 
     // 获取章节信息
     const chapter = await prisma.novelChapter.findUnique({

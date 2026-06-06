@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { logError } from '@/lib/logger'
+import { projectNotFoundResponse, requireProjectOwner } from '@/lib/server/project-access'
 
 // ============================================
 // Schema 验证
@@ -36,14 +37,33 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       )
     }
 
+    if (!await requireProjectOwner(projectIdNum)) {
+      return projectNotFoundResponse()
+    }
+    const projectIdValue = projectIdNum
+
     const body = await request.json()
     const { chapterIds } = reorderSchema.parse(body)
+
+    const existingChapters = await prisma.novelChapter.count({
+      where: {
+        id: { in: chapterIds },
+        projectId: projectIdValue,
+      },
+    })
+
+    if (existingChapters !== chapterIds.length) {
+      return NextResponse.json(
+        { success: false, error: { code: 'NOT_FOUND', message: '章节不存在' } },
+        { status: 404 }
+      )
+    }
 
     // 批量更新排序
     await prisma.$transaction(
       chapterIds.map((id, index) =>
-        prisma.novelChapter.update({
-          where: { id },
+        prisma.novelChapter.updateMany({
+          where: { id, projectId: projectIdValue },
           data: { sortOrder: index },
         })
       )

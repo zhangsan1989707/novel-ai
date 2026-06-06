@@ -11,6 +11,7 @@ import { logger, logError } from '@/lib/logger'
 import { ANALYSIS_DIMENSION_LABELS, ANALYSIS_FORMAT_TEMPLATES } from '@/lib/analysis/config'
 import { countChineseWords } from '@/lib/utils'
 import { buildFallbackAnalysisData, isRefusalContent } from '@/lib/analysis/book-analysis-fallback'
+import { requireProjectOwner, projectNotFoundResponse } from '@/lib/server/project-access'
 
 // ============================================
 // 常量配置
@@ -340,6 +341,12 @@ export async function POST(request: NextRequest) {
       contextChapterCount,
       temperature,
     } = parsed
+
+    // 项目所有权校验
+    const projectAccess = await requireProjectOwner(projectId)
+    if (!projectAccess) {
+      return projectNotFoundResponse()
+    }
 
     // 获取项目信息
     const project = await prisma.novelProject.findUnique({

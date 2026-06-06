@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { logError } from '@/lib/logger'
 import { AnalysisDimension, AnalysisType } from '@/types'
 import { buildChapterGraph } from '@/lib/analysis/chapter-graph'
+import { projectNotFoundResponse, requireProjectOwner } from '@/lib/server/project-access'
 
 /**
  * GET /api/novel/projects/[projectId]/chapter-graph
@@ -23,6 +24,10 @@ export async function GET(
         { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
         { status: 400 }
       )
+    }
+
+    if (!await requireProjectOwner(projectIdNum)) {
+      return projectNotFoundResponse()
     }
 
     const [analyses, chapters, snapshot] = await Promise.all([

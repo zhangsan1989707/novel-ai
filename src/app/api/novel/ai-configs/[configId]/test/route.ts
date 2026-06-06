@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { getAIProvider } from '@/lib/ai'
 import { AIVendor } from '@/types'
 import { logError } from '@/lib/logger'
+import { getAuthorizedAIConfigUserId, getSafeAIProviderErrorMessage } from '@/lib/ai/config-redaction'
 
 // ============================================
 // POST /api/novel/ai-configs/[configId]/test
@@ -15,6 +16,14 @@ export async function POST(
 ) {
   let id: number | null = null
   try {
+    const userId = await getAuthorizedAIConfigUserId()
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: { code: 'UNAUTHORIZED', message: '未登录' } },
+        { status: 401 }
+      )
+    }
+
     const { configId } = await params
     id = parseInt(configId)
 
@@ -63,28 +72,11 @@ export async function POST(
         },
       })
     } catch (apiError) {
-      const errorMessage = apiError instanceof Error ? apiError.message : 'API 调用失败'
-
-      // 提取更有用的错误信息
-      let detailMessage = errorMessage
-      if (errorMessage.includes('401')) {
-        detailMessage = 'API Key 无效或已过期'
-      } else if (errorMessage.includes('403')) {
-        detailMessage = 'API Key 权限不足'
-      } else if (errorMessage.includes('429')) {
-        detailMessage = '请求过于频繁，请稍后重试'
-      } else if (errorMessage.includes('500') || errorMessage.includes('502') || errorMessage.includes('503')) {
-        detailMessage = 'AI 服务端错误，请稍后重试'
-      } else if (errorMessage.includes('fetch') || errorMessage.includes('network')) {
-        detailMessage = '网络连接失败，请检查网络或 API 端点'
-      }
-
       return NextResponse.json({
         success: false,
         error: {
           code: 'API_ERROR',
-          message: detailMessage,
-          original: errorMessage,
+          message: getSafeAIProviderErrorMessage(apiError),
         },
       }, { status: 200 })
     }

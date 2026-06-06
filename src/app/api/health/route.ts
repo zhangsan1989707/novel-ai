@@ -1,36 +1,23 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { getDefaultAIConfig } from '@/lib/ai/factory'
 
 export async function GET() {
   const startedAt = Date.now()
-  const checks: Record<string, { ok: boolean; detail?: string }> = {}
+  const checks: Record<string, { ok: boolean }> = {}
 
   try {
     await prisma.$queryRaw`SELECT 1`
     checks.database = { ok: true }
-  } catch (err) {
-    checks.database = {
-      ok: false,
-      detail: err instanceof Error ? err.message : 'database check failed',
-    }
+  } catch {
+    checks.database = { ok: false }
   }
 
   try {
-    const defaultConfig = await prisma.aIModelConfig.findFirst({
-      where: { isDefault: true },
-      select: { vendor: true, modelId: true, apiKey: true },
-    })
-    checks.aiConfig = {
-      ok: Boolean(defaultConfig?.apiKey),
-      detail: defaultConfig
-        ? `${defaultConfig.vendor}/${defaultConfig.modelId}`
-        : 'no default model',
-    }
-  } catch (err) {
-    checks.aiConfig = {
-      ok: false,
-      detail: err instanceof Error ? err.message : 'ai config check failed',
-    }
+    const defaultConfig = getDefaultAIConfig()
+    checks.aiConfig = { ok: Boolean(defaultConfig.apiKey?.trim()) }
+  } catch {
+    checks.aiConfig = { ok: false }
   }
 
   const ok = Object.values(checks).every(check => check.ok)

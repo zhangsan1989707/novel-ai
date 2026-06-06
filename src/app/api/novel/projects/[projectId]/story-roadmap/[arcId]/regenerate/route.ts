@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { createProjectProvider } from '@/lib/engine/production-pipeline'
 import { parseAiJsonObject } from '@/lib/engine/ai-json'
 import { buildStoryRoadmapItem } from '@/lib/engine/story-roadmap'
+import { projectNotFoundResponse, requireProjectOwner } from '@/lib/server/project-access'
 
 export async function POST(
   request: NextRequest,
@@ -17,6 +18,10 @@ export async function POST(
         { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
         { status: 400 }
       )
+    }
+
+    if (!await requireProjectOwner(projectId)) {
+      return projectNotFoundResponse()
     }
 
     const body = await request.json().catch(() => ({}))

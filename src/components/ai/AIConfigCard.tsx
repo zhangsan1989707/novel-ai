@@ -10,10 +10,12 @@ interface AIConfig {
   name: string
   vendor: AIVendor
   modelId: string
-  apiKey: string | null
+  hasApiKey: boolean
+  apiKeyPreview: string | null
   apiEndpoint?: string | null
   embeddingVendor?: AIVendor | null
-  embeddingApiKey?: string | null
+  hasEmbeddingApiKey: boolean
+  embeddingApiKeyPreview: string | null
   embeddingApiEndpoint?: string | null
   embeddingModelId?: string | null
   embeddingDimensions?: number | null
@@ -107,7 +109,7 @@ export function AIConfigCard({ config, onEdit, onDelete, onSetDefault, onTest, d
   const [testStatus, setTestStatus] = useState<TestStatus>('idle')
   const [testMessage, setTestMessage] = useState('')
   const meta = vendorMeta[config.vendor] || vendorMeta[AIVendor.DEEPSEEK]
-  const hasEmbedding = !!(config.embeddingVendor || config.embeddingApiKey || config.embeddingModelId)
+  const hasEmbedding = !!(config.embeddingVendor || config.hasEmbeddingApiKey || config.embeddingModelId)
   const embeddingMeta = config.embeddingVendor ? vendorMeta[config.embeddingVendor] : null
 
   const handleTest = async () => {
@@ -158,7 +160,7 @@ export function AIConfigCard({ config, onEdit, onDelete, onSetDefault, onTest, d
                 <span className="truncate">{config.modelId}</span>
               </div>
               <div className="flex items-center gap-1.5">
-                {config.apiKey ? (
+                {config.hasApiKey ? (
                   <>
                     <CheckCircle className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-400 shrink-0" />
                     <span className="text-emerald-600 dark:text-emerald-400 text-xs">API Key 已配置</span>
@@ -252,7 +254,7 @@ export function AIConfigCard({ config, onEdit, onDelete, onSetDefault, onTest, d
               <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-gray-500 dark:text-gray-400 pl-5">
                 {config.embeddingModelId && <span>模型: {config.embeddingModelId}</span>}
                 {config.embeddingDimensions && <span>维度: {config.embeddingDimensions}</span>}
-                {config.embeddingApiKey && <span className="text-emerald-600 dark:text-emerald-400">Key: 已配置</span>}
+                {config.hasEmbeddingApiKey && <span className="text-emerald-600 dark:text-emerald-400">Key: 已配置</span>}
                 {config.embeddingApiEndpoint && <span className="truncate">端点: {config.embeddingApiEndpoint}</span>}
               </div>
             )}

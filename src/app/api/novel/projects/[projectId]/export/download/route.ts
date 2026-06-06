@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { exportNovel } from '@/lib/export/service'
 import { ExportFormat } from '@/lib/export/types'
 import { logError } from '@/lib/logger'
+import { projectNotFoundResponse, requireProjectOwner } from '@/lib/server/project-access'
 
 interface RouteParams {
   params: Promise<{ projectId: string }>
@@ -26,6 +27,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
         { status: 400 }
       )
+    }
+    if (!await requireProjectOwner(projectIdNum)) {
+      return projectNotFoundResponse()
     }
 
     const { searchParams } = new URL(request.url)

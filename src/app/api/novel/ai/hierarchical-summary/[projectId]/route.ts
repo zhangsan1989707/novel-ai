@@ -4,6 +4,7 @@ import { getHierarchicalContext, checkAndGenerateLayeredSummary } from '@/lib/en
 import { getAllVolumeSummaries } from '@/lib/memory/volume-summary'
 import { getBookSummary } from '@/lib/memory/book-summary'
 import { logError } from '@/lib/logger'
+import { requireProjectOwner, projectNotFoundResponse } from '@/lib/server/project-access'
 
 const requestSchema = z.object({
   projectId: z.number().int().positive(),
@@ -30,6 +31,11 @@ export async function GET(
         { success: false, error: { code: 'VALIDATION_ERROR', message: '无效的项目ID' } },
         { status: 400 }
       )
+    }
+
+    const project = await requireProjectOwner(projectIdNum)
+    if (!project) {
+      return projectNotFoundResponse()
     }
 
     const { searchParams } = new URL(request.url)
@@ -74,6 +80,11 @@ export async function POST(
         { success: false, error: { code: 'VALIDATION_ERROR', message: '无效的项目ID' } },
         { status: 400 }
       )
+    }
+
+    const project = await requireProjectOwner(projectIdNum)
+    if (!project) {
+      return projectNotFoundResponse()
     }
 
     const body = await request.json().catch(() => ({}))

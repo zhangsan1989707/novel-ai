@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { success, handleApiError } from '@/lib/api-response'
 import { AppError, ErrorCodes } from '@/lib/errors'
 import { validateCausalConsistency, buildCausalGraph } from '@/lib/engine/causal-graph'
+import { requireProjectOwner, projectNotFoundResponse } from '@/lib/server/project-access'
 
 /**
  * POST /api/novel/ai/causal-validate
@@ -15,6 +16,12 @@ export async function POST(req: NextRequest) {
 
     if (!projectId || !chapterNo) {
       throw new AppError(ErrorCodes.VALIDATION_ERROR, '缺少 projectId 或 chapterNo', 400)
+    }
+
+    // 项目所有权校验
+    const projectAccess = await requireProjectOwner(projectId)
+    if (!projectAccess) {
+      return projectNotFoundResponse()
     }
 
     const chapter = await prisma.novelChapter.findUnique({
@@ -46,6 +53,12 @@ export async function GET(req: NextRequest) {
 
     if (!projectId) {
       throw new AppError(ErrorCodes.VALIDATION_ERROR, '缺少 projectId', 400)
+    }
+
+    // 项目所有权校验
+    const projectAccess = await requireProjectOwner(projectId)
+    if (!projectAccess) {
+      return projectNotFoundResponse()
     }
 
     const graph = await buildCausalGraph(projectId)

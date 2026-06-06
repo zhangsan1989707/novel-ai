@@ -5,6 +5,7 @@ import { createProviderFromDefaultConfig } from '@/lib/ai'
 import { logError } from '@/lib/logger'
 import { parseAiJsonObject } from '@/lib/engine/ai-json'
 import { createCharacterProfile } from '@/lib/memory/character-memory'
+import { requireProjectOwner, projectNotFoundResponse } from '@/lib/server/project-access'
 import { CharacterRole } from '@prisma/client'
 
 const extractCharactersSchema = z.object({
@@ -17,6 +18,12 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const parsed = extractCharactersSchema.parse(body)
     projectId = parsed.projectId
+
+    // 项目所有权校验
+    const projectAccess = await requireProjectOwner(projectId)
+    if (!projectAccess) {
+      return projectNotFoundResponse()
+    }
 
     const project = await prisma.novelProject.findUnique({
       where: { id: projectId },

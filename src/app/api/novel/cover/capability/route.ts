@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { tryCatch, error } from '@/lib/api-response'
 import { getCoverCapability } from '@/lib/cover/service'
+import { requireProjectOwner, projectNotFoundResponse } from '@/lib/server/project-access'
 
 export async function GET(request: NextRequest) {
   return tryCatch(async () => {
@@ -14,6 +15,11 @@ export async function GET(request: NextRequest) {
     const parsedId = parseInt(projectId, 10)
     if (Number.isNaN(parsedId)) {
       return error('VALIDATION_ERROR', 'projectId 格式无效')
+    }
+
+    const project = await requireProjectOwner(parsedId)
+    if (!project) {
+      return projectNotFoundResponse()
     }
 
     return getCoverCapability(parsedId)

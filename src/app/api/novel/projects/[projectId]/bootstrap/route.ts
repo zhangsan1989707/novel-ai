@@ -7,6 +7,7 @@ import { loadProjectHealthReport } from '@/lib/engine/project-health'
 import { syncProjectHealthNotification } from '@/lib/notifications/project-health'
 import { refreshBlueprintConsole } from '@/lib/engine/blueprint-console'
 import { getDefaultAIConfigRecord } from '@/lib/ai/factory'
+import { projectNotFoundResponse, requireProjectOwner } from '@/lib/server/project-access'
 
 export async function POST(
   _request: NextRequest,
@@ -21,6 +22,10 @@ export async function POST(
         { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
         { status: 400 }
       )
+    }
+
+    if (!await requireProjectOwner(projectId)) {
+      return projectNotFoundResponse()
     }
 
     const project = await prisma.novelProject.findUnique({

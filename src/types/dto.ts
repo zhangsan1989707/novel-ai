@@ -22,8 +22,8 @@ export interface ProjectDTO {
   aiModelConfig?: {
     vendor: string
     modelId: string
-    apiKey?: string
     apiEndpoint?: string
+    apiKey?: string
   }
 }
 
@@ -70,8 +70,8 @@ export function toProjectDTO(
       ? {
           vendor: raw.aiModelConfig.vendor,
           modelId: raw.aiModelConfig.modelId,
-          apiKey: raw.aiModelConfig.apiKey ?? undefined,
           apiEndpoint: raw.aiModelConfig.apiEndpoint ?? undefined,
+          apiKey: raw.aiModelConfig.apiKey ?? undefined,
         }
       : undefined,
   }

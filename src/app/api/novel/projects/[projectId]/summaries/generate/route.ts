@@ -5,6 +5,7 @@ import { buildChapterMemoryPack } from '@/lib/memory'
 import { saveChapterSummary } from '@/lib/memory/chapter-summary'
 import type { ChapterSummaryData } from '@/lib/engine/types'
 import { logError } from '@/lib/logger'
+import { projectNotFoundResponse, requireProjectOwner } from '@/lib/server/project-access'
 
 const BATCH_SIZE = 5 // 每批处理章节数
 
@@ -26,6 +27,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
       { status: 400 }
     )
+  }
+
+  if (!await requireProjectOwner(projectIdNum)) {
+    return projectNotFoundResponse()
   }
 
   // 获取项目信息
@@ -253,6 +258,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
       { status: 400 }
     )
+  }
+
+  if (!await requireProjectOwner(projectIdNum)) {
+    return projectNotFoundResponse()
   }
 
   // 获取项目章节总数

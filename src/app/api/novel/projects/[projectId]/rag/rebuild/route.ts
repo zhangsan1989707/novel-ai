@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { rebuildProjectRAGIndex } from '@/lib/engine/rag-vector'
+import { projectNotFoundResponse, requireProjectOwner } from '@/lib/server/project-access'
 
 interface RouteParams {
   params: Promise<{ projectId: string }>
@@ -15,6 +16,9 @@ export async function POST(_request: Request, { params }: RouteParams) {
         { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
         { status: 400 }
       )
+    }
+    if (!await requireProjectOwner(id)) {
+      return projectNotFoundResponse()
     }
 
     const project = await prisma.novelProject.findUnique({

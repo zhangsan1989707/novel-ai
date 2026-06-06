@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { analyzeChapterQuality } from '@/lib/knowledge/chapter-quality'
 import { logError } from '@/lib/logger'
+import { projectNotFoundResponse, requireProjectOwner } from '@/lib/server/project-access'
 
 interface RouteParams {
   params: Promise<{ projectId: string; chapterId: string }>
@@ -25,9 +26,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       )
     }
 
+    if (!await requireProjectOwner(projectIdNum)) {
+      return projectNotFoundResponse()
+    }
+
     const [chapter, project, completionReport, arcEvents, cheatState] = await Promise.all([
-      prisma.novelChapter.findUnique({
-        where: { id: chapterIdNum },
+      prisma.novelChapter.findFirst({
+        where: { id: chapterIdNum, projectId: projectIdNum },
         select: {
           id: true,
           chapterNumber: true,

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { buildBlueprintConsoleSnapshot, refreshBlueprintConsole } from '@/lib/engine/blueprint-console'
+import { projectNotFoundResponse, requireProjectOwner } from '@/lib/server/project-access'
 
 export async function GET(
   _request: NextRequest,
@@ -14,6 +15,10 @@ export async function GET(
         { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
         { status: 400 }
       )
+    }
+
+    if (!await requireProjectOwner(projectId)) {
+      return projectNotFoundResponse()
     }
 
     const snapshot = await buildBlueprintConsoleSnapshot(projectId)
@@ -40,6 +45,10 @@ export async function POST(
         { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
         { status: 400 }
       )
+    }
+
+    if (!await requireProjectOwner(projectId)) {
+      return projectNotFoundResponse()
     }
 
     const body = await request.json().catch(() => ({}))

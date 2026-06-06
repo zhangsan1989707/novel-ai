@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { logError } from '@/lib/logger'
+import { getAuthorizedAIConfigUserId, redactAIConfig } from '@/lib/ai/config-redaction'
 
 export async function POST(
   request: NextRequest,
@@ -8,6 +9,14 @@ export async function POST(
 ) {
   let id: number | null = null
   try {
+    const userId = await getAuthorizedAIConfigUserId()
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: { code: 'UNAUTHORIZED', message: '未登录' } },
+        { status: 401 }
+      )
+    }
+
     const { configId } = await params
     id = parseInt(configId)
 
@@ -15,6 +24,18 @@ export async function POST(
       return NextResponse.json(
         { success: false, error: { code: 'INVALID_ID', message: '无效的 ID' } },
         { status: 400 }
+      )
+    }
+
+    const existingConfig = await prisma.aIModelConfig.findUnique({
+      where: { id },
+      select: { id: true },
+    })
+
+    if (!existingConfig) {
+      return NextResponse.json(
+        { success: false, error: { code: 'NOT_FOUND', message: '配置不存在' } },
+        { status: 404 }
       )
     }
 
@@ -30,7 +51,7 @@ export async function POST(
       data: { isDefault: true },
     })
 
-    return NextResponse.json({ success: true, data: config })
+    return NextResponse.json({ success: true, data: redactAIConfig(config) })
   } catch (error) {
     logError(error instanceof Error ? error : new Error(String(error)), { type: 'set_default_ai_config', configId: id })
     return NextResponse.json(

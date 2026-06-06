@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { AIVendor } from '@/types'
 import { logError } from '@/lib/logger'
+import { getAuthorizedAIConfigUserId, redactAIConfig } from '@/lib/ai/config-redaction'
 
 // ============================================
 // Schema 验证
@@ -34,6 +35,14 @@ export async function GET(
 ) {
   let id: number | null = null
   try {
+    const userId = await getAuthorizedAIConfigUserId()
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: { code: 'UNAUTHORIZED', message: '未登录' } },
+        { status: 401 }
+      )
+    }
+
     const { configId } = await params
     id = parseInt(configId)
 
@@ -55,14 +64,7 @@ export async function GET(
       )
     }
 
-    // 隐藏 API Key
-    const safeConfig = {
-      ...config,
-      apiKey: config.apiKey ? `${config.apiKey.slice(0, 4)}${'*'.repeat(Math.max(0, config.apiKey.length - 8))}${config.apiKey.slice(-4)}` : null,
-      embeddingApiKey: config.embeddingApiKey ? `${config.embeddingApiKey.slice(0, 4)}${'*'.repeat(Math.max(0, config.embeddingApiKey.length - 8))}${config.embeddingApiKey.slice(-4)}` : null,
-    }
-
-    return NextResponse.json({ success: true, data: safeConfig })
+    return NextResponse.json({ success: true, data: redactAIConfig(config) })
   } catch (error) {
     logError(error instanceof Error ? error : new Error(String(error)), { type: 'get_ai_config', configId: id })
     return NextResponse.json(
@@ -83,6 +85,14 @@ export async function PUT(
 ) {
   let id: number | null = null
   try {
+    const userId = await getAuthorizedAIConfigUserId()
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: { code: 'UNAUTHORIZED', message: '未登录' } },
+        { status: 401 }
+      )
+    }
+
     const { configId } = await params
     id = parseInt(configId)
 
@@ -141,7 +151,7 @@ export async function PUT(
       data: updateData,
     })
 
-    return NextResponse.json({ success: true, data: config })
+    return NextResponse.json({ success: true, data: redactAIConfig(config) })
   } catch (error) {
     if (error instanceof z.ZodError) {
       
@@ -169,6 +179,14 @@ export async function DELETE(
 ) {
   let id: number | null = null
   try {
+    const userId = await getAuthorizedAIConfigUserId()
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: { code: 'UNAUTHORIZED', message: '未登录' } },
+        { status: 401 }
+      )
+    }
+
     const { configId } = await params
     id = parseInt(configId)
 

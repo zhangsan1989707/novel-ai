@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { validateChapter, validateProject } from '@/lib/engine/validation/validator'
 import { prisma } from '@/lib/prisma'
 import { logError } from '@/lib/logger'
+import { requireProjectOwner, projectNotFoundResponse } from '@/lib/server/project-access'
 
 const vendorEnum = z.enum(['OPENAI', 'ANTHROPIC', 'ALIBABA', 'DEEPSEEK', 'MINIMAX', 'VOLCENGINE', 'ZHIPU'])
 
@@ -34,6 +35,12 @@ export async function POST(request: NextRequest) {
         { success: false, error: { code: 'NOT_FOUND', message: '章节不存在' } },
         { status: 404 }
       )
+    }
+
+    // 通过 chapterId 关联的 projectId 校验项目所有权
+    const projectAccess = await requireProjectOwner(chapter.projectId)
+    if (!projectAccess) {
+      return projectNotFoundResponse()
     }
 
     if (!chapter.content) {

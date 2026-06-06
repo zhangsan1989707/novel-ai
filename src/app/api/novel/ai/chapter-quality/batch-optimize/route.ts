@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { tryCatch, error } from '@/lib/api-response'
 import { batchChapterDeslopper } from '@/lib/agents/deslopper'
 import { countChapterWords, syncProjectChapterWordCount } from '@/lib/novel/chapter-word-count'
+import { requireProjectOwner, projectNotFoundResponse } from '@/lib/server/project-access'
 
 const batchOptimizeSchema = z.object({
   projectId: z.number().int().positive(),
@@ -20,6 +21,12 @@ export async function POST(request: NextRequest) {
   return tryCatch(async () => {
     const body = await request.json()
     const data = batchOptimizeSchema.parse(body)
+
+    // 项目所有权校验
+    const projectAccess = await requireProjectOwner(data.projectId)
+    if (!projectAccess) {
+      return { success: false, error: { code: 'NOT_FOUND', message: '项目不存在' } }
+    }
 
     // 获取章节列表
     const chapters = await prisma.novelChapter.findMany({

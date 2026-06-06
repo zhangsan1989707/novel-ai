@@ -5,6 +5,7 @@ import { AIVendor } from '@/types'
 import { prisma } from '@/lib/prisma'
 import { buildChapterListPrompt, buildSummaryCompletionPrompt } from '@/lib/ai/prompts'
 import { logError } from '@/lib/logger'
+import { requireProjectOwner, projectNotFoundResponse } from '@/lib/server/project-access'
 
 const vendorEnum = z.enum(['OPENAI', 'ANTHROPIC', 'ALIBABA', 'DEEPSEEK', 'MINIMAX', 'VOLCENGINE', 'ZHIPU'])
 
@@ -54,10 +55,18 @@ export async function POST(request: NextRequest) {
       temperature,
     } = generateChapterListSchema.parse(body)
 
+    // 如果有项目ID，校验所有权
+    if (projectId) {
+      const projectAccess = await requireProjectOwner(projectId)
+      if (!projectAccess) {
+        return projectNotFoundResponse()
+      }
+    }
+
     // 如果有项目ID，从数据库获取大纲（尝试获取，但失败了也不中断）
     let dbOutline = outline
     let dbOutlineStages = outlineStages
-    
+
     if (projectId) {
       try {
         const project = await prisma.novelProject.findUnique({

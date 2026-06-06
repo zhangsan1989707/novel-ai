@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { updateCharacterProfile } from '@/lib/memory/character-memory'
 import { logError } from '@/lib/logger'
+import { requireProjectOwner, projectNotFoundResponse } from '@/lib/server/project-access'
 
 interface RouteParams {
   params: Promise<{ projectId: string; characterId: string }>
@@ -25,6 +26,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
         { status: 400 }
       )
+    }
+
+    const project = await requireProjectOwner(projectIdNum)
+    if (!project) {
+      return projectNotFoundResponse()
     }
 
     const character = await prisma.character.findUnique({
@@ -63,6 +69,11 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
         { status: 400 }
       )
+    }
+
+    const project = await requireProjectOwner(projectIdNum)
+    if (!project) {
+      return projectNotFoundResponse()
     }
 
     const body = await request.json()

@@ -6,6 +6,7 @@ import { calculateBatchSize } from '@/lib/engine/batch-planner'
 import { parseAiJsonArray } from '@/lib/engine/ai-json'
 import { normalizeArcPlanOutputs, resolveProjectPlanningTargets } from '@/lib/engine/project-length'
 import { toInternalPlatform, toPrismaArcStage } from '@/lib/engine/production-mapping'
+import { projectNotFoundResponse, requireProjectOwner } from '@/lib/server/project-access'
 
 export async function GET(
   request: NextRequest,
@@ -20,6 +21,9 @@ export async function GET(
         { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
         { status: 400 }
       )
+    }
+    if (!await requireProjectOwner(projectId)) {
+      return projectNotFoundResponse()
     }
 
     const arcPlans = await prisma.arcPlan.findMany({
@@ -50,6 +54,9 @@ export async function POST(
         { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
         { status: 400 }
       )
+    }
+    if (!await requireProjectOwner(projectId)) {
+      return projectNotFoundResponse()
     }
 
     const project = await prisma.novelProject.findUnique({
@@ -216,6 +223,9 @@ export async function PUT(
         { success: false, error: { code: 'INVALID_ID', message: '无效的项目ID' } },
         { status: 400 }
       )
+    }
+    if (!await requireProjectOwner(projectId)) {
+      return projectNotFoundResponse()
     }
 
     const body = await request.json()

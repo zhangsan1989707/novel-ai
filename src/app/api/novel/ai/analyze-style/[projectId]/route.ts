@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { analyzeOriginalStyle } from '@/lib/ai/style-analyzer'
 import { AIVendor } from '@/types'
 import { logError } from '@/lib/logger'
+import { requireProjectOwner, projectNotFoundResponse } from '@/lib/server/project-access'
 
 const vendorEnum = z.enum(['OPENAI', 'ANTHROPIC', 'ALIBABA', 'DEEPSEEK', 'MINIMAX', 'VOLCENGINE', 'ZHIPU'])
 
@@ -28,6 +29,11 @@ export async function POST(
         { success: false, error: { code: 'VALIDATION_ERROR', message: '无效的项目ID' } },
         { status: 400 }
       )
+    }
+
+    const project = await requireProjectOwner(projectIdNum)
+    if (!project) {
+      return projectNotFoundResponse()
     }
 
     const body = await request.json().catch(() => ({}))
