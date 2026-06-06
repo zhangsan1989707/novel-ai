@@ -7,7 +7,7 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
-RUN npm ci
+RUN npm config set registry https://registry.npmmirror.com && npm ci
 
 # 构建阶段
 FROM base AS builder
@@ -16,7 +16,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 ENV DATABASE_URL="postgresql://user:password@localhost:5432/db"
-RUN npx prisma generate
+RUN npm config set registry https://registry.npmmirror.com && npx prisma generate
 
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
