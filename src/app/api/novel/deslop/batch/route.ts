@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { tryCatch, error } from '@/lib/api-response'
 import { batchChapterDeslopper } from '@/lib/agents/deslopper'
-import { requireProjectOwner, projectNotFoundResponse } from '@/lib/server/project-access'
+import { requireProjectOwner } from '@/lib/server/project-access'
 
 const batchSchema = z.object({
   projectId: z.number().int().positive(),
@@ -19,13 +19,17 @@ export async function POST(request: NextRequest) {
     const access = await requireProjectOwner(data.projectId)
 
     if (!access) {
-      return projectNotFoundResponse()
+      return error('NOT_FOUND', '项目不存在')
     }
 
     const project = await prisma.novelProject.findUnique({
       where: { id: data.projectId },
       select: { genre: true, writingStyle: true },
     })
+
+    if (!project) {
+      return error('NOT_FOUND', '项目不存在')
+    }
 
     const chapters = await prisma.novelChapter.findMany({
       where: {
@@ -55,8 +59,8 @@ export async function POST(request: NextRequest) {
       })),
       data.projectId,
       {
-        genre: project!.genre,
-        writingStyle: project!.writingStyle,
+        genre: project.genre,
+        writingStyle: project.writingStyle,
         strictness: data.strictness,
       }
     )

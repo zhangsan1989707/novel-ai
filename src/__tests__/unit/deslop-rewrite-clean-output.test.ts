@@ -109,6 +109,16 @@ describe('deslop rewrite API — 用户看到的正文必须是纯文本', () =>
     expect(body.data.content).not.toContain('revisedContent')
   })
 
+  it('项目在权限校验后已被删除时返回 404 而非崩溃', async () => {
+    // 模拟 TOCTOU：requireProjectOwner 通过但 findUnique 返回 null
+    mocks.findUnique.mockResolvedValue(null)
+
+    const body = await callRewrite('原文')
+
+    expect(body.success).toBe(false)
+    expect(body.error.code).toBe('NOT_FOUND')
+  })
+
   it('用户看到的正文不包含 JSON 键名、花括号、转义符', async () => {
     const messyOutput = '```json\n{"revisedContent":"风吹过山岗，带来远处的烟火气。","changes":[{"type":"word","original":"原文","revised":"改后","reason":"去AI味"}]}\n```'
     mocks.generate.mockResolvedValue({

@@ -1,9 +1,9 @@
 import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { tryCatch } from '@/lib/api-response'
+import { tryCatch, error } from '@/lib/api-response'
 import { deslopperAgent } from '@/lib/agents/deslopper'
-import { requireProjectOwner, projectNotFoundResponse } from '@/lib/server/project-access'
+import { requireProjectOwner } from '@/lib/server/project-access'
 
 const rewriteSchema = z.object({
   projectId: z.number().int().positive(),
@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     const access = await requireProjectOwner(data.projectId)
 
     if (!access) {
-      return projectNotFoundResponse()
+      return error('NOT_FOUND', '项目不存在')
     }
 
     const project = await prisma.novelProject.findUnique({
@@ -28,14 +28,18 @@ export async function POST(request: NextRequest) {
       select: { genre: true, writingStyle: true },
     })
 
+    if (!project) {
+      return error('NOT_FOUND', '项目不存在')
+    }
+
     const chapterId = data.chapterId || 0
 
     const result = await deslopperAgent({
       projectId: data.projectId,
       chapterId,
       content: data.content,
-      genre: project!.genre,
-      writingStyle: project!.writingStyle,
+      genre: project.genre,
+      writingStyle: project.writingStyle,
       strictness: data.strictness,
     })
 
