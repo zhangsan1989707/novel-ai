@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { tryCatch, error } from '@/lib/api-response'
 import { getCoverCapability } from '@/lib/cover/service'
-import { requireProjectOwner, projectNotFoundResponse } from '@/lib/server/project-access'
+import { requireProjectOwner } from '@/lib/server/project-access'
 
 export async function GET(request: NextRequest) {
   return tryCatch(async () => {
@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
 
     const project = await requireProjectOwner(parsedId)
     if (!project) {
-      return projectNotFoundResponse()
+      return error('NOT_FOUND', '项目不存在')
     }
 
     return getCoverCapability(parsedId)

@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { tryCatch, error } from '@/lib/api-response'
-import { requireProjectOwner, projectNotFoundResponse } from '@/lib/server/project-access'
+import { requireProjectOwner } from '@/lib/server/project-access'
 
 export async function GET(
   request: NextRequest,
@@ -20,7 +20,7 @@ export async function GET(
 
     const project = await requireProjectOwner(design.projectId)
     if (!project) {
-      return projectNotFoundResponse()
+      return error('NOT_FOUND', '项目不存在')
     }
 
     return design
@@ -44,7 +44,7 @@ export async function DELETE(
 
     const project = await requireProjectOwner(design.projectId)
     if (!project) {
-      return projectNotFoundResponse()
+      return error('NOT_FOUND', '项目不存在')
     }
 
     await prisma.coverDesign.delete({
@@ -72,7 +72,7 @@ export async function PATCH(
 
     const project = await requireProjectOwner(design.projectId)
     if (!project) {
-      return projectNotFoundResponse()
+      return error('NOT_FOUND', '项目不存在')
     }
 
     const updated = await prisma.$transaction(async (tx) => {
