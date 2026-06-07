@@ -44,7 +44,7 @@ import { validateChapterContent } from './content-validator'
 import { getWorldState, getVillains, getWorldExpansionContext, getVillainContext } from './long-novel-integration'
 import { updateWorldStateAfterChapter } from './world-state-updater'
 import { auditChapterContinuityWithLLM, buildChapterContinuitySnapshot, type ContinuityAuditResult } from './chapter-continuity'
-import { emitProgress, type SSEEmitter } from './orchestrator-helpers'
+import { emitProgress, startPhaseHeartbeat, type SSEEmitter } from './orchestrator-helpers'
 
 const MAX_RETRY_COUNT = 3
 const MAX_REPAIR_ATTEMPTS = 2
@@ -270,6 +270,7 @@ export async function runChapterGenerationPipeline(
         emitProgress(emit, 'planning', chapterNo, totalChapters, completedChaptersCount, 0, chapterTargetWordCount, '正在构建章节大纲')
         emit({ type: 'start', data: { chapterId: chapter.id, agent: 'planner' } })
 
+        const plannerHeartbeat = startPhaseHeartbeat(emit, 'planning', chapterNo, totalChapters, completedChaptersCount, 0, chapterTargetWordCount, '正在构建章节大纲…')
         const plannerResult = await plannerAgent({
           projectId,
           chapterNo,
@@ -295,6 +296,7 @@ export async function runChapterGenerationPipeline(
           popularFictionProfile,
         })
 
+        plannerHeartbeat.stop()
         outline = plannerResult.outline
 
         // 保存章节大纲
@@ -415,6 +417,7 @@ export async function runChapterGenerationPipeline(
           )
         }),
         runPhase('summarizer', async () => {
+          const summarizerHeartbeat = startPhaseHeartbeat(emit, 'summarizing', chapterNo, totalChapters, completedChaptersCount, draftWordCount, chapterTargetWordCount, '正在生成摘要…')
           const sd = await summarizerAgent({
             projectId,
             chapterNo,
@@ -425,6 +428,7 @@ export async function runChapterGenerationPipeline(
             protagonistProfile: project.protagonistProfile || undefined,
             provider: await getRoleProvider('summarizer'),
           })
+          summarizerHeartbeat.stop()
           await storyState.updateChapterProgress(projectId, chapterNo)
           return sd
         }),
@@ -435,6 +439,7 @@ export async function runChapterGenerationPipeline(
       await runPhase('summarizer', async () => {
         emit({ type: 'agent_switch', data: { agent: 'summarizer' } })
 
+        const summarizerHeartbeat = startPhaseHeartbeat(emit, 'summarizing', chapterNo, totalChapters, completedChaptersCount, 0, chapterTargetWordCount, '正在生成摘要…')
         summaryData = await summarizerAgent({
           projectId,
           chapterNo,
@@ -445,6 +450,7 @@ export async function runChapterGenerationPipeline(
           protagonistProfile: project.protagonistProfile || undefined,
           provider: await getRoleProvider('summarizer'),
         })
+        summarizerHeartbeat.stop()
 
         await storyState.updateChapterProgress(projectId, chapterNo)
       })
@@ -456,9 +462,11 @@ export async function runChapterGenerationPipeline(
 
     if (speedMode === 'FINAL_POLISH') {
       await runPhase('reviewer', async () => {
-        emitProgress(emit, 'reviewing', chapterNo, totalChapters, completedChaptersCount, countChineseWords(polishedContent), chapterTargetWordCount, '正在对抗审稿')
+        const polishedWordCount = countChineseWords(polishedContent)
+        emitProgress(emit, 'reviewing', chapterNo, totalChapters, completedChaptersCount, polishedWordCount, chapterTargetWordCount, '正在对抗审稿')
         emit({ type: 'agent_switch', data: { agent: 'reviewer' } })
 
+        const reviewerHeartbeat = startPhaseHeartbeat(emit, 'reviewing', chapterNo, totalChapters, completedChaptersCount, polishedWordCount, chapterTargetWordCount, '正在对抗审稿…')
         try {
           reviewResult = await reviewerAgent(
             {
@@ -488,6 +496,8 @@ export async function runChapterGenerationPipeline(
             },
           })
           reviewedContent = polishedContent
+        } finally {
+          reviewerHeartbeat.stop()
         }
       })
     }
@@ -499,6 +509,9 @@ export async function runChapterGenerationPipeline(
     if (speedMode === 'FINAL_POLISH') {
       emitProgress(emit, 'validating', chapterNo, totalChapters, completedChaptersCount, countChineseWords(reviewedContent), chapterTargetWordCount, '正在校验和去 AI 味')
       emit({ type: 'agent_switch', data: { agent: 'validator_deslopper' } })
+
+      const reviewedWordCount = countChineseWords(reviewedContent)
+      const validatorHeartbeat = startPhaseHeartbeat(emit, 'validating', chapterNo, totalChapters, completedChaptersCount, reviewedWordCount, chapterTargetWordCount, '正在校验和去 AI 味…')
 
       const [validReport, deslopContent] = await Promise.all([
         runPhase('validator', async () => {
@@ -539,6 +552,8 @@ export async function runChapterGenerationPipeline(
           }
         }),
       ])
+
+      validatorHeartbeat.stop()
 
       validationReport = validReport
       finalContent = typeof deslopContent === 'string' ? deslopContent : deslopContent.revisedContent
@@ -605,7 +620,9 @@ export async function runChapterGenerationPipeline(
     }
 
     // ========== Phase 8: Quality Gate 质量门禁 ==========
-    emitProgress(emit, 'quality_gate', chapterNo, totalChapters, completedChaptersCount, countChineseWords(finalContent), chapterTargetWordCount, '正在运行质量门禁检查')
+    const qgWordCount = countChineseWords(finalContent)
+    emitProgress(emit, 'quality_gate', chapterNo, totalChapters, completedChaptersCount, qgWordCount, chapterTargetWordCount, '正在运行质量门禁检查')
+    const qualityGateHeartbeat = startPhaseHeartbeat(emit, 'quality_gate', chapterNo, totalChapters, completedChaptersCount, qgWordCount, chapterTargetWordCount, '正在运行质量门禁检查…')
     
     let qualityGateResult: QualityGateResult
     let continuityAuditResult: ContinuityAuditResult | null = null
@@ -755,6 +772,7 @@ export async function runChapterGenerationPipeline(
       repairAttempts++
     }
 
+    qualityGateHeartbeat.stop()
     finalContent = contentToCheck
     const continuitySnapshot = buildChapterContinuitySnapshot({
       chapterNo,

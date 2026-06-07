@@ -57,6 +57,29 @@ export async function runPhase(
 }
 
 /**
+ * 阶段心跳控制器
+ * 在无 token 回调的阶段（planner/summarizer/reviewer/validator）定期发送心跳，
+ * 防止前端因 lastEventAt 过期而误判为任务卡住
+ */
+export function startPhaseHeartbeat(
+  emit: SSEEmitter,
+  phase: GenerationPhase,
+  chapterNo: number,
+  totalChapters: number,
+  completedChapters: number,
+  currentWordCount: number,
+  targetWordCount: number,
+  message: string,
+  intervalMs: number = 25_000,
+): { stop: () => void } {
+  const timer = setInterval(() => {
+    emitProgress(emit, phase, chapterNo, totalChapters, completedChapters, currentWordCount, targetWordCount, message)
+  }, intervalMs)
+
+  return { stop: () => clearInterval(timer) }
+}
+
+/**
  * 构建修复类型标签
  */
 export function getRepairTypeLabel(repairType: string): string {
