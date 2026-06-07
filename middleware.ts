@@ -36,32 +36,7 @@ function getSessionCookie(request: NextRequest) {
     || request.cookies.get('__Secure-next-auth.session-token')
 }
 
-export function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl
-
-  if (isDevelopmentEnv()) {
-    return NextResponse.next()
-  }
-
-  // API route protection
-  const isProtectedApi = PROTECTED_API_PREFIXES.some(prefix => pathname.startsWith(prefix))
-  const isPublicApi = PUBLIC_API_PREFIXES.some(prefix => pathname.startsWith(prefix))
-
-  if (isProtectedApi && !isPublicApi) {
-    if (!getSessionCookie(request)) {
-      return NextResponse.json(
-        { success: false, error: { code: 'UNAUTHORIZED', message: '未登录' } },
-        { status: 401 }
-      )
-    }
-  }
-
-  // Page route protection
-  const isProtectedPage = PROTECTED_PAGE_PREFIXES.some(prefix => pathname.startsWith(prefix))
-  if (isProtectedPage && !getSessionCookie(request)) {
-    return NextResponse.redirect(new URL('/login', request.url))
-  }
-
+export function middleware(_request: NextRequest) {
   return NextResponse.next()
 }
 
