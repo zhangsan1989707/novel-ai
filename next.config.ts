@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  allowedDevOrigins: ['47.109.85.168'],
   output: 'standalone',
   serverExternalPackages: [
     '@prisma/client',
