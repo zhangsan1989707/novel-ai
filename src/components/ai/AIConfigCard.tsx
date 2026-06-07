@@ -102,9 +102,10 @@ interface AIConfigCardProps {
   onSetDefault: (configId: number) => void
   onTest: (configId: number) => Promise<{ success: boolean; message: string }>
   defaultingId: number | null
+  isAdmin?: boolean
 }
 
-export function AIConfigCard({ config, onEdit, onDelete, onSetDefault, onTest, defaultingId }: AIConfigCardProps) {
+export function AIConfigCard({ config, onEdit, onDelete, onSetDefault, onTest, defaultingId, isAdmin = true }: AIConfigCardProps) {
   const [expanded, setExpanded] = useState(false)
   const [testStatus, setTestStatus] = useState<TestStatus>('idle')
   const [testMessage, setTestMessage] = useState('')
@@ -196,21 +197,23 @@ export function AIConfigCard({ config, onEdit, onDelete, onSetDefault, onTest, d
           </div>
 
           <div className="flex flex-col sm:flex-row gap-1.5 shrink-0">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleTest}
-              disabled={testStatus === 'testing'}
-            >
-              {testStatus === 'testing' ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Play className="h-3.5 w-3.5" />
-              )}
-              <span className="hidden sm:inline ml-1">测试</span>
-            </Button>
-            {!config.isDefault && (
+            {isAdmin && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleTest}
+                disabled={testStatus === 'testing'}
+              >
+                {testStatus === 'testing' ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Play className="h-3.5 w-3.5" />
+                )}
+                <span className="hidden sm:inline ml-1">测试</span>
+              </Button>
+            )}
+            {isAdmin && !config.isDefault && (
               <Button
                 type="button"
                 variant="primary"
@@ -223,12 +226,16 @@ export function AIConfigCard({ config, onEdit, onDelete, onSetDefault, onTest, d
                 <span className="hidden sm:inline ml-1">设为默认</span>
               </Button>
             )}
-            <Button type="button" variant="ghost" size="sm" onClick={() => onEdit(config)}>
-              <Edit2 className="h-3.5 w-3.5" />
-            </Button>
-            <Button type="button" variant="ghost" size="sm" onClick={() => onDelete(config.id)}>
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
+            {isAdmin && (
+              <Button type="button" variant="ghost" size="sm" onClick={() => onEdit(config)}>
+                <Edit2 className="h-3.5 w-3.5" />
+              </Button>
+            )}
+            {isAdmin && (
+              <Button type="button" variant="ghost" size="sm" onClick={() => onDelete(config.id)}>
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            )}
           </div>
         </div>
 

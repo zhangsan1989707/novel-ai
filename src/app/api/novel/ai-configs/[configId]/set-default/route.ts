@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { logError } from '@/lib/logger'
-import { getAuthorizedAIConfigUserId, redactAIConfig } from '@/lib/ai/config-redaction'
+import { getAuthorizedAIConfigUserId, redactAIConfig, requireAdmin } from '@/lib/ai/config-redaction'
 
 export async function POST(
   request: NextRequest,
@@ -14,6 +14,13 @@ export async function POST(
       return NextResponse.json(
         { success: false, error: { code: 'UNAUTHORIZED', message: '未登录' } },
         { status: 401 }
+      )
+    }
+
+    if (!(await requireAdmin())) {
+      return NextResponse.json(
+        { success: false, error: { code: 'FORBIDDEN', message: '仅管理员可修改默认配置' } },
+        { status: 403 }
       )
     }
 

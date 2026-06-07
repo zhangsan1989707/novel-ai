@@ -1,5 +1,5 @@
 import type { AIModelConfig } from '@prisma/client'
-import { getCurrentUserId } from '@/lib/auth'
+import { getCurrentUserId, auth } from '@/lib/auth'
 
 export type SafeAIModelConfig = Omit<AIModelConfig, 'apiKey' | 'embeddingApiKey'> & {
   hasApiKey: boolean
@@ -39,6 +39,21 @@ export async function getAuthorizedAIConfigUserId(): Promise<number | null> {
   } catch {
     return null
   }
+}
+
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '')
+  .split(',')
+  .map(e => e.trim().toLowerCase())
+  .filter(Boolean)
+
+export async function requireAdmin(): Promise<boolean> {
+  if (ADMIN_EMAILS.length === 0) {
+    return true
+  }
+
+  const session = await auth()
+  const email = session?.user?.email?.toLowerCase()
+  return !!email && ADMIN_EMAILS.includes(email)
 }
 
 export function getSafeAIProviderErrorMessage(error: unknown): string {

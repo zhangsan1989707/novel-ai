@@ -57,6 +57,7 @@ const vendorFilterOptions = [
 
 export default function SettingsPage() {
   const [configs, setConfigs] = useState<AIConfig[]>([])
+  const [isAdmin, setIsAdmin] = useState(false)
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editingConfig, setEditingConfig] = useState<AIConfig | null>(null)
@@ -88,6 +89,7 @@ export default function SettingsPage() {
       const data = await res.json()
       if (data.success) {
         setConfigs(data.data)
+        setIsAdmin(data.isAdmin ?? true)
       }
     } catch (error) {
       console.error('获取配置失败:', error)
@@ -316,7 +318,10 @@ export default function SettingsPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">系统设置</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">管理 AI 配置</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            系统级 AI 配置（所有用户共享）
+            {!isAdmin && <span className="ml-2 text-amber-500">· 仅管理员可修改</span>}
+          </p>
         </div>
       </div>
 
@@ -386,10 +391,12 @@ export default function SettingsPage() {
               onChange={(e) => setVendorFilter(e.target.value as VendorFilter)}
               className="w-full sm:w-44"
             />
-            <Button type="button" onClick={() => openModal()} className="shrink-0">
-              <Plus className="h-4 w-4 mr-1.5" />
-              添加配置
-            </Button>
+            {isAdmin && (
+              <Button type="button" onClick={() => openModal()} className="shrink-0">
+                <Plus className="h-4 w-4 mr-1.5" />
+                添加配置
+              </Button>
+            )}
           </div>
         )}
 
@@ -402,11 +409,13 @@ export default function SettingsPage() {
                 <>
                   <Key className="h-12 w-12 mx-auto text-gray-300 dark:text-gray-600 mb-4" />
                   <h3 className="font-medium text-gray-900 dark:text-gray-200 mb-2">暂无 AI 配置</h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">添加您的第一个 AI API 配置</p>
-                  <Button type="button" onClick={() => openModal()}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    添加配置
-                  </Button>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">添加第一个 AI API 配置</p>
+                  {isAdmin && (
+                    <Button type="button" onClick={() => openModal()}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      添加配置
+                    </Button>
+                  )}
                 </>
               ) : (
                 <>
@@ -428,6 +437,7 @@ export default function SettingsPage() {
                 onSetDefault={handleSetDefault}
                 onTest={handleTestConfig}
                 defaultingId={defaultingConfigId}
+                isAdmin={isAdmin}
               />
             ))}
           </div>

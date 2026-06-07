@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { AIVendor } from '@/types'
 import { logError } from '@/lib/logger'
-import { getAuthorizedAIConfigUserId, redactAIConfig } from '@/lib/ai/config-redaction'
+import { getAuthorizedAIConfigUserId, redactAIConfig, requireAdmin } from '@/lib/ai/config-redaction'
 
 // ============================================
 // Schema 验证
@@ -47,6 +47,7 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       data: configs.map(redactAIConfig),
+      isAdmin: await requireAdmin(),
     })
   } catch (error) {
     logError(error instanceof Error ? error : new Error(String(error)), { type: 'get_ai_configs' })
@@ -69,6 +70,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: { code: 'UNAUTHORIZED', message: '未登录' } },
         { status: 401 }
+      )
+    }
+
+    if (!(await requireAdmin())) {
+      return NextResponse.json(
+        { success: false, error: { code: 'FORBIDDEN', message: '仅管理员可创建 AI 配置' } },
+        { status: 403 }
       )
     }
 
