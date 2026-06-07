@@ -78,10 +78,7 @@ export async function auth(): Promise<{ user: { id: string; name: string | null;
       }
     }
 
-    if (isProductionLike()) {
-      return null
-    }
-
+    // 无 session 时自动使用默认用户（系统不需要登录）
     let user = await prisma.user.findFirst()
     if (!user) {
       user = await prisma.user.create({
@@ -102,7 +99,7 @@ export async function auth(): Promise<{ user: { id: string; name: string | null;
       },
     }
   } catch {
-    return isProductionLike() ? null : { user: DEFAULT_USER }
+    return { user: DEFAULT_USER }
   }
 }
 
@@ -129,10 +126,6 @@ export async function resolveCurrentUserId(): Promise<number> {
   const session = await auth()
   if (session?.user?.id) {
     return Number(session.user.id)
-  }
-
-  if (isProductionLike()) {
-    throw new Error('Unauthorized: no valid session')
   }
 
   return 1
