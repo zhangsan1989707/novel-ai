@@ -27,7 +27,15 @@ vi.mock('@/lib/prisma', () => ({
     novelProject: {
       update: mocks.novelProjectUpdate,
     },
-    $transaction: vi.fn(async (fn: Function) => fn({
+    $transaction: vi.fn(async (fn: (tx: {
+      coverDesign: {
+        updateMany: typeof mocks.coverDesignUpdateMany
+        update: typeof mocks.coverDesignUpdate
+      }
+      novelProject: {
+        update: typeof mocks.novelProjectUpdate
+      }
+    }) => unknown | Promise<unknown>) => fn({
       coverDesign: {
         updateMany: mocks.coverDesignUpdateMany,
         update: mocks.coverDesignUpdate,

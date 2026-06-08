@@ -1,9 +1,9 @@
-
-const { PrismaClient } = require('@prisma/client');
-
-const prisma = new PrismaClient();
+let prisma;
 
 async function main() {
+  const { PrismaClient } = await import('@prisma/client');
+  prisma = new PrismaClient();
+
   console.log('Checking database connection...');
   
   try {

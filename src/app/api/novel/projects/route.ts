@@ -220,23 +220,23 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const validatedData = createProjectSchema.parse(body)
 
-    let creatorId = await getCurrentUserId()
+    let creatorId: number
+    try {
+      creatorId = await getCurrentUserId()
+    } catch {
+      return NextResponse.json(
+        { success: false, error: { code: 'UNAUTHENTICATED', message: '请先登录后再创建项目' } },
+        { status: 401 }
+      )
+    }
 
-    // 确保用户存在：优先使用当前 ID，否则回退到开发用户（按邮箱查找或创建）
+    // 确保当前用户真实存在；开发默认用户由 auth() 统一负责。
     const userById = await prisma.user.findUnique({ where: { id: creatorId } })
     if (!userById) {
-      const devEmail = 'dev@example.com'
-      let devUser = await prisma.user.findUnique({ where: { email: devEmail } })
-      if (!devUser) {
-        devUser = await prisma.user.create({
-          data: {
-            email: devEmail,
-            name: '开发者',
-            password: 'hashed_password_placeholder',
-          },
-        })
-      }
-      creatorId = devUser.id
+      return NextResponse.json(
+        { success: false, error: { code: 'UNAUTHENTICATED', message: '当前用户不存在，请重新登录' } },
+        { status: 401 }
+      )
     }
 
   const title = validatedData.title?.trim()

@@ -27,20 +27,21 @@ export async function POST(request: NextRequest) {
       return projectNotFoundResponse()
     }
 
-    // 生成 jobId
-    const jobId = `job_${projectId}_${chapterNo}_${Date.now()}`
-
-    // 返回 jobId，前端通过 SSE 流式获取进度
-    return NextResponse.json({
-      success: true,
-      data: {
-        jobId,
-        projectId,
-        chapterNo,
-        streamUrl: `/api/novel/engine/${projectId}/${chapterNo}`,
-        estimatedTime: 45,
+    return NextResponse.json(
+      {
+        success: false,
+        error: {
+          code: 'LEGACY_ENDPOINT',
+          message: '旧章节生成入口已停用，请使用项目生产流水线接口',
+        },
+        data: {
+          projectId,
+          chapterNo,
+          replacement: `/api/novel/projects/${projectId}/pipeline/start`,
+        },
       },
-    })
+      { status: 409 }
+    )
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
