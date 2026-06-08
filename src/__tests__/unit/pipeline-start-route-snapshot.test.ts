@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 
 const snapshot = {
@@ -75,6 +75,7 @@ vi.mock('@/lib/engine/project-pipeline-snapshot', () => ({
 describe('pipeline start route snapshot semantics', () => {
   beforeEach(() => {
     Object.values(mocks).forEach(mock => mock.mockReset())
+    vi.stubEnv('NOVEL_AI_PIPELINE_INLINE', undefined)
     mocks.requireProjectOwner.mockResolvedValue({ id: 42, creatorId: 7 })
     mocks.findUnique.mockResolvedValue({
       id: 42,
@@ -96,6 +97,10 @@ describe('pipeline start route snapshot semantics', () => {
     mocks.readProjectPipelineSnapshot.mockResolvedValue(snapshot)
   })
 
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
   it('returns the post-start snapshot instead of stale optimistic fields', async () => {
     const { POST } = await import('@/app/api/novel/projects/[projectId]/pipeline/start/route')
 
@@ -109,14 +114,34 @@ describe('pipeline start route snapshot semantics', () => {
 
     expect(response.status).toBe(200)
     expect(mocks.resumeJob).toHaveBeenCalledWith(99)
+    expect(mocks.runProductionPipeline).not.toHaveBeenCalled()
     expect(body.data).toMatchObject({
       jobId: 99,
       projectId: 42,
       status: 'PAUSED',
       speedMode: 'FAST_ACCEPTANCE',
+      runner: 'external',
       snapshot,
       totalChapters: 80,
       runtimeSummary: { label: 'paused' },
     })
+  })
+
+  it('runs inline only when explicitly enabled', async () => {
+    vi.stubEnv('NOVEL_AI_PIPELINE_INLINE', 'true')
+    const { POST } = await import('@/app/api/novel/projects/[projectId]/pipeline/start/route')
+
+    const response = await POST(new NextRequest('http://localhost/api/novel/projects/42/pipeline/start', {
+      method: 'POST',
+      body: JSON.stringify({ speedMode: 'FAST_ACCEPTANCE' }),
+    }), {
+      params: Promise.resolve({ projectId: '42' }),
+    })
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(mocks.resumeJob).toHaveBeenCalledWith(99)
+    expect(mocks.runProductionPipeline).toHaveBeenCalledWith(99, { speedMode: 'FAST_ACCEPTANCE' })
+    expect(body.data.runner).toBe('inline')
   })
 })

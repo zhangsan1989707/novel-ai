@@ -214,8 +214,9 @@ export function useProjectPipeline(options: {
           jobId?: number
           totalChapters?: number
           runtimeSummary?: ProjectRuntimeSummary
+          runner?: 'external' | 'inline'
         }
-        toast.success('AI 生成已启动')
+        toast.success(startData.runner === 'inline' ? 'AI 生成已启动' : 'AI 生成已进入生产队列')
         setSelectedSpeedMode(startData.speedMode || selectedSpeedMode)
         if (startData.snapshot) {
           applySnapshotRef.current(startData.snapshot)

@@ -51,13 +51,14 @@ export async function POST(
       ? job.payload as Record<string, unknown>
       : {}
     const speedMode = normalizeGenerationSpeedMode(payload.speedMode)
-    if (process.env.NOVEL_AI_PIPELINE_INLINE !== 'false') {
+    const runner = process.env.NOVEL_AI_PIPELINE_INLINE === 'true' ? 'inline' : 'external'
+    if (runner === 'inline') {
       runProductionPipeline(project.pipelineJobId, { speedMode }).catch(err =>
         console.error('Pipeline resume error:', err)
       )
     }
 
-    return NextResponse.json({ success: true, data: { jobId: project.pipelineJobId, status: 'PENDING', speedMode } })
+    return NextResponse.json({ success: true, data: { jobId: project.pipelineJobId, status: 'PENDING', speedMode, runner } })
   } catch (error) {
     console.error('Pipeline resume error:', error)
     return NextResponse.json(

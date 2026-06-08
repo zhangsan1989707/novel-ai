@@ -159,11 +159,13 @@ export async function POST(
 
     if (activeJob) {
       if (activeJob.status === 'PENDING') {
-        // PENDING状态的任务可能是之前创建但未启动的，直接运行
-        await updateJobStep(activeJob.id, 'blueprint' as any, 1)
-        runProductionPipeline(activeJob.id, { speedMode }).catch(err =>
-          console.error('Pipeline retry error:', err)
-        )
+        const runner = process.env.NOVEL_AI_PIPELINE_INLINE === 'true' ? 'inline' : 'external'
+        if (runner === 'inline') {
+          await updateJobStep(activeJob.id, 'blueprint' as any, 1)
+          runProductionPipeline(activeJob.id, { speedMode }).catch(err =>
+            console.error('Pipeline retry error:', err)
+          )
+        }
       } else if (activeJob.status === 'RUNNING') {
         // 如果已经在运行，直接返回
         const payload = activeJob.payload && typeof activeJob.payload === 'object'
@@ -176,23 +178,27 @@ export async function POST(
       } else if (activeJob.status === 'PAUSED') {
         // 如果任务是暂停状态，先恢复它
         await resumeJob(activeJob.id)
-        runProductionPipeline(activeJob.id, { speedMode }).catch(err =>
-          console.error('Pipeline resume error:', err)
-        )
+        const runner = process.env.NOVEL_AI_PIPELINE_INLINE === 'true' ? 'inline' : 'external'
+        if (runner === 'inline') {
+          runProductionPipeline(activeJob.id, { speedMode }).catch(err =>
+            console.error('Pipeline resume error:', err)
+          )
+        }
       }
 
       // 处理完上面的分支后返回
       const payload = activeJob.payload && typeof activeJob.payload === 'object'
         ? activeJob.payload as Record<string, unknown>
         : {}
+      const runner = process.env.NOVEL_AI_PIPELINE_INLINE === 'true' ? 'inline' : 'external'
       return NextResponse.json({
         success: true,
-        data: await buildStartPipelineData(projectId, activeJob.id, normalizeGenerationSpeedMode(payload.speedMode)),
+        data: await buildStartPipelineData(projectId, activeJob.id, normalizeGenerationSpeedMode(payload.speedMode), runner),
       })
     }
 
     const jobId = await createJob(projectId, 'FULL_PIPELINE', speedMode)
-    const runner = process.env.NOVEL_AI_PIPELINE_INLINE === 'false' ? 'external' : 'inline'
+    const runner = process.env.NOVEL_AI_PIPELINE_INLINE === 'true' ? 'inline' : 'external'
     if (runner === 'inline') {
       runProductionPipeline(jobId, { speedMode }).catch(err =>
         console.error('Pipeline start error:', err)

@@ -84,7 +84,8 @@ export async function POST(
       ? job.payload as Record<string, unknown>
       : {}
     const speedMode = normalizeGenerationSpeedMode(payload.speedMode)
-    if (process.env.NOVEL_AI_PIPELINE_INLINE !== 'false') {
+    const runner = process.env.NOVEL_AI_PIPELINE_INLINE === 'true' ? 'inline' : 'external'
+    if (runner === 'inline') {
       runProductionPipeline(project.pipelineJobId, { speedMode }).catch(err =>
         console.error('Pipeline recover error:', err)
       )
@@ -97,6 +98,7 @@ export async function POST(
         target,
         status: 'PENDING',
         speedMode,
+        runner,
       },
     })
   } catch (error) {
